@@ -127,7 +127,14 @@ function renderPortrait(story) {
   const holder = $("story-portrait");
   holder.innerHTML = "";
   const fallback = () => {
-    holder.textContent = story.speaker ? story.speaker.slice(0, 1) : "…";
+    holder.innerHTML = `<svg class="portrait-figure" viewBox="0 0 140 190" aria-hidden="true">
+      <circle cx="70" cy="76" r="46"></circle>
+      <path class="shoulders" d="M24 190v-36c0-22 20-36 46-36s46 14 46 36v36"></path>
+      <rect x="44" y="48" width="52" height="58" rx="20"></rect>
+      <path d="M52 68h36M52 82h36M70 48V32M58 32h24M58 118h24"></path>
+      <circle class="eye" cx="60" cy="68" r="2.5"></circle>
+      <circle class="eye" cx="80" cy="68" r="2.5"></circle>
+    </svg>`;
   };
   if (story.portrait) {
     const image = document.createElement("img");
@@ -191,12 +198,17 @@ function mapNodeButton(node) {
   const type = NODE_TYPES[node.type] || node.type;
   const status = MAP_STATUS[node.status] || node.status;
   const disabled = node.status === "available" ? "" : "disabled";
+  const icons = {
+    battle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.8 3.5 5.7 5.7-2.2 2.2-2-2-6.7 6.7-2.9-.7.7-2.9 6.7-6.7-2-2 2.7-2.3Z"/><path d="m4 20 3.1-3.1M14.5 5.5l4 4"/></svg>',
+    recruit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/><circle cx="12" cy="12" r="8"/></svg>',
+    signal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 0 1 16 0M7 16a5 5 0 0 1 10 0M10 16a2 2 0 0 1 4 0"/><path d="M12 19v1"/></svg>',
+    adventure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 5.2L20 10l-5.8 1.8L12 17l-2.2-5.2L4 10l5.8-1.8L12 3Z"/><path d="m18 16 .8 1.8L21 18.5l-2.2.7L18 21l-.8-1.8-2.2-.7 2.2-.7L18 16Z"/></svg>'
+  };
   return `<button class="map-node status-${esc(node.status)} type-${esc(node.type)}"
       data-id="${esc(node.id)}" ${disabled}
       aria-label="${esc(node.name)}，${esc(type)}，${esc(status)}">
-      <span class="map-node-type">${esc(type)}</span>
-      <span class="map-node-name">${esc(node.name)}</span>
-      <span class="map-node-status">${esc(status)}</span>
+      <span class="map-node-icon">${icons[node.type] || icons.adventure}</span>
+      <span class="map-node-copy"><span class="map-node-type">${esc(type)}</span><span class="map-node-name">${esc(node.name)}</span><span class="map-node-status">${esc(status)}</span></span>
     </button>`;
 }
 
@@ -208,28 +220,37 @@ function renderMap() {
   }
   $("map-view").hidden = false;
   const byId = Object.fromEntries(map.nodes.map((node) => [node.id, node]));
+  const available = map.nodes.filter((node) => node.status === "available");
+  const nextNames = available.map((node) => node.name).join(" / ");
   $("map-page-left").innerHTML = `
-    <h3 class="page-title">第 1 幕 · 岔路</h3>
-    <div class="map-flow">
+    <h3 class="page-title">回路航线 <span>SECTOR 01</span></h3>
+    <div class="map-flow route-track">
       ${mapNodeButton(byId.battle1)}
-      <div class="map-split">分叉</div>
-      <div class="branch-row">
+      <div class="route-rail route-rail-split"><span></span><span></span></div>
+      <div class="branch-row route-branch">
         ${mapNodeButton(byId.recruit)}
         ${mapNodeButton(byId.signal)}
       </div>
-    </div>`;
-  $("map-page-right").innerHTML = `
-    <h3 class="page-title">第 2 幕 · 汇合</h3>
-    <div class="map-flow">
-      <div class="merge-label">两条路线在此汇合</div>
+      <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.adventure)}
-      <div class="map-arrow">▼</div>
+      <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.battle2)}
     </div>`;
+  $("map-page-right").innerHTML = `
+    <h3 class="page-title">航线记录 <span>RUN ${String(state.progress).padStart(2, "0")}</span></h3>
+    <div class="route-readout"><strong>${esc(map.route ? ROUTE_NAMES[map.route] || map.route : "未选路线")}</strong><small>当前路径</small></div>
+    <div class="map-route-list"><span class="route-dot complete"></span><span>起始信标</span><span class="route-line"></span><span class="route-dot active"></span><span>下一节点</span></div>
+    <div class="route-next"><small>可进入</small><strong>${esc(nextNames || "无")}</strong></div>
+    <div class="map-legend">
+      <span class="legend available">可进入</span>
+      <span class="legend completed">已完成</span>
+      <span class="legend locked">未解锁</span>
+      <span class="legend closed">已关闭</span>
+    </div>
+    <p class="map-copy">点击发光节点继续前进。分支会在选择后锁定。</p>`;
   $("map-route").textContent = map.route
     ? `已选择路线：${ROUTE_NAMES[map.route] || map.route}`
     : "尚未选择分支";
-  const available = map.nodes.filter((node) => node.status === "available");
   $("map-hint").textContent = available.length > 1
     ? "选择一条分支；确认后另一条分支会关闭。"
     : "选择下一个节点，进入其前置剧情。";
@@ -285,6 +306,7 @@ function unitHtml(unit, side, column) {
     return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}"><span>空列</span></div>`;
   }
   return `<div class="slot unit ${side}" data-side="${side}" data-column="${column}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}">
+      <div class="unit-core" aria-hidden="true">${esc(unit.name.slice(0, 1))}</div>
       <div class="unit-name">${esc(unit.name)}</div>
       <div class="unit-stats"><span class="atk">⚔ ${unit.atk}</span><span class="hp">❤ ${unit.hp}/${unit.maxHp}</span></div>
     </div>`;
@@ -297,6 +319,7 @@ function cardHtml(card, selected, draggable = false) {
   return `<div class="card${selected ? " selected" : ""}" data-uid="${card.uid}" data-type="${card.type}"
       tabindex="0" role="button" draggable="${draggable ? "true" : "false"}"
       aria-label="${esc(card.name)}，费用 ${card.cost}，等级 ${card.level}${card.type === "unit" ? `，攻击 ${card.atk}，生命 ${card.hp}` : ""}">
+      <div class="card-art ${card.type}" aria-hidden="true"><span>${esc(card.name.slice(0, 1))}</span></div>
       <div class="card-cost">${card.cost}</div>
       <div class="card-name">${esc(card.name)}</div>
       <div class="card-stats">${stats}</div>
@@ -349,7 +372,7 @@ function renderBattle() {
     ? battle.hand.map((card) => cardHtml(
         card,
         card.uid === selectedUid,
-        battle.phase === "player" && card.type === "unit",
+        battle.phase === "player",
       )).join("")
     : "<p class='hint'>手牌为空</p>";
 
@@ -412,32 +435,117 @@ function clearDragState() {
   });
 }
 
-function markDropTargets(card) {
-  document.querySelectorAll("#player-row .slot.empty").forEach((slot) => {
-    slot.classList.add("drop-ok");
-  });
-  if (card.cost > battle.energy) {
-    document.querySelectorAll("#player-row .slot.drop-ok").forEach((slot) => slot.classList.remove("drop-ok"));
-    showToast("能量不足，无法部署这个单位");
-  }
+function markDropSlot(side, column) {
+  const slot = document.querySelector(`#${side}-row .slot[data-column="${column}"]`);
+  if (slot) slot.classList.add("drop-ok");
 }
 
-async function deployFromDrag(uid, column) {
-  if (!battle || battle.phase !== "player") {
-    showToast("当前不能部署");
-    return;
-  }
-  const card = battle.hand.find((item) => item.uid === uid);
-  if (!card) return;
-  if (battle.board.player[column - 1]) {
-    showToast("该列已有单位");
-    return;
-  }
+function markDropTargets(card) {
   if (card.cost > battle.energy) {
     showToast("能量不足");
     return;
   }
-  await act("/api/battle/deploy", { uid, column });
+  if (card.type === "unit") {
+    let count = 0;
+    battle.board.player.forEach((unit, index) => {
+      if (!unit) {
+        markDropSlot("player", index + 1);
+        count += 1;
+      }
+    });
+    if (!count) showToast("己方没有空列");
+    return;
+  }
+  if (card.heal != null) {
+    let count = 0;
+    battle.board.player.forEach((unit, index) => {
+      if (unit && unit.hp < unit.maxHp) {
+        markDropSlot("player", index + 1);
+        count += 1;
+      }
+    });
+    if (!count) showToast("没有需要维修的己方单位");
+    return;
+  }
+  if (card.damage != null) {
+    let count = 0;
+    battle.board.enemy.forEach((unit, index) => {
+      if (unit) {
+        markDropSlot("enemy", index + 1);
+        count += 1;
+      }
+    });
+    if (!count) showToast("敌方场上没有单位");
+  }
+}
+
+async function dropFromDrag(uid, side, column) {
+  if (!battle || busy || battle.phase !== "player") {
+    showToast("当前不能操作");
+    return;
+  }
+  const card = battle.hand.find((item) => item.uid === uid);
+  if (!card) return;
+  if (card.cost > battle.energy) {
+    showToast("能量不足");
+    return;
+  }
+  const target = (side === "player" ? battle.board.player : battle.board.enemy)[column - 1];
+  if (card.type === "unit") {
+    if (side !== "player" || target) {
+      showToast("单位只能部署到己方空列");
+      return;
+    }
+    await act("/api/battle/deploy", { uid, column });
+    return;
+  }
+  if (card.heal != null) {
+    if (side !== "player" || !target) {
+      showToast("请把紧急维修拖到受伤的己方单位");
+      return;
+    }
+    if (target.hp >= target.maxHp) {
+      showToast("该单位不需要维修");
+      return;
+    }
+    await act("/api/battle/command", { uid, targetUid: target.uid });
+    return;
+  }
+  if (card.damage != null) {
+    if (side !== "enemy" || !target) {
+      showToast("请把闪电脉冲拖到敌方单位");
+      return;
+    }
+    await act("/api/battle/command", { uid, targetUid: target.uid });
+    return;
+  }
+  showToast("这张牌不能拖动使用");
+}
+
+function onDragOver(event) {
+  if (draggingUid == null) return;
+  const info = slotInfo(event);
+  if (!info) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".slot.drop-hover").forEach((slot) => slot.classList.remove("drop-hover"));
+  const slot = event.target.closest(".slot");
+  if (slot?.classList.contains("drop-ok")) slot.classList.add("drop-hover");
+}
+
+function onDragLeave(event) {
+  const slot = event.target.closest(".slot");
+  if (slot) slot.classList.remove("drop-hover");
+}
+
+function onDrop(event) {
+  const info = slotInfo(event);
+  if (!info || draggingUid == null) return;
+  event.preventDefault();
+  dragDropped = true;
+  const uid = draggingUid;
+  clearDragState();
+  dropFromDrag(uid, info.side, info.column);
 }
 
 async function slotAction(side, column, uid) {
@@ -485,7 +593,14 @@ function slotInfo(event) {
 
 function onSlotClick(event) {
   const info = slotInfo(event);
-  if (!info) return;
+  if (!info || !battle) return;
+  if (!recycleMode && selectedUid != null) {
+    const card = battle.hand.find((item) => item.uid === selectedUid);
+    if (card?.type === "unit" && info.side === "player" && info.uid == null) {
+      showToast("请拖动单位牌到空列部署");
+      return;
+    }
+  }
   slotAction(info.side, info.column, info.uid);
 }
 
@@ -701,7 +816,7 @@ function bindEvents() {
       return;
     }
     const card = battle.hand.find((item) => item.uid === Number(element.dataset.uid));
-    if (!card || card.type !== "unit") {
+    if (!card) {
       event.preventDefault();
       return;
     }
@@ -715,32 +830,14 @@ function bindEvents() {
   $("hand").addEventListener("dragend", (event) => {
     const element = event.target.closest(".card");
     if (element) element.classList.remove("dragging");
-    if (draggingUid != null && !dragDropped) showToast("未部署：请把单位放到己方空列");
+    if (draggingUid != null && !dragDropped) showToast("未完成：请拖到高亮目标");
     clearDragState();
   });
 
-  $("player-row").addEventListener("dragover", (event) => {
-    if (draggingUid == null) return;
-    const info = slotInfo(event);
-    if (!info) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    document.querySelectorAll("#player-row .slot.drop-hover").forEach((slot) => slot.classList.remove("drop-hover"));
-    const slot = event.target.closest(".slot");
-    if (slot?.classList.contains("drop-ok")) slot.classList.add("drop-hover");
-  });
-  $("player-row").addEventListener("dragleave", (event) => {
-    const slot = event.target.closest(".slot");
-    if (slot) slot.classList.remove("drop-hover");
-  });
-  $("player-row").addEventListener("drop", (event) => {
-    const info = slotInfo(event);
-    if (!info || draggingUid == null) return;
-    event.preventDefault();
-    dragDropped = true;
-    const uid = draggingUid;
-    clearDragState();
-    deployFromDrag(uid, info.column);
+  ["player-row", "enemy-row"].forEach((id) => {
+    $(id).addEventListener("dragover", onDragOver);
+    $(id).addEventListener("dragleave", onDragLeave);
+    $(id).addEventListener("drop", onDrop);
   });
 
   $("discard-hand").addEventListener("click", (event) => {

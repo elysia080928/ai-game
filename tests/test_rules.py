@@ -397,6 +397,15 @@ def test_migration_old_saves():
     story = G.public_state(migrated)["story"]
     assert story["text"] == "挑一件合适的装备吧。", "无标记旧档应显示默认对话"
 
+    future = dict(base, schemaVersion=999, nodeId="battle1")
+    try:
+        G.migrate_state(future)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("未来版本存档不应被当作当前版本迁移")
+    assert future["schemaVersion"] == 999, "被拒绝的存档不能被改写版本号"
+
     bad_saves = [
         dict(base, nodeId="missing", nodeIndex=0),
         dict(base, nodeId="battle1", route="other"),

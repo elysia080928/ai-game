@@ -164,6 +164,43 @@ async function main() {
     );
     console.log("ok 进入战斗界面");
 
+    const interaction = await evaluate(`(() => {
+      const cardSelect = getComputedStyle(document.querySelector('#hand .card')).userSelect;
+      const slotSelect = getComputedStyle(document.querySelector('#player-row .slot')).userSelect;
+      const energy = Number(document.getElementById('energy').textContent);
+      const hand = document.querySelectorAll('#hand .card').length;
+      const units = document.querySelectorAll('#player-row .slot.unit').length;
+      const unit = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+        .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
+      if (!unit) return { skip: true };
+      unit.click();
+      const empty = document.querySelector('#player-row .slot.empty');
+      if (!empty) return { skip: true };
+      empty.click();
+      return {
+        skip: false, cardSelect, slotSelect, energy, hand, units,
+        selected: document.querySelectorAll('#hand .card.selected').length,
+        toast: document.getElementById('toast').textContent,
+      };
+    })()`);
+    if (interaction.skip) throw new Error("没有可用于点击部署测试的单位牌或空列");
+    if (interaction.cardSelect !== "none" || interaction.slotSelect !== "none") {
+      throw new Error(`拖动时不应选中文字：${JSON.stringify(interaction)}`);
+    }
+    await sleep(200);
+    const clickAfter = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      units: document.querySelectorAll('#player-row .slot.unit').length,
+      toast: document.getElementById('toast').textContent,
+    })`);
+    if (clickAfter.energy !== interaction.energy || clickAfter.hand !== interaction.hand ||
+        clickAfter.units !== interaction.units || !clickAfter.toast.includes("请拖动单位牌")) {
+      throw new Error(`点击卡牌再点空列不应部署：${JSON.stringify({ interaction, clickAfter })}`);
+    }
+    await evaluate("document.querySelector('#hand .card.selected').click(); true;");
+    console.log("ok 鼠标点击卡牌再点空列不会部署，拖动不会选中文字");
+
     const drag = await evaluate(`(() => {
       const energy = Number(document.getElementById('energy').textContent);
       const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
@@ -230,7 +267,7 @@ async function main() {
     if (occupiedAfter.energy !== occupiedDrop.energy || occupiedAfter.hand !== occupiedDrop.hand) {
       throw new Error(`拖到占用列不应改变手牌或能量：${JSON.stringify({ occupiedDrop, occupiedAfter })}`);
     }
-    if (occupiedDrop.hovered !== 0 || !occupiedAfter.toast.includes("已有单位")) {
+    if (occupiedDrop.hovered !== 0 || !occupiedAfter.toast.includes("单位只能部署")) {
       throw new Error(`占用列缺少反馈：${JSON.stringify({ occupiedDrop, occupiedAfter })}`);
     }
     console.log("ok 拖到占用列不会部署并给出反馈");
@@ -258,7 +295,7 @@ async function main() {
     if (outsideAfter.energy !== outsideDrop.energy || outsideAfter.hand !== outsideDrop.hand) {
       throw new Error(`拖到敌方区域不应改变手牌或能量：${JSON.stringify({ outsideDrop, outsideAfter })}`);
     }
-    if (!outsideAfter.toast.includes("未部署")) throw new Error(`拖到无效区域缺少反馈：${outsideAfter.toast}`);
+    if (!outsideAfter.toast.includes("单位只能部署")) throw new Error(`拖到无效区域缺少反馈：${outsideAfter.toast}`);
     console.log("ok 拖到无效区域不会部署并给出反馈");
 
     await deployAll();
@@ -295,22 +332,112 @@ async function main() {
     }
     console.log("ok 能量不足时拖放不会部署并给出反馈");
 
+    const turnBeforeCommand = await evaluate("document.getElementById('turn').textContent");
+    await click("#end-turn");
+    await waitFor(async () => {
+      const turn = await evaluate("document.getElementById('turn').textContent");
+      return turn !== turnBeforeCommand && !(await evaluate("!document.getElementById('result-panel').hidden"));
+    }, "等待技能测试回合");
+    await waitFor(
+      async () => (await evaluate("document.querySelectorAll('#enemy-row .slot.unit').length")) > 0,
+      "敌方单位部署"
+    );
+
+    const repairBefore = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      dragging: (() => {
+        const card = [...document.querySelectorAll('#hand .card[data-type="command"]')]
+          .find((element) => element.querySelector('.card-name').textContent.includes("紧急维修"));
+        if (!card) return null;
+        const data = new DataTransfer();
+        card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+        return document.querySelectorAll('#hand .card.dragging').length;
+      })(),
+    })`);
+    if (repairBefore.dragging !== 1) throw new Error("紧急维修无法开始拖动");
+    const repairDrop = await evaluate(`(() => {
+      const card = [...document.querySelectorAll('#hand .card[data-type="command"]')]
+        .find((element) => element.querySelector('.card-name').textContent.includes("紧急维修"));
+      const target = document.querySelector('#enemy-row .slot[data-column="1"]');
+      if (!card || !target) return false;
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      return true;
+    })()`);
+    if (!repairDrop) throw new Error("技能牌拖放事件发送失败");
+    await sleep(250);
+    const repairAfter = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      toast: document.getElementById('toast').textContent,
+    })`);
+    if (repairAfter.energy !== repairBefore.energy || repairAfter.hand !== repairBefore.hand) {
+      throw new Error(`维修牌拖到敌方不应结算：${JSON.stringify({ repairBefore, repairAfter })}`);
+    }
+    if (!repairAfter.toast.includes("紧急维修")) {
+      throw new Error(`维修牌拖错目标缺少反馈：${repairAfter.toast}`);
+    }
+
+    const spark = await evaluate(`(() => {
+      const energy = Number(document.getElementById('energy').textContent);
+      const card = [...document.querySelectorAll('#hand .card[data-type="command"]')]
+        .find((element) => element.querySelector('.card-name').textContent.includes("闪电脉冲") &&
+          Number(element.querySelector('.card-cost').textContent) <= energy);
+      const target = document.querySelector('#enemy-row .slot.unit');
+      if (!card || !target) return { skip: true };
+      const before = {
+        energy,
+        cost: Number(card.querySelector('.card-cost').textContent),
+        hand: document.querySelectorAll('#hand .card').length,
+        log: document.getElementById('log').textContent,
+        uid: Number(card.dataset.uid),
+        column: Number(target.dataset.column),
+      };
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      before.highlighted = document.querySelectorAll('#enemy-row .slot.drop-ok').length;
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      return { skip: false, before };
+    })()`);
+    if (spark.skip) throw new Error("第二回合手牌没有可用的闪电脉冲或敌方目标");
+    if (spark.before.highlighted < 1) throw new Error("拖动闪电脉冲未高亮敌方单位");
+    await waitFor(async () => {
+      const energy = await evaluate("Number(document.getElementById('energy').textContent)");
+      return energy < spark.before.energy;
+    }, "闪电脉冲结算");
+    const sparkAfter = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      log: document.getElementById('log').textContent,
+    })`);
+    if (sparkAfter.hand >= spark.before.hand || sparkAfter.energy !== spark.before.energy - spark.before.cost) {
+      throw new Error(`闪电脉冲未消耗手牌或能量：${JSON.stringify({ spark, sparkAfter })}`);
+    }
+    if (!sparkAfter.log.includes("闪电脉冲")) throw new Error(`闪电脉冲未写入战斗日志：${sparkAfter.log}`);
+    console.log("ok 紧急维修/闪电脉冲技能牌可拖动并按目标结算");
+
     async function deployAll() {
       for (let index = 0; index < 6; index += 1) {
         const handBefore = await evaluate("document.querySelectorAll('#hand .card').length");
-        const clicked = await evaluate(`(() => {
+        const deployed = await evaluate(`(() => {
           const energy = Number(document.getElementById('energy').textContent);
-          const cards = [...document.querySelectorAll('#hand .card[data-type="unit"]')];
           const empty = [...document.querySelectorAll('#player-row .slot.empty')].pop();
-          const card = cards.find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
+          const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+            .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
           if (!card || !empty) return false;
-          card.click();
-          const target = [...document.querySelectorAll('#player-row .slot.empty')].pop();
-          if (!target) return false;
-          target.click();
+          const data = new DataTransfer();
+          card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+          empty.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+          empty.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+          card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
           return true;
         })()`);
-        if (!clicked) break;
+        if (!deployed) break;
         await waitFor(
           async () => (await evaluate("document.querySelectorAll('#hand .card').length")) < handBefore,
           "单位部署"

@@ -35,6 +35,7 @@
     <main class="stage">
       <section id="story-view" class="view" hidden>
         <div class="story-panel" id="story-panel">
+          <div class="story-scene-grid" aria-hidden="true"></div>
           <div class="story-node" id="story-node"></div>
           <div class="story-portrait" id="story-portrait" aria-hidden="true"></div>
           <div class="story-body">
@@ -64,12 +65,6 @@
           <div class="book-page" id="map-page-left"></div>
           <div class="book-page" id="map-page-right"></div>
         </div>
-        <div class="map-legend">
-          <span class="legend available">可进入</span>
-          <span class="legend completed">已完成</span>
-          <span class="legend locked">未解锁</span>
-          <span class="legend closed">已关闭</span>
-        </div>
       </section>
 
       <section id="battle-view" class="view" hidden>
@@ -84,9 +79,13 @@
 
         <div class="forecast-label">敌方预告 <span>本回合 / 下回合</span></div>
         <div class="forecast-row" id="forecast-row"></div>
-        <div class="board-row enemy-row" id="enemy-row"></div>
-        <div class="board-middle"><span>对位战线</span></div>
-        <div class="board-row player-row" id="player-row"></div>
+        <div class="battle-table">
+          <div class="table-caption enemy-caption"><span>敌方部署</span><i></i></div>
+          <div class="board-row enemy-row" id="enemy-row"></div>
+          <div class="board-middle"><span>对位战线</span></div>
+          <div class="board-row player-row" id="player-row"></div>
+          <div class="table-caption player-caption"><i></i><span>我的部署</span></div>
+        </div>
 
         <div class="battle-bottom">
           <div class="leader player"><span>己方领袖</span><b id="player-hp">15</b></div>

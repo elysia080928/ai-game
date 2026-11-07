@@ -604,6 +604,11 @@ def migrate_state(state):
     """把旧档补成当前结构；无法安全读取时抛 ValueError。返回 (state, changed)。"""
     if not isinstance(state, dict):
         raise ValueError("存档结构非法")
+    version = state.get("schemaVersion", 1)
+    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+        raise ValueError("存档版本非法")
+    if version > SCHEMA_VERSION:
+        raise ValueError("存档版本高于当前程序版本")
     before = json.dumps(state, sort_keys=True, ensure_ascii=False)
 
     if "nodeId" not in state:
