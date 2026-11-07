@@ -1,6 +1,7 @@
 /**
  * 浏览器冒烟测试：node tests/ui_smoke.js（需要先启动服务，以及本机 Edge）。
- * 通过 CDP 驱动无头 Edge：注册 → 剧情 → 战斗 → 部署 → 连续结束回合触发弃牌 → 完成弃牌。
+ * 通过 CDP 驱动无头 Edge：注册 → 拖放部署 → 战斗 1 → 剧情选项 → 关卡选择 →
+ * 招募/维修 → 战斗 2 → 逐列预告与键盘部署；并检查窄窗口滚动。
  */
 
 const { spawn, execFileSync } = require("child_process");
@@ -106,6 +107,20 @@ async function main() {
       console.log(`截图 ${file}`);
     }
 
+    async function visible(id) {
+      return !(await evaluate(`document.getElementById(${JSON.stringify(id)}).hidden`));
+    }
+
+    async function click(selector) {
+      const ok = await evaluate(`(() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        if (!element || element.disabled) return false;
+        element.click();
+        return true;
+      })()`);
+      if (!ok) throw new Error(`无法点击 ${selector}`);
+    }
+
     await command("Page.enable");
     await command("Runtime.enable");
     await command("Page.navigate", { url: BASE });
@@ -123,26 +138,162 @@ async function main() {
       document.getElementById('register-btn').click();
       true;
     `);
-    await waitFor(
-      async () => !(await evaluate("document.getElementById('game').hidden")),
-      "注册后进入游戏"
-    );
-    await waitFor(
-      async () => !(await evaluate("document.getElementById('story-view').hidden")),
-      "前置剧情显示"
-    );
-    await screenshot("ai-game-story.png");
+    await waitFor(async () => await visible("game"), "注册后进入游戏");
+    await waitFor(async () => await visible("story-view"), "前置剧情显示");
     console.log("ok 注册与剧情界面");
 
-    await evaluate("document.getElementById('story-next').click(); true;");
+    await command("Emulation.setDeviceMetricsOverride", {
+      width: 760,
+      height: 1000,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await sleep(300);
+    const storyOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
+    if (storyOverflow) throw new Error("窄窗口剧情界面出现横向溢出");
+    await screenshot("ai-game-story-narrow.png");
+    await command("Emulation.clearDeviceMetricsOverride");
+    await sleep(200);
+    console.log("ok 窄窗口下剧情与跳过按钮布局");
+
+    await click("#story-next");
     await waitFor(
-      async () =>
-        !(await evaluate("document.getElementById('battle-view').hidden")) &&
+      async () => (await visible("battle-view")) &&
         (await evaluate("document.querySelectorAll('#hand .card').length")) > 0,
       "战斗界面载入"
     );
-    await screenshot("ai-game-battle.png");
     console.log("ok 进入战斗界面");
+
+    const drag = await evaluate(`(() => {
+      const energy = Number(document.getElementById('energy').textContent);
+      const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+        .map((element) => ({ element, cost: Number(element.querySelector('.card-cost').textContent) }))
+        .filter((item) => item.cost <= energy)
+        .sort((a, b) => a.cost - b.cost)[0]?.element;
+      const slot = document.querySelector('#player-row .slot.empty');
+      if (!card || !slot) return { ok: false };
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      return {
+        ok: true,
+        uid: Number(card.dataset.uid),
+        column: Number(slot.dataset.column),
+        highlighted: document.querySelectorAll('#player-row .slot.drop-ok').length,
+        hand: document.querySelectorAll('#hand .card').length,
+      };
+    })()`);
+    if (!drag.ok) throw new Error("没有可拖动的单位牌或空列");
+    if (drag.highlighted !== 4) throw new Error(`可放置空列应高亮 4 个，实际 ${drag.highlighted}`);
+    await screenshot("ai-game-drag-state.png");
+    console.log("ok 拖动时高亮己方空列");
+
+    const dropped = await evaluate(`(() => {
+      const card = document.querySelector('#hand .card[data-uid="${drag.uid}"]');
+      const slot = document.querySelector('#player-row .slot[data-column="${drag.column}"]');
+      if (!card || !slot) return false;
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      slot.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+      slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      return true;
+    })()`);
+    if (!dropped) throw new Error("拖放事件发送失败");
+    await waitFor(
+      async () => (await evaluate("document.querySelectorAll('#player-row .slot.unit').length")) > 0,
+      "拖放部署成功"
+    );
+    console.log("ok 单位牌拖放到己方空列");
+
+    const occupiedDrop = await evaluate(`(() => {
+      const energy = Number(document.getElementById('energy').textContent);
+      const hand = document.querySelectorAll('#hand .card').length;
+      const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+        .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
+      const slot = document.querySelector('#player-row .slot.unit');
+      if (!card || !slot) return { skip: true };
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      slot.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+      const hovered = document.querySelectorAll('#player-row .slot.drop-hover').length;
+      slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      return { skip: false, energy, hand, hovered };
+    })()`);
+    if (occupiedDrop.skip) throw new Error("没有可用于占用列测试的单位牌");
+    await sleep(300);
+    const occupiedAfter = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      toast: document.getElementById('toast').textContent,
+    })`);
+    if (occupiedAfter.energy !== occupiedDrop.energy || occupiedAfter.hand !== occupiedDrop.hand) {
+      throw new Error(`拖到占用列不应改变手牌或能量：${JSON.stringify({ occupiedDrop, occupiedAfter })}`);
+    }
+    if (occupiedDrop.hovered !== 0 || !occupiedAfter.toast.includes("已有单位")) {
+      throw new Error(`占用列缺少反馈：${JSON.stringify({ occupiedDrop, occupiedAfter })}`);
+    }
+    console.log("ok 拖到占用列不会部署并给出反馈");
+
+    const outsideDrop = await evaluate(`(() => {
+      const energy = Number(document.getElementById('energy').textContent);
+      const hand = document.querySelectorAll('#hand .card').length;
+      const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+        .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
+      const slot = document.querySelector('#enemy-row .slot');
+      if (!card || !slot) return { skip: true };
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      return { skip: false, energy, hand };
+    })()`);
+    if (outsideDrop.skip) throw new Error("没有可用于无效区域测试的单位牌");
+    await sleep(300);
+    const outsideAfter = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      toast: document.getElementById('toast').textContent,
+    })`);
+    if (outsideAfter.energy !== outsideDrop.energy || outsideAfter.hand !== outsideDrop.hand) {
+      throw new Error(`拖到敌方区域不应改变手牌或能量：${JSON.stringify({ outsideDrop, outsideAfter })}`);
+    }
+    if (!outsideAfter.toast.includes("未部署")) throw new Error(`拖到无效区域缺少反馈：${outsideAfter.toast}`);
+    console.log("ok 拖到无效区域不会部署并给出反馈");
+
+    await deployAll();
+    const energyDrop = await evaluate(`(() => {
+      const energy = Number(document.getElementById('energy').textContent);
+      const hand = document.querySelectorAll('#hand .card').length;
+      const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+        .find((element) => Number(element.querySelector('.card-cost').textContent) > energy);
+      const slot = document.querySelector('#player-row .slot.empty');
+      if (!card || !slot) return { skip: true, energy, hand };
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      const highlighted = document.querySelectorAll('#player-row .slot.drop-ok').length;
+      const toastBefore = document.getElementById('toast').textContent;
+      slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      return { skip: false, energy, hand, highlighted, toastBefore };
+    })()`);
+    if (energyDrop.skip) throw new Error(`能量不足测试缺少单位牌或空列：${JSON.stringify(energyDrop)}`);
+    await sleep(300);
+    const energyAfter = await evaluate(`({
+      energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
+      toast: document.getElementById('toast').textContent,
+    })`);
+    if (energyDrop.highlighted !== 0 || !energyDrop.toastBefore.includes("能量不足")) {
+      throw new Error(`能量不足时不应高亮可放置列：${JSON.stringify({ energyDrop, energyAfter })}`);
+    }
+    if (energyAfter.energy !== energyDrop.energy || energyAfter.hand !== energyDrop.hand) {
+      throw new Error(`能量不足时不应改变手牌或能量：${JSON.stringify({ energyDrop, energyAfter })}`);
+    }
+    if (!energyAfter.toast.includes("能量不足")) {
+      throw new Error(`能量不足缺少反馈：${energyAfter.toast}`);
+    }
+    console.log("ok 能量不足时拖放不会部署并给出反馈");
 
     async function deployAll() {
       for (let index = 0; index < 6; index += 1) {
@@ -168,45 +319,205 @@ async function main() {
       return (await evaluate("document.querySelectorAll('#player-row .slot.unit').length")) > 0;
     }
 
-    if (!(await deployAll())) throw new Error("第一回合没有部署成功");
-    console.log("ok 点击卡牌并在空列部署单位");
+    async function winBattle() {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        let resultShown = false;
+        for (let index = 0; index < 25; index += 1) {
+          if (await evaluate("!document.getElementById('result-panel').hidden")) {
+            resultShown = true;
+            break;
+          }
+          await deployAll();
+          if (await evaluate("!document.getElementById('result-panel').hidden")) {
+            resultShown = true;
+            break;
+          }
+          const before = await evaluate("document.getElementById('turn').textContent");
+          await evaluate("document.getElementById('end-turn').click(); true;");
+          await waitFor(async () => {
+            const resultOpen = await evaluate("!document.getElementById('result-panel').hidden");
+            const turn = await evaluate("document.getElementById('turn').textContent");
+            return resultOpen || turn !== before;
+          }, `第 ${index + 1} 次结束回合`);
+        }
+        if (!resultShown) throw new Error("战斗没有在预期回合内结束");
+        const title = await evaluate("document.getElementById('result-title').textContent");
+        if (title === "战斗胜利") return;
+        await click("#result-action");
+        await waitFor(
+          async () => await evaluate("document.getElementById('result-panel').hidden"),
+          "重试战斗"
+        );
+      }
+      throw new Error("多次重试仍未获胜");
+    }
 
-    let resultShown = false;
-    for (let index = 0; index < 25; index += 1) {
-      if (await evaluate("!document.getElementById('result-panel').hidden")) {
-        resultShown = true;
-        break;
-      }
-      await deployAll();
-      if (await evaluate("!document.getElementById('result-panel').hidden")) {
-        resultShown = true;
-        break;
-      }
-      const before = await evaluate("document.getElementById('turn').textContent");
-      await evaluate("document.getElementById('end-turn').click(); true;");
-      await waitFor(async () => {
-        const resultOpen = await evaluate("!document.getElementById('result-panel').hidden");
-        const turn = await evaluate("document.getElementById('turn').textContent");
-        return resultOpen || turn !== before;
-      }, `第 ${index + 1} 次结束回合`);
-    }
-    if (!resultShown) {
-      resultShown = await evaluate("!document.getElementById('result-panel').hidden");
-    }
-    if (!resultShown) throw new Error("战斗没有在预期回合内结束");
-    if ((await evaluate("document.getElementById('result-title').textContent")) !== "战斗胜利") {
-      throw new Error(`预期战斗胜利，实际：${await evaluate("document.getElementById('result-title').textContent")}`);
+    await winBattle();
+    const overDrag = await evaluate(`(() => {
+      const card = document.querySelector('#hand .card[data-type="unit"]');
+      if (!card) return { skip: true };
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      return {
+        skip: false,
+        draggable: card.getAttribute('draggable'),
+        dragging: document.querySelectorAll('.card.dragging').length,
+        highlighted: document.querySelectorAll('#player-row .slot.drop-ok').length,
+      };
+    })()`);
+    if (!overDrag.skip && (
+      overDrag.draggable !== "false" || overDrag.dragging !== 0 || overDrag.highlighted !== 0
+    )) {
+      throw new Error(`战斗结束后不应允许拖放：${JSON.stringify(overDrag)}`);
     }
     await screenshot("ai-game-result.png");
-    console.log("ok 结束回合直到战斗结算");
+    console.log("ok 战斗 1 胜利，结束后拖放被禁用");
 
-    await evaluate("document.getElementById('result-action').click(); true;");
+    await click("#result-action");
+    await waitFor(async () => await visible("story-view"), "战斗后剧情");
+    await click("#story-next");
     await waitFor(
-      async () => !(await evaluate("document.getElementById('story-view').hidden")),
-      "战斗后剧情"
+      async () => (await evaluate("document.querySelectorAll('#story-options .story-option').length")) === 2,
+      "剧情选项"
     );
-    await screenshot("ai-game-after-battle.png");
-    console.log("ok 结果确认后进入后日谈");
+    await screenshot("ai-game-story-options.png");
+    await click('.story-option[data-option="battle1_signal"]');
+    await waitFor(
+      async () => (await evaluate("document.querySelectorAll('#story-options .story-option').length")) === 0,
+      "选项确认"
+    );
+    await click("#story-next");
+    await waitFor(async () => await visible("map-view"), "关卡选择界面");
+    await screenshot("ai-game-map.png");
+    console.log("ok 剧情选项后进入关卡选择");
+
+    await command("Emulation.setDeviceMetricsOverride", {
+      width: 760,
+      height: 1000,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await sleep(300);
+    const overflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
+    if (overflow) throw new Error("窄窗口出现横向溢出");
+    await screenshot("ai-game-map-narrow.png");
+    await command("Emulation.clearDeviceMetricsOverride");
+    await sleep(200);
+    console.log("ok 窄窗口下关卡选择布局");
+
+    await click('.map-node[data-id="signal"]');
+    await waitFor(async () => await visible("story-view"), "信号前置剧情");
+    const signalStory = await evaluate("document.getElementById('story-text').textContent");
+    if (!signalStory.includes("追着这个信号")) throw new Error(`剧情未按标记回应：${signalStory}`);
+    await click("#story-next");
+    await click("#story-next");
+    await waitFor(async () => await visible("signal-view"), "信号奇遇界面");
+    await click('.signal-action[data-action="upgrade"]');
+    await waitFor(
+      async () => (await evaluate("document.querySelectorAll('#signal-targets .target').length")) > 0,
+      "信号目标"
+    );
+    await click('#signal-targets .target[data-card="striker"]');
+    await waitFor(async () => await visible("signal-preview"), "信号预览");
+    await screenshot("ai-game-signal-preview.png");
+    await click("#signal-confirm");
+    await waitFor(async () => await visible("story-view"), "信号后剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("map-view"), "信号后选关");
+    await click('.map-node[data-id="adventure"]');
+    await waitFor(async () => await visible("story-view"), "维修前置剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("adventure-view"), "维修界面");
+    await click('.target-action[data-card="striker"][data-effect="hp"]');
+    await waitFor(async () => await visible("adventure-preview"), "维修预览");
+    await screenshot("ai-game-adventure-preview.png");
+    await click("#adventure-confirm");
+    await waitFor(async () => await visible("story-view"), "维修后剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("map-view"), "维修后选关");
+    await click('.map-node[data-id="battle2"]');
+    await waitFor(async () => await visible("story-view"), "战斗 2 前置剧情");
+    await click("#story-next");
+    await waitFor(
+      async () => (await visible("battle-view")) &&
+        (await evaluate("document.querySelectorAll('#hand .card').length")) > 0,
+      "战斗 2 界面"
+    );
+    console.log("ok 信号、维修与关卡串联");
+
+    await command("Emulation.setDeviceMetricsOverride", {
+      width: 760,
+      height: 1000,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await sleep(300);
+    const battleOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
+    if (battleOverflow) throw new Error("窄窗口战斗界面出现横向溢出");
+    await screenshot("ai-game-battle2-narrow.png");
+    await command("Emulation.clearDeviceMetricsOverride");
+    await sleep(200);
+    console.log("ok 窄窗口下战斗与预告布局");
+
+    const forecast = await evaluate(`(() => {
+      const cells = [...document.querySelectorAll('#forecast-row .forecast-cell')];
+      return {
+        cells: cells.length,
+        text: document.getElementById('forecast-row').textContent,
+        current: document.querySelectorAll('.forecast-item.current').length,
+        next: document.querySelectorAll('.forecast-item.next').length,
+      };
+    })()`);
+    if (forecast.cells !== 4) throw new Error(`预告应固定四列，实际 ${forecast.cells}`);
+    if (!forecast.text.includes("防守机偶") || !forecast.text.includes("突击哨兵")) {
+      throw new Error(`战斗 2 预告缺少内容：${forecast.text}`);
+    }
+    if (forecast.current < 1 || forecast.next < 1) {
+      throw new Error(`预告应区分当前与下一回合：${JSON.stringify(forecast)}`);
+    }
+    await screenshot("ai-game-battle2-forecast.png");
+    console.log("ok 敌方四列预告区分当前与下一回合");
+
+    const keyboard = await evaluate(`(() => {
+      const energy = Number(document.getElementById('energy').textContent);
+      const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+        .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
+      if (!card) return false;
+      card.focus();
+      card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      return true;
+    })()`);
+    if (!keyboard) throw new Error("没有可用键盘选择的单位");
+    await waitFor(
+      async () => (await evaluate("document.querySelectorAll('#hand .card.selected').length")) === 1,
+      "键盘选择单位"
+    );
+    const keyboardDeploy = await evaluate(`(() => {
+      const slot = document.querySelector('#player-row .slot.empty');
+      if (!slot) return false;
+      slot.focus();
+      slot.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      return true;
+    })()`);
+    if (!keyboardDeploy) throw new Error("没有可用键盘部署的空列");
+    await waitFor(
+      async () => (await evaluate("document.querySelectorAll('#player-row .slot.unit').length")) > 0,
+      "键盘部署"
+    );
+    console.log("ok 键盘选择单位并部署");
+
+    const beforeTurn = await evaluate("document.getElementById('turn').textContent");
+    await click("#end-turn");
+    await waitFor(
+      async () => (await evaluate("document.getElementById('turn').textContent")) !== beforeTurn,
+      "结束回合"
+    );
+    const nextForecast = await evaluate("document.getElementById('forecast-row').textContent");
+    if (nextForecast.includes("防守机偶") || !nextForecast.includes("突击哨兵")) {
+      throw new Error(`下一回合预告不正确：${nextForecast}`);
+    }
+    await screenshot("ai-game-battle2-next-turn.png");
+    console.log("ok 进入下一回合后预告更新");
 
     ws.close();
     console.log("浏览器冒烟测试全部通过");

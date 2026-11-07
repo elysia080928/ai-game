@@ -34,17 +34,41 @@
 
     <main class="stage">
       <section id="story-view" class="view" hidden>
-        <div class="story-panel">
+        <div class="story-panel" id="story-panel">
           <div class="story-node" id="story-node"></div>
-          <div class="story-speaker" id="story-speaker"></div>
-          <p class="story-text" id="story-text"></p>
+          <div class="story-portrait" id="story-portrait" aria-hidden="true"></div>
+          <div class="story-body">
+            <div class="story-speaker" id="story-speaker"></div>
+            <p class="story-text" id="story-text"></p>
+            <div class="story-options" id="story-options"></div>
+          </div>
           <div class="story-footer">
             <span id="story-progress"></span>
             <div>
               <button id="story-next" class="primary">下一句</button>
-              <button id="story-skip" class="ghost">跳过整段</button>
+              <button id="story-skip" class="ghost">跳过本段（遇选项停）</button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section id="map-view" class="view" hidden>
+        <div class="map-head">
+          <div>
+            <h2>路线选择</h2>
+            <p class="map-hint" id="map-hint">选择下一个可进入的节点。</p>
+          </div>
+          <div class="map-route" id="map-route"></div>
+        </div>
+        <div class="book-spread">
+          <div class="book-page" id="map-page-left"></div>
+          <div class="book-page" id="map-page-right"></div>
+        </div>
+        <div class="map-legend">
+          <span class="legend available">可进入</span>
+          <span class="legend completed">已完成</span>
+          <span class="legend locked">未解锁</span>
+          <span class="legend closed">已关闭</span>
         </div>
       </section>
 
@@ -56,9 +80,10 @@
             <span>能量 <b id="energy">4</b></span>
             <span>牌堆 <b id="deck-count">0</b></span>
           </div>
-          <div class="forecast" id="forecast"></div>
         </div>
 
+        <div class="forecast-label">敌方预告 <span>本回合 / 下回合</span></div>
+        <div class="forecast-row" id="forecast-row"></div>
         <div class="board-row enemy-row" id="enemy-row"></div>
         <div class="board-middle"><span>对位战线</span></div>
         <div class="board-row player-row" id="player-row"></div>
@@ -104,10 +129,27 @@
         </div>
       </section>
 
+      <section id="signal-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>旧型号信号</h2>
+          <p class="node-hint">选择一项效果并指定单位，先预览再确认；也可以离开。</p>
+          <div class="signal-actions" id="signal-actions"></div>
+          <div class="targets" id="signal-targets"></div>
+          <div class="preview" id="signal-preview" hidden>
+            <p id="signal-preview-text"></p>
+            <button id="signal-confirm" class="primary">确认</button>
+            <button id="signal-cancel" class="ghost">取消</button>
+          </div>
+          <div class="node-actions">
+            <button id="signal-leave" class="ghost">离开</button>
+          </div>
+        </div>
+      </section>
+
       <section id="adventure-view" class="view" hidden>
         <div class="node-panel">
           <h2>废弃维修站</h2>
-          <p class="node-hint">选择一张已有单位，使其本趟冒险攻击 +1；也可以离开。</p>
+          <p class="node-hint">选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。</p>
           <div class="targets" id="targets"></div>
           <div class="preview" id="adventure-preview" hidden>
             <p id="preview-text"></p>

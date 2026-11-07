@@ -13,7 +13,7 @@ class GameError(Exception):
     pass
 
 
-def card_stats(cards, card_id, level, atk_bonus=0):
+def card_stats(cards, card_id, level, atk_bonus=0, hp_bonus=0):
     definition = cards[card_id]
     level_data = definition["levels"][level - 1]
     result = {
@@ -25,8 +25,8 @@ def card_stats(cards, card_id, level, atk_bonus=0):
     }
     if definition["type"] == "unit":
         result["atk"] = level_data["atk"] + atk_bonus
-        result["hp"] = level_data["hp"]
-        result["maxHp"] = level_data["hp"]
+        result["hp"] = level_data["hp"] + hp_bonus
+        result["maxHp"] = result["hp"]
     else:
         result["heal"] = level_data.get("heal")
         result["damage"] = level_data.get("damage")
@@ -44,7 +44,9 @@ def _log(b, text):
 
 
 def _card_cost(b, card):
-    return card_stats(b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0))["cost"]
+    return card_stats(
+        b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+    )["cost"]
 
 
 def make_battle(deck_cards, encounter, cards, enemies, rng=None):
@@ -73,6 +75,7 @@ def make_battle(deck_cards, encounter, cards, enemies, rng=None):
                 "cardId": card["cardId"],
                 "level": card["level"],
                 "atkBonus": card.get("atkBonus", 0),
+                "hpBonus": card.get("hpBonus", 0),
             }
         )
         b["next_uid"] += 1
@@ -108,7 +111,10 @@ def _draw_opening(b, rng):
         low_units = [
             c
             for c in low
-            if card_stats(b["cards"], c["cardId"], c["level"], c.get("atkBonus", 0))["type"] == "unit"
+            if card_stats(
+                b["cards"], c["cardId"], c["level"], c.get("atkBonus", 0), c.get("hpBonus", 0)
+            )["type"]
+            == "unit"
         ]
         if len(low) >= 4 and low_units:
             picks = candidate
@@ -194,7 +200,9 @@ def deploy(b, uid, column):
     _require_playable(b)
     index = _hand_index(b, uid)
     card = b["hand"][index]
-    stats = card_stats(b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0))
+    stats = card_stats(
+        b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+    )
     if stats["type"] != "unit":
         raise GameError("这不是单位牌")
     if not (1 <= column <= COLUMNS):
@@ -217,7 +225,9 @@ def play_command(b, uid, target_uid):
     _require_playable(b)
     index = _hand_index(b, uid)
     card = b["hand"][index]
-    stats = card_stats(b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0))
+    stats = card_stats(
+        b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+    )
     if stats["type"] != "command":
         raise GameError("这不是指令牌")
     target = _find_unit(b, target_uid)
@@ -375,7 +385,9 @@ def _check_stalemate(b):
 
 
 def _hand_view(b, card):
-    stats = card_stats(b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0))
+    stats = card_stats(
+        b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+    )
     stats["uid"] = card["uid"]
     return stats
 
@@ -415,6 +427,8 @@ def view(b):
                 "turn": item["turn"],
                 "column": item["column"],
                 "name": b["enemies"][item["enemy"]]["name"],
+                "atk": b["enemies"][item["enemy"]]["atk"],
+                "hp": b["enemies"][item["enemy"]]["hp"],
             }
             for item in b["plan"]
             if item["turn"] in (b["turn"], b["turn"] + 1)

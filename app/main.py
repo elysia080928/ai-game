@@ -58,6 +58,20 @@ class RecruitBody(BaseModel):
 
 class AdventureBody(BaseModel):
     cardId: str
+    effect: str
+
+
+class SignalBody(BaseModel):
+    action: str
+    cardId: str
+
+
+class MapSelectBody(BaseModel):
+    nodeId: str
+
+
+class StoryChooseBody(BaseModel):
+    optionId: str
 
 
 class NewGameBody(BaseModel):
@@ -80,7 +94,13 @@ def _load_state(user_id):
     row = db.conn().execute("SELECT state FROM saves WHERE user_id = ?", (user_id,)).fetchone()
     if row is None:
         return game.new_state()
-    return json.loads(row["state"])
+    try:
+        state, changed = game.migrate_state(json.loads(row["state"]))
+    except (ValueError, B.GameError):
+        raise HTTPException(status_code=500, detail="存档无法读取，已保留原数据")
+    if changed:
+        _save_state(user_id, state)
+    return state
 
 
 def _save_state(user_id, state):
@@ -195,6 +215,26 @@ def story_advance(body: StoryBody, user=Depends(current_user)):
         _save_state(user["id"], state)
         if state["phase"] != "node":
             BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/story/choose")
+def story_choose(body: StoryChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.choose_story_option(state, body.optionId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/map/select")
+def map_select(body: MapSelectBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.select_node(state, body.nodeId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -333,11 +373,31 @@ def recruit_leave(user=Depends(current_user)):
     return {"state": game.public_state(state), "battle": None}
 
 
-@app.post("/api/adventure/choose")
-def adventure_choose(body: AdventureBody, user=Depends(current_user)):
+@app.post("/api/signal/apply")
+def signal_apply(body: SignalBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.adventure_choose(state, body.cardId)
+        game.signal_apply(state, body.action, body.cardId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/signal/leave")
+def signal_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.signal_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/adventure/apply")
+def adventure_apply(body: AdventureBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.adventure_apply(state, body.cardId, body.effect)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}

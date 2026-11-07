@@ -94,7 +94,8 @@
       "enemyHp": 15,
       "plan": [
         {"turn": 1, "column": 1, "enemy": "small_sentry"},
-        {"turn": 2, "column": 3, "enemy": "small_sentry"}
+        {"turn": 2, "column": 3, "enemy": "small_sentry"},
+        {"turn": 3, "column": 2, "enemy": "small_sentry"}
       ],
       "reward": {"gold": 20}
     },
@@ -104,7 +105,8 @@
       "enemyHp": 15,
       "plan": [
         {"turn": 1, "column": 2, "enemy": "defender"},
-        {"turn": 2, "column": 4, "enemy": "assault_sentry"},
+        {"turn": 1, "column": 4, "enemy": "small_sentry"},
+        {"turn": 2, "column": 3, "enemy": "assault_sentry"},
         {"turn": 3, "column": 1, "enemy": "small_sentry"}
       ],
       "reward": {"gold": 0}
@@ -117,37 +119,131 @@
       {"id": "flyer", "price": 15}
     ]
   },
-  "adventure": {"attackBonus": 1},
+  "signal": {"hpBonus": 1},
+  "adventure": {"atkBonus": 1, "hpBonus": 2},
+  "runLength": 4,
+  "firstNode": "battle1",
   "nodes": [
     {
       "id": "battle1",
       "type": "battle",
       "name": "战斗 1",
       "encounter": "battle1",
-      "before": [{"speaker": "爱", "text": "第一次实战……我会在终端这边看着你，别紧张。"}],
-      "after": [{"speaker": "爱", "text": "赢了。你的机偶比我想象中更可靠。"}]
+      "next": ["recruit", "signal"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "第一次实战……我会在终端这边看着你，别紧张。",
+          "background": "battle",
+          "portrait": "/static/ai.png"
+        }
+      ],
+      "after": [
+        {
+          "speaker": "爱",
+          "text": "赢了。你的机偶比我想象中更可靠。",
+          "background": "battle"
+        },
+        {
+          "speaker": "爱",
+          "text": "前面的路线需要你决定：补给站能补充新机偶；旧型号信号也许能强化现有单位。你更倾向哪边？",
+          "options": [
+            {"id": "battle1_supply", "text": "去补给站看看", "set": {"battle1_choice": "supply"}},
+            {"id": "battle1_signal", "text": "先追踪信号", "set": {"battle1_choice": "signal"}}
+          ]
+        },
+        {
+          "speaker": "爱",
+          "text": "好，路线记下了。真正走哪条，由你在路线图上决定。"
+        }
+      ]
     },
     {
       "id": "recruit",
       "type": "recruit",
       "name": "补给站",
-      "before": [{"speaker": "爱", "text": "前面是补给站，用刚才缴获的金币换点零件吧。"}],
-      "after": [{"speaker": "爱", "text": "装备整理好了，我们继续。"}]
+      "branch": "recruit",
+      "next": ["adventure"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "你刚才提到补给站，我就把坐标调过去了。",
+          "if": {"battle1_choice": "supply"},
+          "background": "station"
+        },
+        {
+          "speaker": "爱",
+          "text": "虽然你更在意那个信号，补给站也顺路，先看看这里。",
+          "if": {"battle1_choice": "signal"}
+        },
+        {
+          "speaker": "爱",
+          "text": "挑一件合适的装备吧。"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "装备整理好了，我们继续。"}
+      ]
+    },
+    {
+      "id": "signal",
+      "type": "signal",
+      "name": "旧型号信号",
+      "branch": "signal",
+      "next": ["adventure"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "按你说的，我们追着这个信号过来了。",
+          "if": {"battle1_choice": "signal"},
+          "background": "signal"
+        },
+        {
+          "speaker": "爱",
+          "text": "补给站那边先放一放，这个信号值得看看。",
+          "if": {"battle1_choice": "supply"}
+        },
+        {
+          "speaker": "爱",
+          "text": "要接入旧型号信号吗？可能会有点奇怪。"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "信号安静下来了。它好像把东西留给了你。"}
+      ]
     },
     {
       "id": "adventure",
       "type": "adventure",
       "name": "废弃维修站",
-      "before": [{"speaker": "爱", "text": "这座维修站还能运转，也许能把一台机偶调校得更强。"}],
-      "after": [{"speaker": "爱", "text": "它看起来精神多了。"}]
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "这座维修站还能运转，也许能把一台机偶调校得更强。",
+          "background": "repair"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "它看起来精神多了。"}
+      ]
     },
     {
       "id": "battle2",
       "type": "battle",
       "name": "战斗 2",
       "encounter": "battle2",
-      "before": [{"speaker": "爱", "text": "这次的对手不一样了。小心它们的部署位置。"}],
-      "after": [{"speaker": "爱", "text": "结束了……谢谢你陪我走到这里。"}]
+      "next": [],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "这次的对手不一样了。小心它们的部署位置。",
+          "background": "battle"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "结束了……谢谢你陪我走到这里。"}
+      ]
     }
   ]
 }

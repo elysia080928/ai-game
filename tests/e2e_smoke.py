@@ -1,6 +1,6 @@
 """端到端冒烟测试：python tests/e2e_smoke.py（需要先启动服务）。
 
-依次验证：注册、越权、剧情推进、两场战斗、招募、奇遇、完成、重复提交与新局覆盖、账号隔离。
+验证注册、剧情选项与跳过、选关、两条四节点路线、奇遇、预告、重复请求与账号隔离。
 """
 
 import http.cookiejar
@@ -71,15 +71,30 @@ def advance_to_node(client):
         if state["phase"] == "node":
             return state
         assert state["phase"] in ("before_story", "after_story"), state
+        story = state.get("story") or {}
+        assert not story.get("options"), "节点前置剧情不应含选项"
         client.ok("/api/story/advance", {"skip": False})
     raise AssertionError("无法进入节点")
 
 
-def play_battle(client):
-    battle = client.ok("/api/battle/reset", {})["battle"]
-    for _ in range(80):
+def advance_to_map(client):
+    for _ in range(10):
+        state = client.state()
+        if state["phase"] == "map":
+            return state
+        assert state["phase"] in ("before_story", "after_story"), state
+        client.ok("/api/story/advance", {"skip": False})
+    raise AssertionError("无法进入选关")
+
+
+def map_status(state):
+    return {node["id"]: node["status"] for node in state["map"]["nodes"]}
+
+
+def play_loop(client, battle):
+    for _ in range(100):
         if battle["phase"] == "over":
-            break
+            return battle
         if battle["phase"] == "discard":
             uids = [card["uid"] for card in battle["hand"][: battle["discardRequired"]]]
             battle = client.ok("/api/battle/discard", {"uids": uids})["battle"]
@@ -128,53 +143,98 @@ def play_battle(client):
         if placed:
             continue
         battle = client.ok("/api/battle/end", {})["battle"]
-
-    assert battle["phase"] == "over", battle["phase"]
-    if battle["result"] != "win":
-        return False
-    client.ok("/api/battle/confirm", {})
-    return True
+    raise AssertionError("战斗没有在合理回合内结束")
 
 
-def win_battle(client):
-    for _ in range(8):
-        if play_battle(client):
+def win_battle(client, encounter_id):
+    for attempt in range(8):
+        battle = client.ok("/api/battle/reset", {})["battle"]
+        assert battle["turn"] == 1 and battle["energy"] == 4 and len(battle["hand"]) == 6
+        if attempt == 0 and encounter_id == "battle1":
+            entries = {(item["turn"], item["column"]) for item in battle["forecast"]}
+            assert entries == {(1, 1), (2, 3)}, entries
+        if attempt == 0 and encounter_id == "battle2":
+            entries = {(item["turn"], item["column"]) for item in battle["forecast"]}
+            assert entries == {(1, 2), (1, 4), (2, 3)}, entries
+            assert all(item["turn"] in (1, 2) for item in battle["forecast"])
+        battle = play_loop(client, battle)
+        if battle["result"] == "win":
+            client.ok("/api/battle/confirm", {})
             return
-    raise AssertionError("多次重试仍未获胜")
+    raise AssertionError(f"{encounter_id} 多次重试仍未获胜")
 
 
-def main():
-    wait_for_server()
+def battle1_to_map(client, branch_option):
+    advance_to_node(client)
+    win_battle(client, "battle1")
+    state = client.state()
+    assert state["phase"] == "after_story" and state["gold"] == 20, state
+    client.ok("/api/battle/confirm", {})
+    assert client.state()["gold"] == 20, "重复确认不能重复发奖"
 
-    # 未登录访问
-    anon = Client()
-    anon.fail("/api/state", status=401)
+    client.ok("/api/story/advance", {"skip": True})
+    state = client.state()
+    assert state["phase"] == "after_story" and state["story"]["options"], state
+    client.fail("/api/story/advance", {"skip": True})
+    client.fail("/api/story/advance", {"skip": False})
+    client.fail("/api/story/choose", {"optionId": "not-an-option"})
+    client.ok("/api/story/choose", {"optionId": branch_option})
+    client.fail("/api/story/choose", {"optionId": branch_option})
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["battle1"] == "completed"
+    assert status["recruit"] == "available" and status["signal"] == "available", status
+    assert status["adventure"] == "locked" and status["battle2"] == "locked", status
+    for illegal in ("adventure", "battle2", "battle1"):
+        client.fail("/api/map/select", {"nodeId": illegal})
+    return state
 
+
+def adventure_phase(client, expected_card):
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "adventure", state
+    client.fail("/api/adventure/apply", {"cardId": "spark", "effect": "atk"})
+    client.fail("/api/adventure/apply", {"cardId": "striker", "effect": "nope"})
+    before = next(card for card in state["deck"] if card["cardId"] == expected_card)
+    client.ok("/api/adventure/apply", {"cardId": expected_card, "effect": "hp"})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    after = next(card for card in state["deck"] if card["cardId"] == expected_card)
+    assert after["hpBonus"] == before["hpBonus"] + 2, (before, after)
+    assert after["atk"] == before["atk"]
+    return after
+
+
+def finish_route(client):
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["adventure"] == "available", status
+    client.ok("/api/map/select", {"nodeId": "adventure"})
+    return state
+
+
+def recruit_route():
     name = "u" + "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10))
     client = Client()
-    client.fail("/api/register", {"username": "x", "password": "12345678"})
-    client.fail("/api/register", {"username": name, "password": "short"})
     client.ok("/api/register", {"username": name, "password": "test-pass-123"})
     state = client.state()
     assert state["phase"] == "before_story" and state["gold"] == 0, state
     assert len(state["deck"]) == 8
-    print("ok 注册与新存档")
 
-    # 战斗 1
-    advance_to_node(client)
-    battle = client.ok("/api/battle/reset", {})["battle"]
-    assert battle["turn"] == 1 and battle["energy"] == 4 and len(battle["hand"]) == 6
-    assert battle["forecast"], "战斗开始时应有敌方预告"
-    client.fail("/api/battle/deploy", {"uid": 999999, "column": 1})
-    win_battle(client)
+    state = battle1_to_map(client, "battle1_supply")
+    client.ok("/api/logout", {})
+    client.ok("/api/login", {"username": name, "password": "test-pass-123"})
+    restored = client.state()
+    assert restored["phase"] == "map" and restored["gold"] == state["gold"], restored
+    assert restored["completed"] == state["completed"], "重新登录后进度丢失"
+    print("ok 重新登录仍停留在选关")
+    client.ok("/api/map/select", {"nodeId": "recruit"})
+    client.fail("/api/map/select", {"nodeId": "signal"})
     state = client.state()
-    assert state["phase"] == "after_story" and state["gold"] == 20, state
-    # 重复确认不能重复发奖
-    client.ok("/api/battle/confirm", {})
-    assert client.state()["gold"] == 20
-    print("ok 战斗 1、胜利奖励与重复确认")
+    assert state["route"] == "recruit" and state["phase"] == "before_story"
+    assert "补给站" in state["story"]["text"], state["story"]
 
-    # 招募
     advance_to_node(client)
     state = client.state()
     assert state["node"]["type"] == "recruit"
@@ -188,58 +248,109 @@ def main():
     client.fail("/api/recruit/buy", {"offerId": "not-a-card"})
     client.ok("/api/recruit/leave", {})
     assert client.state()["phase"] == "after_story"
-    print("ok 招募、同名升级与单次购买")
 
-    # 奇遇
-    advance_to_node(client)
-    state = client.state()
-    assert state["node"]["type"] == "adventure"
-    before = next(card for card in state["deck"] if card["cardId"] == "striker")
-    client.ok("/api/adventure/choose", {"cardId": "striker"})
-    state = client.state()
-    assert state["phase"] == "after_story"
-    striker = next(card for card in state["deck"] if card["cardId"] == "striker")
-    assert striker["atk"] == before["atk"] + 1, (before, striker)
-    print("ok 奇遇强化")
+    state = finish_route(client)
+    assert map_status(state)["signal"] == "closed", state["map"]
+    client.fail("/api/map/select", {"nodeId": "signal"})
+    client.fail("/api/map/select", {"nodeId": "recruit"})
+    striker = adventure_phase(client, "striker")
+    assert striker["level"] == 1 and striker["hpBonus"] == 2
 
-    # 战斗 2
+    state = advance_to_map(client)
+    assert map_status(state)["battle2"] == "available"
+    client.ok("/api/map/select", {"nodeId": "battle2"})
     advance_to_node(client)
-    state = client.state()
-    assert state["node"]["id"] == "battle2"
-    win_battle(client)
+    assert client.state()["node"]["id"] == "battle2"
+    win_battle(client, "battle2")
     state = client.state()
     assert state["gold"] == 10, "战斗 2 不发金币"
-    print("ok 战斗 2（无奖励）")
-
-    # 完成
-    for _ in range(10):
+    for _ in range(5):
         state = client.state()
         if state["phase"] == "complete":
             break
-        assert state["phase"] in ("after_story", "before_story"), state
         client.ok("/api/story/advance", {"skip": True})
     assert client.state()["phase"] == "complete"
-    print("ok 完成画面")
+    client.fail("/api/map/select", {"nodeId": "battle2"})
+    print("ok 招募路线：战斗 1 → 招募 → 维修 → 战斗 2 → 完成")
+    return client
 
-    # 新游戏需要确认
-    client.fail("/api/game/new", {"confirm": False})
-    client.ok("/api/game/new", {"confirm": True})
+
+def signal_route():
+    name = "u" + "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10))
+    client = Client()
+    client.ok("/api/register", {"username": name, "password": "test-pass-456"})
+    state = battle1_to_map(client, "battle1_signal")
+    client.ok("/api/map/select", {"nodeId": "signal"})
+    client.fail("/api/map/select", {"nodeId": "recruit"})
     state = client.state()
-    assert state["phase"] == "before_story" and state["gold"] == 0 and state["nodeIndex"] == 0
-    print("ok 新游戏覆盖确认")
+    assert state["route"] == "signal" and state["phase"] == "before_story"
+    assert "追着这个信号" in state["story"]["text"], state["story"]
 
-    # 账号隔离
-    other = Client()
-    other_name = "v" + "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10))
-    other.ok("/api/register", {"username": other_name, "password": "test-pass-456"})
-    assert other.state()["gold"] == 0
-    assert client.state()["gold"] == 0
-    other.fail("/api/game/new", {"confirm": False})
-    print("ok 账号隔离")
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "signal"
+    client.fail("/api/signal/apply", {"action": "nope", "cardId": "striker"})
+    client.fail("/api/signal/apply", {"action": "upgrade", "cardId": "spark"})
+    striker_before = next(card for card in state["deck"] if card["cardId"] == "striker")
+    client.ok("/api/signal/apply", {"action": "upgrade", "cardId": "striker"})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    striker = next(card for card in state["deck"] if card["cardId"] == "striker")
+    assert striker["level"] == 2 and striker["atk"] > striker_before["atk"], (striker_before, striker)
 
-    # 登出
-    client.ok("/api/logout", {})
-    client.fail("/api/state", status=401)
+    state = finish_route(client)
+    assert map_status(state)["recruit"] == "closed", state["map"]
+    striker = adventure_phase(client, "striker")
+    assert striker["level"] == 2 and striker["hpBonus"] == 2, striker
+
+    state = advance_to_map(client)
+    assert map_status(state)["battle2"] == "available"
+    client.ok("/api/map/select", {"nodeId": "battle2"})
+    advance_to_node(client)
+    win_battle(client, "battle2")
+    state = client.state()
+    assert state["gold"] == 20, "信号路线不经过招募，战斗 2 不发金币"
+    for _ in range(5):
+        state = client.state()
+        if state["phase"] == "complete":
+            break
+        client.ok("/api/story/advance", {"skip": True})
+    assert client.state()["phase"] == "complete"
+    print("ok 信号路线：战斗 1 → 信号 → 维修 → 战斗 2 → 完成")
+    return client
+
+
+def main():
+    wait_for_server()
+
+    anon = Client()
+    anon.fail("/api/state", status=401)
+
+    bad = Client()
+    bad.fail("/api/register", {"username": "x", "password": "12345678"})
+    bad.fail("/api/register", {"username": "validname", "password": "short"})
+
+    recruit = recruit_route()
+    recruit_state = recruit.state()
+    assert recruit_state["complete"] and recruit_state["gold"] == 10
+
+    signal = signal_route()
+    signal_state = signal.state()
+    assert signal_state["complete"] and signal_state["gold"] == 20
+    print("ok 两条路线互斥、汇合与完成画面")
+
+    # 新游戏需要确认；不影响另一账号
+    recruit.fail("/api/game/new", {"confirm": False})
+    recruit.ok("/api/game/new", {"confirm": True})
+    state = recruit.state()
+    assert state["phase"] == "before_story" and state["gold"] == 0
+    assert state["node"]["id"] == "battle1"
+    assert signal.state()["gold"] == 20, "账号隔离失败"
+    print("ok 新游戏覆盖确认与账号隔离")
+
+    recruit.ok("/api/logout", {})
+    recruit.fail("/api/state", status=401)
+    assert signal.state()["phase"] == "complete"
     print("ok 登出")
 
     print("端到端冒烟测试全部通过")
