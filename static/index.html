@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>机偶回路 · MVP</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="auth" class="screen auth-screen">
+    <div class="auth-card">
+      <h1>机偶回路</h1>
+      <p class="subtitle">MVP 试玩版</p>
+      <label>用户名<input id="username" maxlength="20" autocomplete="username" placeholder="3-20 位字母 / 数字 / 下划线"></label>
+      <label>密码<input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="至少 8 位"></label>
+      <div class="auth-error" id="auth-error"></div>
+      <div class="auth-actions">
+        <button id="login-btn" class="primary">登录</button>
+        <button id="register-btn" class="ghost">注册</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="game" class="screen game-screen" hidden>
+    <header class="topbar">
+      <div class="brand">机偶回路 <span class="tag">MVP</span></div>
+      <div class="hud">
+        <span class="hud-item">金币 <b id="hud-gold">0</b></span>
+        <span class="hud-item" id="hud-node"></span>
+        <span class="hud-item" id="hud-user"></span>
+        <button id="logout-btn" class="ghost small">退出登录</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section id="story-view" class="view" hidden>
+        <div class="story-panel">
+          <div class="story-node" id="story-node"></div>
+          <div class="story-speaker" id="story-speaker"></div>
+          <p class="story-text" id="story-text"></p>
+          <div class="story-footer">
+            <span id="story-progress"></span>
+            <div>
+              <button id="story-next" class="primary">下一句</button>
+              <button id="story-skip" class="ghost">跳过整段</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="battle-view" class="view" hidden>
+        <div class="battle-head">
+          <div class="leader enemy"><span>敌方领袖</span><b id="enemy-hp">15</b></div>
+          <div class="turn-box">
+            <span>回合 <b id="turn">1</b></span>
+            <span>能量 <b id="energy">4</b></span>
+            <span>牌堆 <b id="deck-count">0</b></span>
+          </div>
+          <div class="forecast" id="forecast"></div>
+        </div>
+
+        <div class="board-row enemy-row" id="enemy-row"></div>
+        <div class="board-middle"><span>对位战线</span></div>
+        <div class="board-row player-row" id="player-row"></div>
+
+        <div class="battle-bottom">
+          <div class="leader player"><span>己方领袖</span><b id="player-hp">15</b></div>
+          <div class="battle-actions">
+            <button id="end-turn" class="primary">结束回合</button>
+            <button id="recycle-btn" class="ghost">回收模式</button>
+          </div>
+        </div>
+
+        <div class="hand" id="hand"></div>
+        <div class="battle-log" id="log"></div>
+
+        <div class="overlay" id="discard-panel" hidden>
+          <div class="modal">
+            <h2>手牌超过上限</h2>
+            <p>选择弃掉 <b id="discard-needed">0</b> 张牌（本场不能再使用）。</p>
+            <div class="discard-hand" id="discard-hand"></div>
+            <button id="discard-confirm" class="primary" disabled>确认弃牌</button>
+          </div>
+        </div>
+
+        <div class="overlay" id="result-panel" hidden>
+          <div class="modal">
+            <h2 id="result-title"></h2>
+            <p id="result-text"></p>
+            <button id="result-action" class="primary"></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="recruit-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>补给站</h2>
+          <p class="node-hint">最多购买一张，也可以直接离开。同名卡升级、不增加牌组张数。</p>
+          <div class="offers" id="offers"></div>
+          <div class="node-actions">
+            <button id="recruit-leave" class="ghost">离开</button>
+          </div>
+          <div class="node-note" id="recruit-note"></div>
+        </div>
+      </section>
+
+      <section id="adventure-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>废弃维修站</h2>
+          <p class="node-hint">选择一张已有单位，使其本趟冒险攻击 +1；也可以离开。</p>
+          <div class="targets" id="targets"></div>
+          <div class="preview" id="adventure-preview" hidden>
+            <p id="preview-text"></p>
+            <button id="adventure-confirm" class="primary">确认强化</button>
+            <button id="adventure-cancel" class="ghost">取消</button>
+          </div>
+          <div class="node-actions">
+            <button id="adventure-leave" class="ghost">离开</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="complete-view" class="view" hidden>
+        <div class="complete-panel">
+          <h1>MVP 完成</h1>
+          <p>你已经走通了完整的节点路线。</p>
+          <button id="restart-btn" class="primary">重新开始</button>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

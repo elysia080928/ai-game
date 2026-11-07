@@ -1,0 +1,153 @@
+{
+  "cards": {
+    "bean": {
+      "name": "豆丁机器人",
+      "type": "unit",
+      "levels": [
+        {"cost": 1, "atk": 1, "hp": 2},
+        {"cost": 1, "atk": 1, "hp": 3}
+      ]
+    },
+    "shell": {
+      "name": "盾壳机器人",
+      "type": "unit",
+      "levels": [
+        {"cost": 2, "atk": 1, "hp": 4},
+        {"cost": 2, "atk": 2, "hp": 4}
+      ]
+    },
+    "scout": {
+      "name": "侦察机偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 1, "atk": 2, "hp": 1},
+        {"cost": 1, "atk": 2, "hp": 2}
+      ]
+    },
+    "repair": {
+      "name": "紧急维修",
+      "type": "command",
+      "levels": [
+        {"cost": 1, "heal": 3},
+        {"cost": 1, "heal": 4}
+      ]
+    },
+    "spark": {
+      "name": "闪电脉冲",
+      "type": "command",
+      "levels": [
+        {"cost": 2, "damage": 2},
+        {"cost": 2, "damage": 3}
+      ]
+    },
+    "worker": {
+      "name": "维修工偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 2, "atk": 2, "hp": 2},
+        {"cost": 2, "atk": 2, "hp": 3}
+      ]
+    },
+    "striker": {
+      "name": "突击机偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 4, "atk": 3, "hp": 4},
+        {"cost": 4, "atk": 4, "hp": 4}
+      ]
+    },
+    "heavy": {
+      "name": "重装机偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 6, "atk": 5, "hp": 6},
+        {"cost": 6, "atk": 6, "hp": 6}
+      ]
+    },
+    "guard": {
+      "name": "守护机偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 3, "atk": 2, "hp": 4},
+        {"cost": 3, "atk": 3, "hp": 4}
+      ]
+    },
+    "flyer": {
+      "name": "流星机偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 3, "atk": 3, "hp": 2},
+        {"cost": 3, "atk": 3, "hp": 3}
+      ]
+    }
+  },
+  "initialDeck": ["bean", "shell", "scout", "repair", "spark", "worker", "striker", "heavy"],
+  "enemies": {
+    "small_sentry": {"name": "小型哨兵", "atk": 1, "hp": 2},
+    "defender": {"name": "防守机偶", "atk": 1, "hp": 4},
+    "assault_sentry": {"name": "突击哨兵", "atk": 2, "hp": 2}
+  },
+  "encounters": {
+    "battle1": {
+      "name": "战斗 1",
+      "playerHp": 15,
+      "enemyHp": 15,
+      "plan": [
+        {"turn": 1, "column": 1, "enemy": "small_sentry"},
+        {"turn": 2, "column": 3, "enemy": "small_sentry"}
+      ],
+      "reward": {"gold": 20}
+    },
+    "battle2": {
+      "name": "战斗 2",
+      "playerHp": 15,
+      "enemyHp": 15,
+      "plan": [
+        {"turn": 1, "column": 2, "enemy": "defender"},
+        {"turn": 2, "column": 4, "enemy": "assault_sentry"},
+        {"turn": 3, "column": 1, "enemy": "small_sentry"}
+      ],
+      "reward": {"gold": 0}
+    }
+  },
+  "recruit": {
+    "offers": [
+      {"id": "bean", "price": 10},
+      {"id": "guard", "price": 15},
+      {"id": "flyer", "price": 15}
+    ]
+  },
+  "adventure": {"attackBonus": 1},
+  "nodes": [
+    {
+      "id": "battle1",
+      "type": "battle",
+      "name": "战斗 1",
+      "encounter": "battle1",
+      "before": [{"speaker": "爱", "text": "第一次实战……我会在终端这边看着你，别紧张。"}],
+      "after": [{"speaker": "爱", "text": "赢了。你的机偶比我想象中更可靠。"}]
+    },
+    {
+      "id": "recruit",
+      "type": "recruit",
+      "name": "补给站",
+      "before": [{"speaker": "爱", "text": "前面是补给站，用刚才缴获的金币换点零件吧。"}],
+      "after": [{"speaker": "爱", "text": "装备整理好了，我们继续。"}]
+    },
+    {
+      "id": "adventure",
+      "type": "adventure",
+      "name": "废弃维修站",
+      "before": [{"speaker": "爱", "text": "这座维修站还能运转，也许能把一台机偶调校得更强。"}],
+      "after": [{"speaker": "爱", "text": "它看起来精神多了。"}]
+    },
+    {
+      "id": "battle2",
+      "type": "battle",
+      "name": "战斗 2",
+      "encounter": "battle2",
+      "before": [{"speaker": "爱", "text": "这次的对手不一样了。小心它们的部署位置。"}],
+      "after": [{"speaker": "爱", "text": "结束了……谢谢你陪我走到这里。"}]
+    }
+  ]
+}
