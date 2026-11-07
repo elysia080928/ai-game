@@ -147,8 +147,8 @@
 
       <section id="adventure-view" class="view" hidden>
         <div class="node-panel">
-          <h2>废弃维修站</h2>
-          <p class="node-hint">选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。</p>
+          <h2 id="adventure-title">废弃维修站</h2>
+          <p class="node-hint" id="adventure-hint">选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。</p>
           <div class="targets" id="targets"></div>
           <div class="preview" id="adventure-preview" hidden>
             <p id="preview-text"></p>
@@ -157,6 +157,35 @@
           </div>
           <div class="node-actions">
             <button id="adventure-leave" class="ghost">离开</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="drift-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>漂流卡匣</h2>
+          <p class="node-hint">三张候选只能带走一张；已有卡会升一级，新卡加入牌组。可以重抽一次。</p>
+          <div class="offers" id="drift-offers"></div>
+          <div class="node-actions">
+            <button id="drift-reroll" class="ghost">重抽</button>
+            <button id="drift-leave" class="ghost">离开</button>
+          </div>
+          <div class="node-note" id="drift-note"></div>
+        </div>
+      </section>
+
+      <section id="recycle-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>记忆回收站</h2>
+          <p class="node-hint">选择一张卡牌拆解为金币；不能移除最后一张单位牌或清空牌组。</p>
+          <div class="targets" id="recycle-targets"></div>
+          <div class="preview" id="recycle-preview" hidden>
+            <p id="recycle-preview-text"></p>
+            <button id="recycle-confirm" class="primary">确认拆解</button>
+            <button id="recycle-cancel" class="ghost">取消</button>
+          </div>
+          <div class="node-actions">
+            <button id="recycle-leave" class="ghost">离开</button>
           </div>
         </div>
       </section>

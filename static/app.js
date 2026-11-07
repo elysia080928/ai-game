@@ -10,6 +10,8 @@ let recycleMode = false;
 let discardSelection = new Set();
 let adventureTarget = null;
 let adventureEffect = null;
+let enhanceKind = "adventure";
+let recycleTarget = null;
 let signalAction = null;
 let signalTarget = null;
 let draggingUid = null;
@@ -18,9 +20,16 @@ let busy = false;
 let loadingBattle = false;
 let toastTimer = null;
 
-const NODE_TYPES = { battle: "战斗", recruit: "招募", signal: "信号", adventure: "维修" };
+const NODE_TYPES = {
+  battle: "战斗",
+  recruit: "招募",
+  signal: "信号",
+  adventure: "维修",
+  calibration: "校准",
+  drift: "卡匣",
+  recycle: "回收",
+};
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
-const ROUTE_NAMES = { recruit: "招募", signal: "信号奇遇" };
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -65,7 +74,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "complete-view"].forEach((id) => {
+  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -117,7 +126,19 @@ function render() {
     return;
   }
   if (state.node && state.node.type === "adventure") {
-    renderAdventure();
+    renderAdventure("adventure");
+    return;
+  }
+  if (state.node && state.node.type === "calibration") {
+    renderAdventure("calibration");
+    return;
+  }
+  if (state.node && state.node.type === "drift") {
+    renderDrift();
+    return;
+  }
+  if (state.node && state.node.type === "recycle") {
+    renderRecycle();
   }
 }
 
@@ -202,7 +223,10 @@ function mapNodeButton(node) {
     battle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.8 3.5 5.7 5.7-2.2 2.2-2-2-6.7 6.7-2.9-.7.7-2.9 6.7-6.7-2-2 2.7-2.3Z"/><path d="m4 20 3.1-3.1M14.5 5.5l4 4"/></svg>',
     recruit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/><circle cx="12" cy="12" r="8"/></svg>',
     signal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 0 1 16 0M7 16a5 5 0 0 1 10 0M10 16a2 2 0 0 1 4 0"/><path d="M12 19v1"/></svg>',
-    adventure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 5.2L20 10l-5.8 1.8L12 17l-2.2-5.2L4 10l5.8-1.8L12 3Z"/><path d="m18 16 .8 1.8L21 18.5l-2.2.7L18 21l-.8-1.8-2.2-.7 2.2-.7L18 16Z"/></svg>'
+    adventure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 5.2L20 10l-5.8 1.8L12 17l-2.2-5.2L4 10l5.8-1.8L12 3Z"/><path d="m18 16 .8 1.8L21 18.5l-2.2.7L18 21l-.8-1.8-2.2-.7 2.2-.7L18 16Z"/></svg>',
+    calibration: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17V9m7 8V5m7 12v-6"/><path d="M3 21h18"/></svg>',
+    drift: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M9 5v14"/></svg>',
+    recycle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V5h6v3M10 12v4M14 12v4"/></svg>'
   };
   return `<button class="map-node status-${esc(node.status)} type-${esc(node.type)}"
       data-id="${esc(node.id)}" ${disabled}
@@ -222,6 +246,10 @@ function renderMap() {
   const byId = Object.fromEntries(map.nodes.map((node) => [node.id, node]));
   const available = map.nodes.filter((node) => node.status === "available");
   const nextNames = available.map((node) => node.name).join(" / ");
+  const selected = map.nodes.filter(
+    (node) => node.branchGroup && map.route[node.branchGroup] === node.branch
+  );
+  const routeNames = selected.map((node) => node.name).join(" → ");
   $("map-page-left").innerHTML = `
     <h3 class="page-title">回路航线 <span>SECTOR 01</span></h3>
     <div class="map-flow route-track">
@@ -231,14 +259,22 @@ function renderMap() {
         ${mapNodeButton(byId.recruit)}
         ${mapNodeButton(byId.signal)}
       </div>
-      <div class="route-rail"><span></span></div>
-      ${mapNodeButton(byId.adventure)}
+      <div class="route-rail route-rail-split"><span></span><span></span></div>
+      <div class="branch-row route-branch">
+        ${mapNodeButton(byId.adventure)}
+        ${mapNodeButton(byId.calibration)}
+      </div>
+      <div class="route-rail route-rail-split"><span></span><span></span></div>
+      <div class="branch-row route-branch">
+        ${mapNodeButton(byId.drift_capsule)}
+        ${mapNodeButton(byId.recycle_station)}
+      </div>
       <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.battle2)}
     </div>`;
   $("map-page-right").innerHTML = `
     <h3 class="page-title">航线记录 <span>RUN ${String(state.progress).padStart(2, "0")}</span></h3>
-    <div class="route-readout"><strong>${esc(map.route ? ROUTE_NAMES[map.route] || map.route : "未选路线")}</strong><small>当前路径</small></div>
+    <div class="route-readout"><strong>${esc(routeNames || "未选路线")}</strong><small>当前路径</small></div>
     <div class="map-route-list"><span class="route-dot complete"></span><span>起始信标</span><span class="route-line"></span><span class="route-dot active"></span><span>下一节点</span></div>
     <div class="route-next"><small>可进入</small><strong>${esc(nextNames || "无")}</strong></div>
     <div class="map-legend">
@@ -248,8 +284,8 @@ function renderMap() {
       <span class="legend closed">已关闭</span>
     </div>
     <p class="map-copy">点击发光节点继续前进。分支会在选择后锁定。</p>`;
-  $("map-route").textContent = map.route
-    ? `已选择路线：${ROUTE_NAMES[map.route] || map.route}`
+  $("map-route").textContent = routeNames
+    ? `已选择路线：${routeNames}`
     : "尚未选择分支";
   $("map-hint").textContent = available.length > 1
     ? "选择一条分支；确认后另一条分支会关闭。"
@@ -702,26 +738,35 @@ function renderSignal() {
 
 /* ---------- 维修奇遇 ---------- */
 
-function renderAdventure() {
-  const adventure = state.adventure;
-  if (!adventure) {
+function renderAdventure(kind) {
+  enhanceKind = kind;
+  const data = state[kind];
+  if (!data) {
     render();
     return;
   }
   $("adventure-view").hidden = false;
-  $("targets").innerHTML = adventure.targets.length
-    ? adventure.targets.map((card) => `
+  $("adventure-title").textContent = kind === "calibration" ? "校准平台" : "废弃维修站";
+  $("adventure-hint").textContent = kind === "calibration"
+    ? "选择一张已有单位，三选一：攻击强化、生命强化或直接升一级；先预览再确认，也可以离开。"
+    : "选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。";
+  $("targets").innerHTML = data.targets.length
+    ? data.targets.map((card) => `
         <div class="target${adventureTarget && adventureTarget.cardId === card.cardId ? " selected" : ""}" data-card="${esc(card.cardId)}">
           <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
           <div class="target-meta">攻击 ${card.atk}　生命 ${card.hp}</div>
           <div class="target-meta">${card.atkBonus || card.hpBonus ? `改造：攻击 +${card.atkBonus || 0} / 生命 +${card.hpBonus || 0}` : "暂无改造"}</div>
           <div class="target-actions">
             <button class="target-action" data-card="${esc(card.cardId)}" data-effect="atk">
-              攻击 +${adventure.atkBonus}<small>${card.atk} → ${card.atkPreview.atk}</small>
+              攻击 +${data.atkBonus}<small>${card.atk} → ${card.atkPreview.atk}</small>
             </button>
             <button class="target-action" data-card="${esc(card.cardId)}" data-effect="hp">
-              最大生命 +${adventure.hpBonus}<small>${card.maxHp} → ${card.hpPreview.maxHp}</small>
+              最大生命 +${data.hpBonus}<small>${card.maxHp} → ${card.hpPreview.maxHp}</small>
             </button>
+            ${kind === "calibration" ? `
+            <button class="target-action" data-card="${esc(card.cardId)}" data-effect="level" ${card.canLevel ? "" : "disabled"}>
+              等级 +${data.levelBonus}<small>${card.canLevel ? `Lv.${card.level} → Lv.${card.level + data.levelBonus}` : "已满级"}</small>
+            </button>` : ""}
           </div>
         </div>`).join("")
     : "<p class='hint'>没有可强化的单位。</p>";
@@ -729,11 +774,69 @@ function renderAdventure() {
   const preview = $("adventure-preview");
   if (adventureTarget && adventureEffect) {
     preview.hidden = false;
-    const next = adventureEffect === "atk" ? adventureTarget.atkPreview : adventureTarget.hpPreview;
-    const detail = adventureEffect === "atk"
-      ? `攻击 ${adventureTarget.atk} → ${next.atk}`
-      : `最大生命 ${adventureTarget.maxHp} → ${next.maxHp}`;
+    const next = adventureEffect === "atk"
+      ? adventureTarget.atkPreview
+      : adventureEffect === "hp" ? adventureTarget.hpPreview : adventureTarget.levelPreview;
+    let detail;
+    if (adventureEffect === "atk") detail = `攻击 ${adventureTarget.atk} → ${next.atk}`;
+    else if (adventureEffect === "hp") detail = `最大生命 ${adventureTarget.maxHp} → ${next.maxHp}`;
+    else detail = `Lv.${adventureTarget.level} → Lv.${adventureTarget.level + data.levelBonus}，攻击 ${adventureTarget.atk} → ${next.atk}，生命 ${adventureTarget.maxHp} → ${next.maxHp}`;
     $("preview-text").textContent = `${adventureTarget.name}：${detail}（仅本趟冒险保留）`;
+  } else {
+    preview.hidden = true;
+  }
+}
+
+/* ---------- 漂流卡匣 ---------- */
+
+function renderDrift() {
+  const drift = state.drift;
+  if (!drift) {
+    render();
+    return;
+  }
+  $("drift-view").hidden = false;
+  $("drift-offers").innerHTML = drift.candidates.length
+    ? drift.candidates.map((card) => `
+        <div class="offer">
+          <div class="offer-name">${esc(card.name)}</div>
+          <div class="offer-meta">${card.isUpgrade
+            ? `已有 Lv.${card.currentLevel} → Lv.${card.targetLevel}`
+            : `新卡 Lv.${card.targetLevel}`}</div>
+          <div class="offer-meta">费用 ${card.cost}　${card.type === "unit" ? `攻击 ${card.atk}　生命 ${card.hp}` : esc(card.effectText)}</div>
+          <button class="buy-btn" data-id="${esc(card.cardId)}">${card.isUpgrade ? "升级" : "带走"}</button>
+        </div>`).join("")
+    : "<p class='hint'>卡匣里没有可用的记录。</p>";
+  const reroll = $("drift-reroll");
+  reroll.textContent = `重抽（${drift.rerollPrice} 金币，剩余 ${drift.rerollLimit - drift.rerolls} 次）`;
+  reroll.disabled = !drift.canReroll;
+  $("drift-note").textContent = `当前金币：${state.gold}`;
+}
+
+/* ---------- 记忆回收站 ---------- */
+
+function renderRecycle() {
+  const data = state.recycle;
+  if (!data) {
+    render();
+    return;
+  }
+  $("recycle-view").hidden = false;
+  $("recycle-targets").innerHTML = data.targets.length
+    ? data.targets.map((card) => `
+        <div class="target${recycleTarget && recycleTarget.cardId === card.cardId ? " selected" : ""}${card.removable ? "" : " disabled"}"
+            data-card="${esc(card.cardId)}" ${card.removable ? 'role="button" tabindex="0"' : ""}>
+          <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
+          <div class="target-meta">攻击 ${card.atk}　生命 ${card.hp}</div>
+          <div class="target-meta">${card.removable ? `可拆解：+${card.price} 金币` : "不可拆解（最后一张单位牌）"}</div>
+        </div>`).join("")
+    : "<p class='hint'>牌组里没有卡牌。</p>";
+
+  const preview = $("recycle-preview");
+  if (recycleTarget) {
+    preview.hidden = false;
+    $("recycle-preview-text").textContent =
+      `拆解 ${recycleTarget.name}（Lv.${recycleTarget.level}），获得 ${recycleTarget.price} 金币。此操作不可撤销。`;
   } else {
     preview.hidden = true;
   }
@@ -905,10 +1008,10 @@ function bindEvents() {
 
   $("targets").addEventListener("click", (event) => {
     const button = event.target.closest(".target-action");
-    if (!button || !state.adventure) return;
-    adventureTarget = state.adventure.targets.find((card) => card.cardId === button.dataset.card) || null;
+    if (!button || button.disabled || !state[enhanceKind]) return;
+    adventureTarget = state[enhanceKind].targets.find((card) => card.cardId === button.dataset.card) || null;
     adventureEffect = button.dataset.effect;
-    renderAdventure();
+    renderAdventure(enhanceKind);
   });
   $("adventure-confirm").addEventListener("click", () => {
     if (!adventureTarget || !adventureEffect) return;
@@ -916,14 +1019,48 @@ function bindEvents() {
     const effect = adventureEffect;
     adventureTarget = null;
     adventureEffect = null;
-    act("/api/adventure/apply", { cardId, effect });
+    act(`/api/${enhanceKind}/apply`, { cardId, effect });
   });
   $("adventure-cancel").addEventListener("click", () => {
     adventureTarget = null;
     adventureEffect = null;
-    renderAdventure();
+    renderAdventure(enhanceKind);
   });
-  $("adventure-leave").addEventListener("click", () => act("/api/adventure/leave", {}));
+  $("adventure-leave").addEventListener("click", () => act(`/api/${enhanceKind}/leave`, {}));
+
+  $("drift-offers").addEventListener("click", (event) => {
+    const button = event.target.closest(".buy-btn");
+    if (!button || button.disabled) return;
+    act("/api/drift/choose", { cardId: button.dataset.id });
+  });
+  $("drift-reroll").addEventListener("click", () => act("/api/drift/reroll", {}));
+  $("drift-leave").addEventListener("click", () => act("/api/drift/leave", {}));
+
+  $("recycle-targets").addEventListener("click", (event) => {
+    const element = event.target.closest(".target");
+    if (!element || element.classList.contains("disabled") || !state.recycle) return;
+    recycleTarget = state.recycle.targets.find((card) => card.cardId === element.dataset.card) || null;
+    renderRecycle();
+  });
+  $("recycle-targets").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const element = event.target.closest(".target");
+    if (!element || element.classList.contains("disabled") || !state.recycle) return;
+    event.preventDefault();
+    recycleTarget = state.recycle.targets.find((card) => card.cardId === element.dataset.card) || null;
+    renderRecycle();
+  });
+  $("recycle-confirm").addEventListener("click", () => {
+    if (!recycleTarget) return;
+    const cardId = recycleTarget.cardId;
+    recycleTarget = null;
+    act("/api/recycle/apply", { cardId });
+  });
+  $("recycle-cancel").addEventListener("click", () => {
+    recycleTarget = null;
+    renderRecycle();
+  });
+  $("recycle-leave").addEventListener("click", () => act("/api/recycle/leave", {}));
 
   $("restart-btn").addEventListener("click", () => {
     if (!confirm("重新开始会覆盖当前冒险进度，确定吗？")) return;

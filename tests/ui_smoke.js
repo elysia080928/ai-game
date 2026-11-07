@@ -1,7 +1,7 @@
 /**
  * 浏览器冒烟测试：node tests/ui_smoke.js（需要先启动服务，以及本机 Edge）。
  * 通过 CDP 驱动无头 Edge：注册 → 拖放部署 → 战斗 1 → 剧情选项 → 关卡选择 →
- * 招募/维修 → 战斗 2 → 逐列预告与键盘部署；并检查窄窗口滚动。
+ * 信号/校准/漂流卡匣 → 战斗 2 → 逐列预告与键盘部署；并检查窄窗口滚动。
  */
 
 const { spawn, execFileSync } = require("child_process");
@@ -551,17 +551,40 @@ async function main() {
     await waitFor(async () => await visible("story-view"), "信号后剧情");
     await click("#story-next");
     await waitFor(async () => await visible("map-view"), "信号后选关");
-    await click('.map-node[data-id="adventure"]');
-    await waitFor(async () => await visible("story-view"), "维修前置剧情");
+    await click('.map-node[data-id="calibration"]');
+    await waitFor(async () => await visible("story-view"), "校准前置剧情");
     await click("#story-next");
-    await waitFor(async () => await visible("adventure-view"), "维修界面");
+    await waitFor(async () => await visible("adventure-view"), "校准界面");
+    const calibrationTitle = await evaluate("document.getElementById('adventure-title').textContent");
+    if (calibrationTitle !== "校准平台") throw new Error(`校准界面标题错误：${calibrationTitle}`);
     await click('.target-action[data-card="striker"][data-effect="hp"]');
-    await waitFor(async () => await visible("adventure-preview"), "维修预览");
-    await screenshot("ai-game-adventure-preview.png");
+    await waitFor(async () => await visible("adventure-preview"), "校准预览");
+    const calibrationPreview = await evaluate("document.getElementById('preview-text').textContent");
+    if (!calibrationPreview.includes("最大生命")) throw new Error(`校准预览错误：${calibrationPreview}`);
+    await screenshot("ai-game-calibration-preview.png");
     await click("#adventure-confirm");
-    await waitFor(async () => await visible("story-view"), "维修后剧情");
+    await waitFor(async () => await visible("story-view"), "校准后剧情");
     await click("#story-next");
-    await waitFor(async () => await visible("map-view"), "维修后选关");
+    await waitFor(async () => await visible("map-view"), "校准后选关");
+    await click('.map-node[data-id="drift_capsule"]');
+    await waitFor(async () => await visible("story-view"), "卡匣前置剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("drift-view"), "漂流卡匣界面");
+    const cardCount = await evaluate("document.querySelectorAll('#drift-offers .offer').length");
+    if (cardCount !== 3) throw new Error(`卡匣应有 3 张候选，实际 ${cardCount}`);
+    const goldBeforeReroll = await evaluate("Number(document.getElementById('hud-gold').textContent)");
+    await click("#drift-reroll");
+    await waitFor(async () => {
+      const gold = await evaluate("Number(document.getElementById('hud-gold').textContent)");
+      return gold < goldBeforeReroll;
+    }, "卡匣重抽扣费");
+    const rerollDisabled = await evaluate("document.getElementById('drift-reroll').disabled");
+    if (!rerollDisabled) throw new Error("重抽一次后按钮应禁用");
+    await screenshot("ai-game-drift.png");
+    await click("#drift-offers .offer .buy-btn");
+    await waitFor(async () => await visible("story-view"), "卡匣选择后剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("map-view"), "卡匣后选关");
     await click('.map-node[data-id="battle2"]');
     await waitFor(async () => await visible("story-view"), "战斗 2 前置剧情");
     await click("#story-next");
@@ -570,7 +593,7 @@ async function main() {
         (await evaluate("document.querySelectorAll('#hand .card').length")) > 0,
       "战斗 2 界面"
     );
-    console.log("ok 信号、维修与关卡串联");
+    console.log("ok 信号、校准、漂流卡匣与关卡串联");
 
     await command("Emulation.setDeviceMetricsOverride", {
       width: 760,

@@ -1,6 +1,7 @@
 """冒险流程与存档状态。状态是普通 dict，由调用方负责持久化。"""
 
 import json
+import random
 from pathlib import Path
 
 from .battle import GameError, card_stats
@@ -16,13 +17,20 @@ ENCOUNTERS = CONTENT["encounters"]
 NODES = CONTENT["nodes"]
 RECRUIT = CONTENT["recruit"]
 ADVENTURE = CONTENT["adventure"]
+CALIBRATION = CONTENT["calibration"]
+RECYCLE = CONTENT["recycle"]
+DRIFT = CONTENT["drift"]
 SIGNAL = CONTENT["signal"]
 FIRST_NODE = CONTENT["firstNode"]
 RUN_LENGTH = CONTENT["runLength"]
 NODE_BY_ID = {node["id"]: node for node in NODES}
+BRANCH_PAIRS = {
+    (node["branchGroup"], node["branch"]) for node in NODES if node.get("branchGroup")
+}
 
 MAX_DECK = 20
-SCHEMA_VERSION = 2
+NODE_TYPES = ("battle", "recruit", "signal", "adventure", "calibration", "drift", "recycle")
+SCHEMA_VERSION = 3
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
 VALID_PHASES = ("before_story", "node", "after_story", "map", "complete")
 
@@ -48,8 +56,9 @@ def validate_content():
         raise RuntimeError("首个节点不存在")
     if RUN_LENGTH <= 0:
         raise RuntimeError("runLength 非法")
+    branch_pairs = set()
     for node in NODES:
-        if node["type"] not in ("battle", "recruit", "signal", "adventure"):
+        if node["type"] not in NODE_TYPES:
             raise RuntimeError(f"节点 {node['id']} 类型非法")
         if node["type"] == "battle" and node["encounter"] not in ENCOUNTERS:
             raise RuntimeError(f"节点 {node['id']} 引用了未知遭遇")
@@ -58,8 +67,16 @@ def validate_content():
         for next_id in node["next"]:
             if next_id not in NODE_BY_ID:
                 raise RuntimeError(f"节点 {node['id']} 引用了未知后续节点 {next_id}")
-        if "branch" in node and node["branch"] not in ("recruit", "signal"):
-            raise RuntimeError(f"节点 {node['id']} 分支标记非法")
+        group = node.get("branchGroup")
+        branch = node.get("branch")
+        if (group is None) != (branch is None):
+            raise RuntimeError(f"节点 {node['id']} 分支标记不完整")
+        if group is not None:
+            if not isinstance(group, str) or not group or not isinstance(branch, str) or not branch:
+                raise RuntimeError(f"节点 {node['id']} 分支标记非法")
+            if (group, branch) in branch_pairs:
+                raise RuntimeError(f"节点 {node['id']} 分支重复")
+            branch_pairs.add((group, branch))
         for slot in ("before", "after"):
             lines = node.get(slot)
             if not isinstance(lines, list):
@@ -110,6 +127,12 @@ def validate_content():
             raise RuntimeError(f"{name} 强化数值非法")
     if ADVENTURE["atkBonus"] < 0 or ADVENTURE["hpBonus"] < 0:
         raise RuntimeError("维修站强化数值非法")
+    if CALIBRATION["atkBonus"] < 0 or CALIBRATION["hpBonus"] < 0 or CALIBRATION["levelBonus"] < 1:
+        raise RuntimeError("校准平台强化数值非法")
+    if RECYCLE["goldPerCost"] < 0 or RECYCLE["goldPerLevel"] < 0:
+        raise RuntimeError("回收站金币配置非法")
+    if DRIFT["candidateCount"] < 1 or DRIFT["rerollPrice"] < 0 or DRIFT["rerollLimit"] < 0:
+        raise RuntimeError("漂流卡匣配置非法")
 
 
 validate_content()
@@ -128,7 +151,7 @@ def new_state():
         ],
         "completed": [],
         "nodeData": {},
-        "route": None,
+        "route": {},
         "flags": {},
     }
     _normalize(state)
@@ -168,7 +191,12 @@ def _begin_node(state):
     node = current_node(state)
     state["phase"] = "node"
     state["storyLine"] = 0
-    state["nodeData"] = {"purchased": False} if node["type"] == "recruit" else {}
+    if node["type"] == "recruit":
+        state["nodeData"] = {"purchased": False}
+    elif node["type"] == "drift":
+        state["nodeData"] = {"seed": random.randrange(1, 2**31), "rerolls": 0}
+    else:
+        state["nodeData"] = {}
 
 
 def _after_story_done(state):
@@ -279,12 +307,14 @@ def available_nodes(state):
     node = current_node(state)
     if node is None:
         return []
+    route = state.get("route") or {}
     result = []
     for node_id in node["next"]:
         if node_id in state["completed"]:
             continue
-        branch = NODE_BY_ID[node_id].get("branch")
-        if branch and state.get("route") and state["route"] != branch:
+        child = NODE_BY_ID[node_id]
+        group = child.get("branchGroup")
+        if group and route.get(group) not in (None, child["branch"]):
             continue
         result.append(node_id)
     return result
@@ -294,13 +324,15 @@ def map_view(state):
     if state["phase"] != "map":
         return None
     available = set(available_nodes(state))
+    route = state.get("route") or {}
     nodes = []
     for node in NODES:
+        group = node.get("branchGroup")
         if node["id"] in state["completed"]:
             status = "completed"
         elif node["id"] in available:
             status = "available"
-        elif node.get("branch") and state.get("route") and node["branch"] != state["route"]:
+        elif group and route.get(group) not in (None, node["branch"]):
             status = "closed"
         else:
             status = "locked"
@@ -309,11 +341,12 @@ def map_view(state):
                 "id": node["id"],
                 "name": node["name"],
                 "type": node["type"],
+                "branchGroup": group,
                 "branch": node.get("branch"),
                 "status": status,
             }
         )
-    return {"nodes": nodes, "route": state.get("route"), "available": list(available)}
+    return {"nodes": nodes, "route": dict(route), "available": list(available)}
 
 
 def select_node(state, node_id):
@@ -322,8 +355,10 @@ def select_node(state, node_id):
     if node_id not in available_nodes(state):
         raise GameError("该节点当前不可进入")
     node = NODE_BY_ID[node_id]
-    if node.get("branch") and state.get("route") is None:
-        state["route"] = node["branch"]
+    if node.get("branchGroup"):
+        if not isinstance(state.get("route"), dict):
+            state["route"] = {}
+        state["route"][node["branchGroup"]] = node["branch"]
     state["nodeId"] = node_id
     state["phase"] = "before_story"
     state["storyLine"] = 0
@@ -438,6 +473,155 @@ def adventure_leave(state):
     node = current_node(state)
     if node is None or node["type"] != "adventure":
         raise GameError("当前不是奇遇节点")
+    finish_node(state, node["id"])
+
+
+def calibration_apply(state, card_id, effect):
+    node = current_node(state)
+    if node is None or node["type"] != "calibration":
+        raise GameError("当前不是校准平台")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在校准平台")
+    card = _require_unit_target(state, card_id)
+    if effect == "atk":
+        card["atkBonus"] = card.get("atkBonus", 0) + CALIBRATION["atkBonus"]
+    elif effect == "hp":
+        card["hpBonus"] = card.get("hpBonus", 0) + CALIBRATION["hpBonus"]
+    elif effect == "level":
+        if card["level"] >= len(CARDS[card_id]["levels"]):
+            raise GameError("该单位已经满级")
+        card["level"] += CALIBRATION["levelBonus"]
+    else:
+        raise GameError("无效的校准选项")
+    finish_node(state, node["id"])
+
+
+def calibration_leave(state):
+    node = current_node(state)
+    if node is None or node["type"] != "calibration":
+        raise GameError("当前不是校准平台")
+    finish_node(state, node["id"])
+
+
+def recycle_price(card):
+    stats = card_stats(
+        CARDS, card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+    )
+    return RECYCLE["goldPerCost"] * stats["cost"] + RECYCLE["goldPerLevel"] * (card["level"] - 1)
+
+
+def _recycle_removable(state, card):
+    if len(state["cards"]) <= 1:
+        return False
+    if CARDS[card["cardId"]]["type"] != "unit":
+        return True
+    return sum(
+        1 for item in state["cards"] if CARDS[item["cardId"]]["type"] == "unit"
+    ) > 1
+
+
+def recycle_apply(state, card_id):
+    node = current_node(state)
+    if node is None or node["type"] != "recycle":
+        raise GameError("当前不是记忆回收站")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在记忆回收站")
+    card = _owned_card(state, card_id)
+    if card is None:
+        raise GameError("你没有这张卡")
+    if not _recycle_removable(state, card):
+        raise GameError("不能移除最后一张单位牌或让牌组为空")
+    price = recycle_price(card)
+    state["gold"] += price
+    state["cards"].remove(card)
+    finish_node(state, node["id"])
+
+
+def recycle_leave(state):
+    node = current_node(state)
+    if node is None or node["type"] != "recycle":
+        raise GameError("当前不是记忆回收站")
+    finish_node(state, node["id"])
+
+
+def _drift_pool(state):
+    full = len(state["cards"]) >= MAX_DECK
+    pool = []
+    for card_id, definition in CARDS.items():
+        owned = _owned_card(state, card_id)
+        if owned is not None:
+            if owned["level"] < len(definition["levels"]):
+                pool.append(card_id)
+        elif not full:
+            pool.append(card_id)
+    return pool
+
+
+def _drift_candidates(state, rerolls=None):
+    data = state.get("nodeData") or {}
+    seed = data.get("seed")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise GameError("漂流卡匣候选种子缺失")
+    count = data.get("rerolls", 0) if rerolls is None else rerolls
+    pool = _drift_pool(state)
+    if not pool:
+        return []
+    rng = random.Random(seed + count)
+    return rng.sample(pool, min(DRIFT["candidateCount"], len(pool)))
+
+
+def drift_choose(state, card_id):
+    node = current_node(state)
+    if node is None or node["type"] != "drift":
+        raise GameError("当前不是漂流卡匣")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在漂流卡匣")
+    if card_id not in _drift_candidates(state):
+        raise GameError("这张卡不在当前候选中")
+    owned = _owned_card(state, card_id)
+    if owned is not None:
+        if owned["level"] >= len(CARDS[card_id]["levels"]):
+            raise GameError("该卡已经满级")
+        owned["level"] += 1
+    else:
+        if len(state["cards"]) >= MAX_DECK:
+            raise GameError("牌组已满")
+        state["cards"].append(
+            {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
+        )
+    finish_node(state, node["id"])
+
+
+def drift_reroll(state):
+    node = current_node(state)
+    if node is None or node["type"] != "drift":
+        raise GameError("当前不是漂流卡匣")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在漂流卡匣")
+    data = state["nodeData"]
+    rerolls = data.get("rerolls", 0)
+    if rerolls >= DRIFT["rerollLimit"]:
+        raise GameError("本节点已经重抽过")
+    if not _drift_candidates(state, rerolls + 1):
+        raise GameError("没有可以换出的候选")
+    if state["gold"] < DRIFT["rerollPrice"]:
+        raise GameError("金币不足")
+    state["gold"] -= DRIFT["rerollPrice"]
+    data["rerolls"] = rerolls + 1
+
+
+def drift_leave(state):
+    node = current_node(state)
+    if node is None or node["type"] != "drift":
+        raise GameError("当前不是漂流卡匣")
     finish_node(state, node["id"])
 
 
@@ -580,6 +764,98 @@ def _adventure_view(state):
     }
 
 
+def _calibration_view(state):
+    node = current_node(state)
+    if node is None or node["type"] != "calibration" or state["phase"] != "node":
+        return None
+    targets = []
+    for card in state["cards"]:
+        if CARDS[card["cardId"]]["type"] != "unit":
+            continue
+        view = _card_view(card)
+        view["atkPreview"] = card_stats(
+            CARDS,
+            card["cardId"],
+            card["level"],
+            card.get("atkBonus", 0) + CALIBRATION["atkBonus"],
+            card.get("hpBonus", 0),
+        )
+        view["hpPreview"] = card_stats(
+            CARDS,
+            card["cardId"],
+            card["level"],
+            card.get("atkBonus", 0),
+            card.get("hpBonus", 0) + CALIBRATION["hpBonus"],
+        )
+        max_level = len(CARDS[card["cardId"]]["levels"])
+        view["canLevel"] = card["level"] < max_level
+        if view["canLevel"]:
+            view["levelPreview"] = card_stats(
+                CARDS,
+                card["cardId"],
+                card["level"] + CALIBRATION["levelBonus"],
+                card.get("atkBonus", 0),
+                card.get("hpBonus", 0),
+            )
+        targets.append(view)
+    return {
+        "targets": targets,
+        "atkBonus": CALIBRATION["atkBonus"],
+        "hpBonus": CALIBRATION["hpBonus"],
+        "levelBonus": CALIBRATION["levelBonus"],
+    }
+
+
+def _recycle_view(state):
+    node = current_node(state)
+    if node is None or node["type"] != "recycle" or state["phase"] != "node":
+        return None
+    targets = []
+    for card in state["cards"]:
+        view = _card_view(card)
+        view["price"] = recycle_price(card)
+        view["removable"] = _recycle_removable(state, card)
+        targets.append(view)
+    return {"targets": targets, "hasTargets": any(item["removable"] for item in targets)}
+
+
+def _drift_view(state):
+    node = current_node(state)
+    if node is None or node["type"] != "drift" or state["phase"] != "node":
+        return None
+    candidates = []
+    for card_id in _drift_candidates(state):
+        owned = _owned_card(state, card_id)
+        current_level = owned["level"] if owned else 0
+        target_level = current_level + 1 if owned else 1
+        stats = card_stats(
+            CARDS,
+            card_id,
+            target_level,
+            owned.get("atkBonus", 0) if owned else 0,
+            owned.get("hpBonus", 0) if owned else 0,
+        )
+        stats["currentLevel"] = current_level
+        stats["targetLevel"] = target_level
+        stats["isUpgrade"] = owned is not None
+        stats["effectText"] = _effect_text(stats)
+        candidates.append(stats)
+    data = state["nodeData"]
+    rerolls = data.get("rerolls", 0)
+    return {
+        "candidates": candidates,
+        "hasTargets": bool(candidates),
+        "rerolls": rerolls,
+        "rerollLimit": DRIFT["rerollLimit"],
+        "rerollPrice": DRIFT["rerollPrice"],
+        "canReroll": (
+            rerolls < DRIFT["rerollLimit"]
+            and state["gold"] >= DRIFT["rerollPrice"]
+            and bool(_drift_candidates(state, rerolls + 1))
+        ),
+    }
+
+
 def public_state(state):
     node = current_node(state)
     return {
@@ -595,6 +871,9 @@ def public_state(state):
         "recruit": _recruit_view(state),
         "signal": _signal_view(state),
         "adventure": _adventure_view(state),
+        "calibration": _calibration_view(state),
+        "recycle": _recycle_view(state),
+        "drift": _drift_view(state),
         "map": map_view(state),
         "complete": state["phase"] == "complete",
     }
@@ -633,17 +912,31 @@ def migrate_state(state):
         raise ValueError("存档完成记录非法")
     if len(completed) != len(set(completed)):
         raise ValueError("存档完成记录重复")
-    if state.get("route") not in (None, "recruit", "signal"):
-        raise ValueError("存档路线非法")
-    if "route" not in state:
-        if "signal" in completed or state["nodeId"] == "signal":
-            state["route"] = "signal"
-        elif "recruit" in completed or state["nodeId"] in ("recruit", "adventure", "battle2"):
-            state["route"] = "recruit"
+    route = state.get("route")
+    if isinstance(route, str):
+        if route not in ("recruit", "signal"):
+            raise ValueError("存档路线非法")
+        state["route"] = {"supply": route}
+    elif route is None:
+        inferred = None
+        if version <= 2:
+            if "signal" in completed or state["nodeId"] == "signal":
+                inferred = "signal"
+            elif "recruit" in completed or state["nodeId"] in ("recruit", "adventure", "battle2"):
+                inferred = "recruit"
         else:
-            state["route"] = None
-    if state["nodeId"] == "signal" and state["route"] is None:
-        state["route"] = "signal"
+            node = NODE_BY_ID.get(state["nodeId"])
+            if node and node.get("branchGroup"):
+                inferred = (node["branchGroup"], node["branch"])
+        if isinstance(inferred, tuple):
+            state["route"] = {inferred[0]: inferred[1]}
+        else:
+            state["route"] = {"supply": inferred} if inferred else {}
+    elif not isinstance(route, dict):
+        raise ValueError("存档路线非法")
+    for group, branch in state["route"].items():
+        if (group, branch) not in BRANCH_PAIRS:
+            raise ValueError("存档路线非法")
     if state.get("phase") == "complete":
         state["nodeId"] = "battle2"
 

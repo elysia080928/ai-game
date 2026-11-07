@@ -121,7 +121,10 @@
   },
   "signal": {"hpBonus": 1},
   "adventure": {"atkBonus": 1, "hpBonus": 2},
-  "runLength": 4,
+  "calibration": {"atkBonus": 1, "hpBonus": 2, "levelBonus": 1},
+  "recycle": {"goldPerCost": 5, "goldPerLevel": 5},
+  "drift": {"candidateCount": 3, "rerollPrice": 10, "rerollLimit": 1},
+  "runLength": 5,
   "firstNode": "battle1",
   "nodes": [
     {
@@ -162,8 +165,9 @@
       "id": "recruit",
       "type": "recruit",
       "name": "补给站",
+      "branchGroup": "supply",
       "branch": "recruit",
-      "next": ["adventure"],
+      "next": ["adventure", "calibration"],
       "before": [
         {
           "speaker": "爱",
@@ -189,8 +193,9 @@
       "id": "signal",
       "type": "signal",
       "name": "旧型号信号",
+      "branchGroup": "supply",
       "branch": "signal",
-      "next": ["adventure"],
+      "next": ["adventure", "calibration"],
       "before": [
         {
           "speaker": "爱",
@@ -216,7 +221,9 @@
       "id": "adventure",
       "type": "adventure",
       "name": "废弃维修站",
-      "next": ["battle2"],
+      "branchGroup": "repair",
+      "branch": "adventure",
+      "next": ["drift_capsule", "recycle_station"],
       "before": [
         {
           "speaker": "爱",
@@ -226,6 +233,60 @@
       ],
       "after": [
         {"speaker": "爱", "text": "它看起来精神多了。"}
+      ]
+    },
+    {
+      "id": "calibration",
+      "type": "calibration",
+      "name": "校准平台",
+      "branchGroup": "repair",
+      "branch": "calibration",
+      "next": ["drift_capsule", "recycle_station"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "这里有一组还能用的校准台。攻击、生命，或者直接把机偶的等级推高一级。",
+          "background": "repair"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "校准完成，新的参数已经写回去了。"}
+      ]
+    },
+    {
+      "id": "drift_capsule",
+      "type": "drift",
+      "name": "漂流卡匣",
+      "branchGroup": "salvage",
+      "branch": "drift",
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "一只漂流卡匣卡在航道边。里面有三张还完整的机偶记录，只能带走一张。",
+          "background": "station"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "卡匣空了。我们继续走吧。"}
+      ]
+    },
+    {
+      "id": "recycle_station",
+      "type": "recycle",
+      "name": "记忆回收站",
+      "branchGroup": "salvage",
+      "branch": "recycle",
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "旧记录会在这里被拆解成可用零件。你可以放弃一张卡，换回一点金币。",
+          "background": "signal"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "拆解完成。至少它没有白留在牌组里。"}
       ]
     },
     {

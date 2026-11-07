@@ -61,6 +61,19 @@ class AdventureBody(BaseModel):
     effect: str
 
 
+class CalibrationBody(BaseModel):
+    cardId: str
+    effect: str
+
+
+class RecycleCardBody(BaseModel):
+    cardId: str
+
+
+class DriftChooseBody(BaseModel):
+    cardId: str
+
+
 class SignalBody(BaseModel):
     action: str
     cardId: str
@@ -408,6 +421,75 @@ def adventure_leave(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
         game.adventure_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/calibration/apply")
+def calibration_apply(body: CalibrationBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.calibration_apply(state, body.cardId, body.effect)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/calibration/leave")
+def calibration_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.calibration_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/recycle/apply")
+def recycle_apply(body: RecycleCardBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.recycle_apply(state, body.cardId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/recycle/leave")
+def recycle_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.recycle_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/drift/choose")
+def drift_choose(body: DriftChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.drift_choose(state, body.cardId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/drift/reroll")
+def drift_reroll(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.drift_reroll(state)
+        _save_state(user["id"], state)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/drift/leave")
+def drift_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.drift_leave(state)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}

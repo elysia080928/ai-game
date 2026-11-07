@@ -31,7 +31,7 @@ def state_at(node_id, phase, completed=None, route=None, flags=None):
     state["phase"] = phase
     state["storyLine"] = 0
     state["completed"] = list(completed or [])
-    state["route"] = route
+    state["route"] = {"supply": route} if route else {}
     state["flags"] = dict(flags or {})
     state["nodeData"] = {}
     return state
@@ -289,7 +289,7 @@ def test_story_options_flags_and_skip():
     assert state["phase"] == "map"
 
     G.select_node(state, "recruit")
-    assert state["route"] == "recruit" and state["phase"] == "before_story"
+    assert state["route"] == {"supply": "recruit"} and state["phase"] == "before_story"
     assert "补给站" in G.public_state(state)["story"]["text"]
     G.advance_story(state)
     G.advance_story(state)
@@ -375,17 +375,17 @@ def test_migration_old_saves():
     }
     old = dict(base, nodeIndex=1)
     migrated, changed = G.migrate_state(copy.deepcopy(old))
-    assert changed and migrated["nodeId"] == "recruit" and migrated["route"] == "recruit"
+    assert changed and migrated["nodeId"] == "recruit" and migrated["route"] == {"supply": "recruit"}
     assert migrated["cards"][0]["hpBonus"] == 0
 
     old = dict(base, nodeIndex=0, phase="after_story")
     migrated, _ = G.migrate_state(copy.deepcopy(old))
-    assert migrated["nodeId"] == "battle1" and migrated["route"] is None
+    assert migrated["nodeId"] == "battle1" and migrated["route"] == {}
     assert migrated["phase"] == "after_story"
 
     old = dict(base, nodeIndex=2, phase="node", completed=["battle1", "recruit"])
     migrated, _ = G.migrate_state(copy.deepcopy(old))
-    assert migrated["nodeId"] == "adventure" and migrated["route"] == "recruit"
+    assert migrated["nodeId"] == "adventure" and migrated["route"] == {"supply": "recruit"}
 
     old = dict(base, nodeIndex=4, phase="complete",
                completed=["battle1", "recruit", "adventure", "battle2"])
@@ -409,6 +409,7 @@ def test_migration_old_saves():
     bad_saves = [
         dict(base, nodeId="missing", nodeIndex=0),
         dict(base, nodeId="battle1", route="other"),
+        dict(base, nodeId="battle1", route={"supply": "adventure"}),
         dict(base, nodeId="battle1", storyLine=-1),
         dict(base, nodeId="battle1", completed=["battle1", "battle1"]),
         dict(base, nodeId="battle1", cards=[{"cardId": "bean", "level": 1, "hpBonus": -1}]),
@@ -456,6 +457,200 @@ def test_battle_hp_bonus_and_forecast():
     assert B.view(b)["forecast"] == [], "计划结束后不应继续预告"
     assert any("跳过" in line for line in b["log"]), "占列时应跳过且不换列"
     assert len([unit for unit in b["board"]["enemy"] if unit]) == 1
+
+
+def test_calibration_effects():
+    state = state_at("calibration", "node", completed=["battle1", "recruit"], route="recruit")
+    G.calibration_apply(state, "striker", "atk")
+    striker = next(c for c in state["cards"] if c["cardId"] == "striker")
+    assert striker["atkBonus"] == G.CALIBRATION["atkBonus"]
+    assert state["phase"] == "after_story"
+    G.calibration_apply(state, "striker", "level")
+    assert striker["level"] == 1, "节点完成后不能再次校准"
+
+    state2 = state_at("calibration", "node", completed=["battle1", "recruit"], route="recruit")
+    G.calibration_apply(state2, "bean", "level")
+    bean = next(c for c in state2["cards"] if c["cardId"] == "bean")
+    assert bean["level"] == 1 + G.CALIBRATION["levelBonus"]
+
+    state3 = state_at("calibration", "node", completed=["battle1", "recruit"], route="recruit")
+    heavy = next(c for c in state3["cards"] if c["cardId"] == "heavy")
+    heavy["level"] = len(G.CARDS["heavy"]["levels"])
+    try:
+        G.calibration_apply(state3, "heavy", "level")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("满级单位不能继续提升等级")
+
+    state4 = state_at("calibration", "node", completed=["battle1", "recruit"], route="recruit")
+    try:
+        G.calibration_apply(state4, "spark", "atk")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("指令牌不能作为校准目标")
+
+    view = G.public_state(state3)["calibration"]
+    heavy_view = next(c for c in view["targets"] if c["cardId"] == "heavy")
+    assert heavy_view["canLevel"] is False
+
+
+def test_recycle_station():
+    state = state_at(
+        "recycle_station", "node", completed=["battle1", "recruit", "adventure"], route="recruit"
+    )
+    assert state["gold"] == 0
+    bean = next(c for c in state["cards"] if c["cardId"] == "bean")
+    expected = G.recycle_price(bean)
+    assert expected == 5 * bean["level"] + 0, "价格由费用和等级共同决定"
+    G.recycle_apply(state, "bean")
+    assert state["gold"] == expected
+    assert len(state["cards"]) == 7
+    assert not any(c["cardId"] == "bean" for c in state["cards"])
+    assert state["phase"] == "after_story"
+    G.recycle_apply(state, "shell")
+    assert state["gold"] == expected, "节点完成后不能再次回收"
+
+    one_unit = state_at(
+        "recycle_station", "node", completed=["battle1", "recruit", "adventure"], route="recruit"
+    )
+    one_unit["cards"] = [{"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 0}]
+    try:
+        G.recycle_apply(one_unit, "bean")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("不能移除最后一张单位牌")
+    assert one_unit["gold"] == 0 and len(one_unit["cards"]) == 1
+
+    view = G.public_state(one_unit)["recycle"]
+    assert view["targets"][0]["removable"] is False
+
+    empty = state_at(
+        "recycle_station", "node", completed=["battle1", "recruit", "adventure"], route="recruit"
+    )
+    empty["cards"] = [{"cardId": "spark", "level": 1, "atkBonus": 0, "hpBonus": 0}]
+    try:
+        G.recycle_apply(empty, "spark")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("不能把牌组清空")
+    assert empty["phase"] == "node" and len(empty["cards"]) == 1
+
+
+def test_drift_capsule():
+    state = state_at(
+        "drift_capsule", "node", completed=["battle1", "recruit", "adventure"], route="recruit"
+    )
+    state["nodeData"] = {"seed": 12345, "rerolls": 0}
+    candidates = [c["cardId"] for c in G.public_state(state)["drift"]["candidates"]]
+    assert len(candidates) == G.DRIFT["candidateCount"]
+    assert candidates == G._drift_candidates(state), "同一存档的候选必须稳定"
+
+    state["gold"] = G.DRIFT["rerollPrice"]
+    G.drift_reroll(state)
+    assert state["gold"] == 0 and state["nodeData"]["rerolls"] == 1
+    rerolled = [c["cardId"] for c in G.public_state(state)["drift"]["candidates"]]
+    assert rerolled == G._drift_candidates(state, 1)
+    assert G.public_state(state)["drift"]["canReroll"] is False
+    try:
+        G.drift_reroll(state)
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("每个卡匣只能重抽一次")
+
+    pick = rerolled[0]
+    owned = next((c for c in state["cards"] if c["cardId"] == pick), None)
+    G.drift_choose(state, pick)
+    if owned is not None:
+        assert owned["level"] == 2
+        assert len(state["cards"]) == 8
+    else:
+        assert len(state["cards"]) == 9
+        assert state["cards"][-1] == {
+            "cardId": pick,
+            "level": 1,
+            "atkBonus": 0,
+            "hpBonus": 0,
+        }
+    assert state["phase"] == "after_story"
+
+    broke = state_at(
+        "drift_capsule", "node", completed=["battle1", "recruit", "adventure"], route="recruit"
+    )
+    broke["nodeData"] = {"seed": 1, "rerolls": 0}
+    broke["gold"] = G.DRIFT["rerollPrice"] - 1
+    try:
+        G.drift_reroll(broke)
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("金币不足不能重抽")
+    assert broke["nodeData"]["rerolls"] == 0
+
+    fresh = state_at(
+        "drift_capsule", "node", completed=["battle1", "recruit", "adventure"], route="recruit"
+    )
+    fresh["nodeData"] = {"seed": 12345, "rerolls": 0}
+    try:
+        G.drift_choose(fresh, "missing")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("候选外的卡不能选择")
+
+
+def test_three_layer_map_route():
+    state = map_after_battle1()
+    G.select_node(state, "recruit")
+    G.advance_story(state)
+    G.advance_story(state)
+    G.recruit_leave(state)
+    G.advance_story(state)
+    status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
+    assert status["adventure"] == "available" and status["calibration"] == "available"
+    assert status["drift_capsule"] == "locked" and status["recycle_station"] == "locked"
+
+    G.select_node(state, "calibration")
+    assert state["route"] == {"supply": "recruit", "repair": "calibration"}
+    G.advance_story(state)
+    G.calibration_leave(state)
+    G.advance_story(state)
+    status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
+    assert status["adventure"] == "closed" and status["calibration"] == "completed"
+    assert status["drift_capsule"] == "available" and status["battle2"] == "locked"
+    try:
+        G.select_node(state, "adventure")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("已关闭的分支不能进入")
+
+    G.select_node(state, "recycle_station")
+    assert state["route"] == {
+        "supply": "recruit",
+        "repair": "calibration",
+        "salvage": "recycle",
+    }
+    G.advance_story(state)
+    G.recycle_leave(state)
+    G.advance_story(state)
+    status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
+    assert status["drift_capsule"] == "closed" and status["battle2"] == "available"
+
+    G.select_node(state, "battle2")
+    assert state["phase"] == "before_story"
+    G.advance_story(state)
+    assert state["phase"] == "node"
+    try:
+        G.select_node(state, "battle2")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("战斗中不能再次选关")
 
 
 if __name__ == "__main__":

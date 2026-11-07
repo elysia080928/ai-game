@@ -473,6 +473,8 @@ button.small { padding: 6px 12px; font-size: 12px; }
 .target { cursor: pointer; transition: border-color .12s ease, transform .12s ease; }
 .target:hover { border-color: var(--pink); transform: translateY(-2px); }
 .target.selected { border-color: var(--pink); }
+.target.disabled { opacity: .45; cursor: not-allowed; }
+.target.disabled:hover { border-color: var(--line); transform: none; }
 .target-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .target-action {
   flex: 1 1 84px;
@@ -1074,7 +1076,7 @@ input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .book-page { min-height: 470px; padding: 30px clamp(18px, 3vw, 34px); }
 .page-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; color: var(--text); letter-spacing: .12em; }
 .page-title span { color: var(--cyan); font-size: 10px; letter-spacing: .2em; }
-.route-track { display: grid; grid-template-columns: minmax(120px, 1fr) 34px minmax(160px, 1.5fr) 34px minmax(120px, 1fr) 34px minmax(120px, 1fr); align-items: center; gap: 0; width: 100%; }
+.route-track { display: grid; grid-template-columns: minmax(110px, 1fr) 30px minmax(150px, 1.4fr) 30px minmax(150px, 1.4fr) 30px minmax(150px, 1.4fr) 30px minmax(110px, 1fr); align-items: center; gap: 0; width: 100%; }
 .route-track > .map-node { width: 100%; min-height: 108px; }
 .route-branch { display: flex; flex-direction: column; gap: 28px; align-items: stretch; }
 .route-branch .map-node { width: 100%; min-height: 92px; }
@@ -1106,7 +1108,13 @@ input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .map-legend { margin-top: 12px; }
 
 @media (max-width: 900px) {
-  .route-track { grid-template-columns: minmax(90px, 1fr) 30px minmax(150px, 1.3fr) 30px minmax(90px, 1fr) 30px minmax(90px, 1fr); }
+  .route-track { grid-template-columns: 1fr; gap: 8px; }
+  .route-track > .map-node, .route-branch .map-node { width: min(100%, 280px); justify-self: center; }
+  .route-rail, .route-rail-split { width: 2px; height: 28px; justify-self: center; background: repeating-linear-gradient(0deg, rgba(116,216,230,.2) 0 5px, transparent 5px 10px); }
+  .route-rail::after { right: -4px; top: auto; bottom: -1px; border: 5px solid transparent; border-top-color: rgba(116,216,230,.48); border-left-color: transparent; }
+  .route-rail-split { height: 8px; }
+  .route-rail-split::before, .route-rail-split::after { display: none; }
+  .route-branch { gap: 8px; }
   .map-node { grid-template-columns: 34px 1fr; padding: 9px; }
   .map-node-icon { width: 34px; height: 34px; }
   .map-node-icon svg { width: 19px; height: 19px; }
