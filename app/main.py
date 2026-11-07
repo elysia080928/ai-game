@@ -74,6 +74,14 @@ class DriftChooseBody(BaseModel):
     cardId: str
 
 
+class ShopBuyBody(BaseModel):
+    offerId: str
+
+
+class TrialChooseBody(BaseModel):
+    trialId: str
+
+
 class SignalBody(BaseModel):
     action: str
     cardId: str
@@ -490,6 +498,65 @@ def drift_leave(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
         game.drift_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/shop/buy")
+def shop_buy(body: ShopBuyBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.shop_buy(state, body.offerId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/shop/leave")
+def shop_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.shop_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/trial/choose")
+def trial_choose(body: TrialChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.trial_choose(state, body.trialId)
+        _save_state(user["id"], state)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/trial/choose-card")
+def trial_choose_card(body: DriftChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.trial_choose_card(state, body.cardId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/trial/claim")
+def trial_claim(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.trial_claim(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/trial/leave")
+def trial_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.trial_leave(state)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}

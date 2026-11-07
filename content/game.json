@@ -124,7 +124,23 @@
   "calibration": {"atkBonus": 1, "hpBonus": 2, "levelBonus": 1},
   "recycle": {"goldPerCost": 5, "goldPerLevel": 5},
   "drift": {"candidateCount": 3, "rerollPrice": 10, "rerollLimit": 1},
-  "runLength": 5,
+  "shop": {
+    "offers": [
+      {"id": "ship_guard", "kind": "new", "cardId": "guard", "price": 16},
+      {"id": "ship_upgrade", "kind": "upgrade", "cardId": "worker", "price": 8},
+      {"id": "ship_boost", "kind": "boost", "cardId": "striker", "effect": "atk", "amount": 1, "price": 6}
+    ]
+  },
+  "trial": {
+    "trials": [
+      {"id": "light", "name": "轻量编队", "description": "费用 ≤ 2 的卡达到 4 张", "target": 4},
+      {"id": "power", "name": "火力读数", "description": "单位攻击总和达到 12", "target": 12},
+      {"id": "iterations", "name": "迭代记录", "description": "至少 2 张卡达到 2 级", "target": 2}
+    ],
+    "failureGold": 5,
+    "candidateCount": 3
+  },
+  "runLength": 6,
   "firstNode": "battle1",
   "nodes": [
     {
@@ -259,7 +275,7 @@
       "name": "漂流卡匣",
       "branchGroup": "salvage",
       "branch": "drift",
-      "next": ["battle2"],
+      "next": ["shop", "trial"],
       "before": [
         {
           "speaker": "爱",
@@ -277,7 +293,7 @@
       "name": "记忆回收站",
       "branchGroup": "salvage",
       "branch": "recycle",
-      "next": ["battle2"],
+      "next": ["shop", "trial"],
       "before": [
         {
           "speaker": "爱",
@@ -287,6 +303,46 @@
       ],
       "after": [
         {"speaker": "爱", "text": "拆解完成。至少它没有白留在牌组里。"}
+      ]
+    },
+    {
+      "id": "shop",
+      "type": "shop",
+      "name": "断线商船",
+      "branchGroup": "economy",
+      "branch": "shop",
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "一艘断线商船停在航道上。信号不太稳定，但货舱还开着。",
+          "background": "station"
+        },
+        {
+          "speaker": "爱",
+          "text": "只能买一件。新机体比升级贵，想清楚再出手。"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "交易完成。商船正在离港。"}
+      ]
+    },
+    {
+      "id": "trial",
+      "type": "trial",
+      "name": "观测塔",
+      "branchGroup": "economy",
+      "branch": "trial",
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "观测塔会读取你的牌组，给你两个试炼选项。成功的话，可以带走一张机偶记录。",
+          "background": "signal"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "读数结束了。我们继续。"}
       ]
     },
     {

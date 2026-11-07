@@ -12,6 +12,7 @@ let adventureTarget = null;
 let adventureEffect = null;
 let enhanceKind = "adventure";
 let recycleTarget = null;
+let trialPick = null;
 let signalAction = null;
 let signalTarget = null;
 let draggingUid = null;
@@ -28,6 +29,8 @@ const NODE_TYPES = {
   calibration: "校准",
   drift: "卡匣",
   recycle: "回收",
+  shop: "商船",
+  trial: "试炼",
 };
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
 
@@ -74,7 +77,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "complete-view"].forEach((id) => {
+  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -139,6 +142,14 @@ function render() {
   }
   if (state.node && state.node.type === "recycle") {
     renderRecycle();
+    return;
+  }
+  if (state.node && state.node.type === "shop") {
+    renderShop();
+    return;
+  }
+  if (state.node && state.node.type === "trial") {
+    renderTrial();
   }
 }
 
@@ -226,7 +237,9 @@ function mapNodeButton(node) {
     adventure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 5.2L20 10l-5.8 1.8L12 17l-2.2-5.2L4 10l5.8-1.8L12 3Z"/><path d="m18 16 .8 1.8L21 18.5l-2.2.7L18 21l-.8-1.8-2.2-.7 2.2-.7L18 16Z"/></svg>',
     calibration: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17V9m7 8V5m7 12v-6"/><path d="M3 21h18"/></svg>',
     drift: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M9 5v14"/></svg>',
-    recycle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V5h6v3M10 12v4M14 12v4"/></svg>'
+    recycle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V5h6v3M10 12v4M14 12v4"/></svg>',
+    shop: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-1.5 13h-13L4 7Z"/><path d="M8 7V5a4 4 0 0 1 8 0v2M9 12h6"/></svg>',
+    trial: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 21h12M7 7l5-4 5 4M9 7v5a3 3 0 0 0 6 0V7"/><path d="M9 15h6"/></svg>'
   };
   return `<button class="map-node status-${esc(node.status)} type-${esc(node.type)}"
       data-id="${esc(node.id)}" ${disabled}
@@ -268,6 +281,11 @@ function renderMap() {
       <div class="branch-row route-branch">
         ${mapNodeButton(byId.drift_capsule)}
         ${mapNodeButton(byId.recycle_station)}
+      </div>
+      <div class="route-rail route-rail-split"><span></span><span></span></div>
+      <div class="branch-row route-branch">
+        ${mapNodeButton(byId.shop)}
+        ${mapNodeButton(byId.trial)}
       </div>
       <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.battle2)}
@@ -842,6 +860,77 @@ function renderRecycle() {
   }
 }
 
+/* ---------- 断线商船 ---------- */
+
+function renderShop() {
+  const shop = state.shop;
+  if (!shop) {
+    render();
+    return;
+  }
+  $("shop-view").hidden = false;
+  $("shop-offers").innerHTML = shop.offers.map((offer) => {
+    const meta = offer.kind === "new"
+      ? "新单位"
+      : offer.kind === "upgrade" ? "升级已有单位" : esc(offer.effectText);
+    return `<div class="offer">
+        <div class="offer-name">${esc(offer.name)}</div>
+        <div class="offer-meta">${meta}</div>
+        <div class="offer-price">${offer.price} 金币</div>
+        <button class="buy-btn" data-id="${esc(offer.id)}" ${offer.buyable ? "" : "disabled"}>
+          ${shop.purchased ? "已购买" : offer.buyable ? "购买" : esc(offer.reason)}
+        </button>
+      </div>`;
+  }).join("");
+  $("shop-note").textContent = shop.purchased
+    ? "本次交易已完成，可以离开。"
+    : `当前金币：${state.gold}`;
+}
+
+/* ---------- 观测塔 ---------- */
+
+function renderTrial() {
+  const trial = state.trial;
+  if (!trial) {
+    render();
+    return;
+  }
+  $("trial-view").hidden = false;
+  const choosing = trial.status === "choose";
+  $("trial-options").innerHTML = trial.trials.map((item) => `
+    <div class="target${trialPick === item.id ? " selected" : ""}${choosing ? "" : " disabled"}"
+        data-trial="${esc(item.id)}" ${choosing ? 'role="button" tabindex="0"' : ""}>
+      <div class="target-name">${esc(item.name)} <small>${item.progress} / ${item.target}</small></div>
+      <div class="target-meta">${esc(item.description)}</div>
+      <div class="target-meta">${item.passed ? "当前可达成" : "当前未达成"}</div>
+    </div>`).join("");
+
+  const success = trial.status === "success";
+  const rewards = $("trial-rewards");
+  rewards.hidden = !success;
+  rewards.innerHTML = success
+    ? trial.candidates.map((card) => `
+        <div class="offer">
+          <div class="offer-name">${esc(card.name)}</div>
+          <div class="offer-meta">${card.isUpgrade
+            ? `已有 Lv.${card.currentLevel} → Lv.${card.targetLevel}`
+            : `新卡 Lv.${card.targetLevel}`}</div>
+          <div class="offer-meta">费用 ${card.cost}　${card.type === "unit" ? `攻击 ${card.atk}　生命 ${card.hp}` : esc(card.effectText)}</div>
+          <button class="buy-btn" data-id="${esc(card.cardId)}">${card.isUpgrade ? "升级" : "带走"}</button>
+        </div>`).join("")
+    : "";
+
+  $("trial-confirm").hidden = !choosing || trialPick == null;
+  const claim = $("trial-claim");
+  claim.hidden = trial.status !== "failed";
+  claim.textContent = `领取 ${trial.failureGold} 金币`;
+  if (choosing) $("trial-note").textContent = "选择一个试炼，再点“开始试炼”。";
+  else if (success) $("trial-note").textContent = trial.hasCandidates
+    ? "试炼成功：选择一张奖励。"
+    : "试炼成功，但当前没有可用的奖励卡，可以直接离开。";
+  else $("trial-note").textContent = "试炼失败：可以领取补偿金币，或直接离开。";
+}
+
 /* ---------- 启动与事件 ---------- */
 
 async function loginOrRegister(path) {
@@ -1061,6 +1150,37 @@ function bindEvents() {
     renderRecycle();
   });
   $("recycle-leave").addEventListener("click", () => act("/api/recycle/leave", {}));
+
+  $("shop-offers").addEventListener("click", (event) => {
+    const button = event.target.closest(".buy-btn");
+    if (!button || button.disabled) return;
+    act("/api/shop/buy", { offerId: button.dataset.id });
+  });
+  $("shop-leave").addEventListener("click", () => act("/api/shop/leave", {}));
+
+  const pickTrial = (event) => {
+    const element = event.target.closest(".target");
+    if (!element || element.classList.contains("disabled") || !state.trial) return;
+    trialPick = element.dataset.trial;
+    renderTrial();
+  };
+  $("trial-options").addEventListener("click", pickTrial);
+  $("trial-options").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    pickTrial(event);
+  });
+  $("trial-confirm").addEventListener("click", () => {
+    if (!trialPick) return;
+    act("/api/trial/choose", { trialId: trialPick });
+  });
+  $("trial-rewards").addEventListener("click", (event) => {
+    const button = event.target.closest(".buy-btn");
+    if (!button || button.disabled) return;
+    act("/api/trial/choose-card", { cardId: button.dataset.id });
+  });
+  $("trial-claim").addEventListener("click", () => act("/api/trial/claim", {}));
+  $("trial-leave").addEventListener("click", () => act("/api/trial/leave", {}));
 
   $("restart-btn").addEventListener("click", () => {
     if (!confirm("重新开始会覆盖当前冒险进度，确定吗？")) return;

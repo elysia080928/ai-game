@@ -603,7 +603,7 @@ def test_drift_capsule():
         raise AssertionError("候选外的卡不能选择")
 
 
-def test_three_layer_map_route():
+def test_four_layer_map_route():
     state = map_after_battle1()
     G.select_node(state, "recruit")
     G.advance_story(state)
@@ -639,7 +639,19 @@ def test_three_layer_map_route():
     G.recycle_leave(state)
     G.advance_story(state)
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
-    assert status["drift_capsule"] == "closed" and status["battle2"] == "available"
+    assert status["drift_capsule"] == "closed"
+    assert status["shop"] == "available" and status["trial"] == "available"
+    assert status["battle2"] == "locked"
+
+    G.select_node(state, "shop")
+    assert state["route"]["economy"] == "shop"
+    G.advance_story(state)
+    G.advance_story(state)
+    G.shop_leave(state)
+    G.advance_story(state)
+    status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
+    assert status["trial"] == "closed" and status["shop"] == "completed"
+    assert status["battle2"] == "available"
 
     G.select_node(state, "battle2")
     assert state["phase"] == "before_story"
@@ -651,6 +663,198 @@ def test_three_layer_map_route():
         pass
     else:
         raise AssertionError("战斗中不能再次选关")
+
+
+def shop_state(gold=30, cards=None):
+    state = state_at(
+        "shop", "node", completed=["battle1", "recruit", "adventure", "drift_capsule"],
+        route="recruit",
+    )
+    state["gold"] = gold
+    if cards is not None:
+        state["cards"] = copy.deepcopy(cards)
+    state["nodeData"] = {"purchased": False}
+    return state
+
+
+def test_shop():
+    state = shop_state(gold=30)
+    view = G.public_state(state)["shop"]
+    assert [offer["kind"] for offer in view["offers"]] == ["new", "upgrade", "boost"]
+    assert all(offer["buyable"] for offer in view["offers"])
+
+    striker = next(card for card in state["cards"] if card["cardId"] == "striker")
+    before = G.card_stats(G.CARDS, "striker", 1, striker["atkBonus"], striker["hpBonus"])["atk"]
+    G.shop_buy(state, "ship_boost")
+    after = G.card_stats(G.CARDS, "striker", 1, striker["atkBonus"], striker["hpBonus"])["atk"]
+    assert after == before + 1 and state["gold"] == 24
+    assert state["phase"] == "after_story"
+    G.shop_buy(state, "ship_guard")
+    assert state["gold"] == 24, "本节点只能购买一次"
+
+    upgrade = shop_state(gold=30)
+    worker = next(card for card in upgrade["cards"] if card["cardId"] == "worker")
+    worker["level"] = 2
+    view = G.public_state(upgrade)["shop"]
+    offer = next(item for item in view["offers"] if item["id"] == "ship_upgrade")
+    assert offer["buyable"] is False and offer["reason"] == "已满级"
+    try:
+        G.shop_buy(upgrade, "ship_upgrade")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("满级卡不能购买升级")
+
+    fresh = shop_state(gold=30)
+    G.shop_buy(fresh, "ship_guard")
+    assert fresh["cards"][-1]["cardId"] == "guard" and fresh["gold"] == 14
+    view = shop_state(gold=30)
+    view["cards"].append({"cardId": "guard", "level": 1, "atkBonus": 0, "hpBonus": 0})
+    offer = next(item for item in G.public_state(view)["shop"]["offers"] if item["id"] == "ship_guard")
+    assert offer["reason"] == "已拥有同名卡"
+
+    broke = shop_state(gold=G.SHOP["offers"][0]["price"] - 1)
+    offer = next(item for item in G.public_state(broke)["shop"]["offers"] if item["id"] == "ship_guard")
+    assert offer["reason"] == "金币不足"
+    try:
+        G.shop_buy(broke, "ship_guard")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("金币不足不能购买")
+
+    full = shop_state(gold=30, cards=[{"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 0}] * 20)
+    offer = next(item for item in G.public_state(full)["shop"]["offers"] if item["id"] == "ship_guard")
+    assert offer["reason"] == "牌组已满"
+
+    leave = shop_state()
+    G.shop_leave(leave)
+    assert leave["phase"] == "after_story" and leave["completed"][-1] == "shop"
+    G.shop_leave(leave)
+    assert leave["completed"].count("shop") == 1
+
+    try:
+        G.shop_buy(shop_state(), "missing")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("未知商品不能购买")
+
+
+def trial_state(seed, gold=0, cards=None):
+    state = state_at(
+        "trial", "node", completed=["battle1", "recruit", "adventure", "drift_capsule"],
+        route="recruit",
+    )
+    state["gold"] = gold
+    if cards is not None:
+        state["cards"] = copy.deepcopy(cards)
+    state["nodeData"] = {"seed": seed, "status": "choose", "trialId": None, "candidates": []}
+    return state
+
+
+def find_seed(predicate):
+    for seed in range(1, 500):
+        state = trial_state(seed)
+        if predicate(G.public_state(state)["trial"]["trials"]):
+            return seed
+    raise AssertionError("没有找到满足条件的随机种子")
+
+
+def test_trial():
+    seed = find_seed(lambda trials: len(trials) == 2)
+    state = trial_state(seed, gold=0)
+    offered = [item["id"] for item in G.public_state(state)["trial"]["trials"]]
+    assert len(offered) == 2
+    assert offered == [item["id"] for item in G._trial_offered(trial_state(seed))]
+    try:
+        G.trial_choose(state, "missing")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("候选外的试炼不能选择")
+
+    passing = find_seed(
+        lambda trials: any(item["id"] in ("light", "power") and item["passed"] for item in trials)
+    )
+    state = trial_state(passing)
+    pick = next(
+        item["id"]
+        for item in G.public_state(state)["trial"]["trials"]
+        if item["id"] in ("light", "power") and item["passed"]
+    )
+    G.trial_choose(state, pick)
+    view = G.public_state(state)["trial"]
+    assert view["status"] == "success" and view["trialId"] == pick
+    assert len(view["candidates"]) == min(G.TRIAL["candidateCount"], len(G._drift_pool(state)))
+    assert [card["cardId"] for card in view["candidates"]] == state["nodeData"]["candidates"]
+    try:
+        G.trial_claim(state)
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("成功的试炼不能领取补偿")
+    try:
+        G.trial_choose_card(state, "missing")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("候选外的奖励不能选择")
+    G.trial_choose_card(state, view["candidates"][0]["cardId"])
+    assert state["phase"] == "after_story"
+
+    heavy_deck = [
+        {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
+        for card_id in ("striker", "heavy", "guard", "flyer")
+    ]
+
+    def light_fails(trials):
+        return any(item["id"] == "light" and not item["passed"] for item in trials)
+
+    failing = None
+    for seed in range(1, 500):
+        candidate = trial_state(seed, cards=heavy_deck)
+        if light_fails(G.public_state(candidate)["trial"]["trials"]):
+            failing = candidate
+            break
+    assert failing is not None, "没有找到轻量编队失败的种子"
+    state = failing
+    G.trial_choose(state, "light")
+    assert state["nodeData"]["status"] == "failed"
+    try:
+        G.trial_choose_card(state, "bean")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("失败的试炼不能选奖励")
+    gold = state["gold"]
+    G.trial_claim(state)
+    assert state["gold"] == gold + G.TRIAL["failureGold"]
+    assert state["phase"] == "after_story"
+    G.trial_claim(state)
+    assert state["gold"] == gold + G.TRIAL["failureGold"]
+
+    leave = trial_state(seed)
+    G.trial_leave(leave)
+    assert leave["phase"] == "after_story"
+
+    maxed = [
+        {"cardId": card_id, "level": 2, "atkBonus": 0, "hpBonus": 0}
+        for card_id in G.CARDS
+    ]
+    state = trial_state(seed, cards=maxed)
+    pick = G.public_state(state)["trial"]["trials"][0]["id"]
+    G.trial_choose(state, pick)
+    view = G.public_state(state)["trial"]
+    assert view["status"] == "success" and view["hasCandidates"] is False
+    try:
+        G.trial_choose_card(state, "bean")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("没有奖励候选时不能选卡")
+    G.trial_leave(state)
+    assert state["phase"] == "after_story"
 
 
 if __name__ == "__main__":

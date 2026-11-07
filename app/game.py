@@ -20,6 +20,8 @@ ADVENTURE = CONTENT["adventure"]
 CALIBRATION = CONTENT["calibration"]
 RECYCLE = CONTENT["recycle"]
 DRIFT = CONTENT["drift"]
+SHOP = CONTENT["shop"]
+TRIAL = CONTENT["trial"]
 SIGNAL = CONTENT["signal"]
 FIRST_NODE = CONTENT["firstNode"]
 RUN_LENGTH = CONTENT["runLength"]
@@ -29,7 +31,17 @@ BRANCH_PAIRS = {
 }
 
 MAX_DECK = 20
-NODE_TYPES = ("battle", "recruit", "signal", "adventure", "calibration", "drift", "recycle")
+NODE_TYPES = (
+    "battle",
+    "recruit",
+    "signal",
+    "adventure",
+    "calibration",
+    "drift",
+    "recycle",
+    "shop",
+    "trial",
+)
 SCHEMA_VERSION = 3
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
 VALID_PHASES = ("before_story", "node", "after_story", "map", "complete")
@@ -133,6 +145,32 @@ def validate_content():
         raise RuntimeError("回收站金币配置非法")
     if DRIFT["candidateCount"] < 1 or DRIFT["rerollPrice"] < 0 or DRIFT["rerollLimit"] < 0:
         raise RuntimeError("漂流卡匣配置非法")
+    offer_ids = set()
+    for offer in SHOP["offers"]:
+        if offer.get("id") in offer_ids:
+            raise RuntimeError("商店商品 ID 重复")
+        offer_ids.add(offer.get("id"))
+        if offer.get("kind") not in ("new", "upgrade", "boost"):
+            raise RuntimeError("商店商品类型非法")
+        if offer.get("cardId") not in CARDS:
+            raise RuntimeError("商店引用了未知卡牌")
+        if offer["price"] <= 0:
+            raise RuntimeError("商店价格非法")
+        if offer["kind"] == "boost" and (
+            CARDS[offer["cardId"]]["type"] != "unit"
+            or offer.get("effect") not in ("atk", "hp")
+            or offer.get("amount", 0) < 1
+        ):
+            raise RuntimeError("商店强化商品非法")
+    trial_ids = set()
+    for item in TRIAL["trials"]:
+        if item.get("id") in trial_ids:
+            raise RuntimeError("试炼 ID 重复")
+        trial_ids.add(item.get("id"))
+        if item.get("target", 0) < 1 or not item.get("name") or not item.get("description"):
+            raise RuntimeError("试炼配置非法")
+    if not TRIAL["trials"] or TRIAL["failureGold"] < 0 or TRIAL["candidateCount"] < 1:
+        raise RuntimeError("观测塔配置非法")
 
 
 validate_content()
@@ -195,6 +233,15 @@ def _begin_node(state):
         state["nodeData"] = {"purchased": False}
     elif node["type"] == "drift":
         state["nodeData"] = {"seed": random.randrange(1, 2**31), "rerolls": 0}
+    elif node["type"] == "shop":
+        state["nodeData"] = {"purchased": False}
+    elif node["type"] == "trial":
+        state["nodeData"] = {
+            "seed": random.randrange(1, 2**31),
+            "status": "choose",
+            "trialId": None,
+            "candidates": [],
+        }
     else:
         state["nodeData"] = {}
 
@@ -625,6 +672,192 @@ def drift_leave(state):
     finish_node(state, node["id"])
 
 
+def _shop_offer(offer_id):
+    for offer in SHOP["offers"]:
+        if offer["id"] == offer_id:
+            return offer
+    raise GameError("没有这个商品")
+
+
+def _shop_available(state, offer):
+    card = _owned_card(state, offer["cardId"])
+    if offer["kind"] == "new":
+        if card is not None:
+            return False, "已拥有同名卡"
+        if len(state["cards"]) >= MAX_DECK:
+            return False, "牌组已满"
+        return True, ""
+    if card is None:
+        return False, "牌组里没有这张卡"
+    if offer["kind"] == "upgrade":
+        if card["level"] >= len(CARDS[offer["cardId"]]["levels"]):
+            return False, "已满级"
+        return True, ""
+    return True, ""
+
+
+def shop_buy(state, offer_id):
+    node = current_node(state)
+    if node is None or node["type"] != "shop":
+        raise GameError("当前不是断线商船")
+    if node["id"] in state["completed"] or state["nodeData"].get("purchased"):
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在断线商船")
+    offer = _shop_offer(offer_id)
+    buyable, reason = _shop_available(state, offer)
+    if not buyable:
+        raise GameError(reason)
+    if state["gold"] < offer["price"]:
+        raise GameError("金币不足")
+    state["gold"] -= offer["price"]
+    card = _owned_card(state, offer["cardId"])
+    if offer["kind"] == "new":
+        state["cards"].append(
+            {"cardId": offer["cardId"], "level": 1, "atkBonus": 0, "hpBonus": 0}
+        )
+    elif offer["kind"] == "upgrade":
+        card["level"] += 1
+    else:
+        key = "atkBonus" if offer["effect"] == "atk" else "hpBonus"
+        card[key] = card.get(key, 0) + offer["amount"]
+    state["nodeData"]["purchased"] = True
+    finish_node(state, node["id"])
+
+
+def shop_leave(state):
+    node = current_node(state)
+    if node is None or node["type"] != "shop":
+        raise GameError("当前不是断线商船")
+    finish_node(state, node["id"])
+
+
+def _trial_def(trial_id):
+    for item in TRIAL["trials"]:
+        if item["id"] == trial_id:
+            return item
+    raise GameError("没有这个试炼")
+
+
+def _trial_metric(state, trial_id):
+    if trial_id == "light":
+        return sum(
+            1
+            for card in state["cards"]
+            if card_stats(
+                CARDS,
+                card["cardId"],
+                card["level"],
+                card.get("atkBonus", 0),
+                card.get("hpBonus", 0),
+            )["cost"]
+            <= 2
+        )
+    if trial_id == "power":
+        return sum(
+            card_stats(
+                CARDS,
+                card["cardId"],
+                card["level"],
+                card.get("atkBonus", 0),
+                card.get("hpBonus", 0),
+            )["atk"]
+            for card in state["cards"]
+            if CARDS[card["cardId"]]["type"] == "unit"
+        )
+    return sum(1 for card in state["cards"] if card["level"] >= 2)
+
+
+def _trial_offered(state):
+    data = state.get("nodeData") or {}
+    seed = data.get("seed")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise GameError("试炼种子缺失")
+    rng = random.Random(seed)
+    count = min(2, len(TRIAL["trials"]))
+    return rng.sample(TRIAL["trials"], count)
+
+
+def _trial_rewards(state):
+    pool = _drift_pool(state)
+    if not pool:
+        return []
+    seed = state["nodeData"]["seed"]
+    rng = random.Random(seed + 7919)
+    return rng.sample(pool, min(TRIAL["candidateCount"], len(pool)))
+
+
+def trial_choose(state, trial_id):
+    node = current_node(state)
+    if node is None or node["type"] != "trial":
+        raise GameError("当前不是观测塔")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在观测塔")
+    data = state["nodeData"]
+    if data.get("status") != "choose":
+        raise GameError("已经选择过试炼")
+    if trial_id not in [item["id"] for item in _trial_offered(state)]:
+        raise GameError("这个试炼不在当前候选中")
+    item = _trial_def(trial_id)
+    passed = _trial_metric(state, trial_id) >= item["target"]
+    data["trialId"] = trial_id
+    if passed:
+        data["status"] = "success"
+        data["candidates"] = _trial_rewards(state)
+    else:
+        data["status"] = "failed"
+
+
+def trial_choose_card(state, card_id):
+    node = current_node(state)
+    if node is None or node["type"] != "trial":
+        raise GameError("当前不是观测塔")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在观测塔")
+    data = state["nodeData"]
+    if data.get("status") != "success":
+        raise GameError("没有可领取的试炼奖励")
+    if card_id not in data.get("candidates", []):
+        raise GameError("这张卡不在奖励候选中")
+    owned = _owned_card(state, card_id)
+    if owned is not None:
+        if owned["level"] >= len(CARDS[card_id]["levels"]):
+            raise GameError("该卡已经满级")
+        owned["level"] += 1
+    else:
+        if len(state["cards"]) >= MAX_DECK:
+            raise GameError("牌组已满")
+        state["cards"].append(
+            {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
+        )
+    finish_node(state, node["id"])
+
+
+def trial_claim(state):
+    node = current_node(state)
+    if node is None or node["type"] != "trial":
+        raise GameError("当前不是观测塔")
+    if node["id"] in state["completed"]:
+        return
+    if state["phase"] != "node":
+        raise GameError("当前不在观测塔")
+    if state["nodeData"].get("status") != "failed":
+        raise GameError("试炼没有失败，不能领取补偿")
+    state["gold"] += TRIAL["failureGold"]
+    finish_node(state, node["id"])
+
+
+def trial_leave(state):
+    node = current_node(state)
+    if node is None or node["type"] != "trial":
+        raise GameError("当前不是观测塔")
+    finish_node(state, node["id"])
+
+
 def _card_view(card):
     stats = card_stats(
         CARDS,
@@ -856,6 +1089,80 @@ def _drift_view(state):
     }
 
 
+def _shop_view(state):
+    node = current_node(state)
+    if node is None or node["type"] != "shop" or state["phase"] != "node":
+        return None
+    purchased = bool(state["nodeData"].get("purchased"))
+    offers = []
+    for offer in SHOP["offers"]:
+        view = {
+            "id": offer["id"],
+            "kind": offer["kind"],
+            "cardId": offer["cardId"],
+            "name": CARDS[offer["cardId"]]["name"],
+            "price": offer["price"],
+        }
+        if offer["kind"] == "boost":
+            label = "攻击" if offer["effect"] == "atk" else "最大生命"
+            view["effectText"] = f"{label} +{offer['amount']}"
+        buyable, reason = _shop_available(state, offer)
+        if purchased:
+            buyable, reason = False, "本节点已购买"
+        elif state["gold"] < offer["price"]:
+            buyable, reason = False, "金币不足"
+        view["buyable"] = buyable
+        view["reason"] = reason
+        offers.append(view)
+    return {"offers": offers, "purchased": purchased}
+
+
+def _trial_view(state):
+    node = current_node(state)
+    if node is None or node["type"] != "trial" or state["phase"] != "node":
+        return None
+    data = state["nodeData"]
+    trials = []
+    for item in _trial_offered(state):
+        progress = _trial_metric(state, item["id"])
+        trials.append(
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "description": item["description"],
+                "target": item["target"],
+                "progress": progress,
+                "passed": progress >= item["target"],
+            }
+        )
+    candidates = []
+    if data.get("status") == "success":
+        for card_id in data.get("candidates", []):
+            owned = _owned_card(state, card_id)
+            current_level = owned["level"] if owned else 0
+            target_level = current_level + 1 if owned else 1
+            stats = card_stats(
+                CARDS,
+                card_id,
+                target_level,
+                owned.get("atkBonus", 0) if owned else 0,
+                owned.get("hpBonus", 0) if owned else 0,
+            )
+            stats["currentLevel"] = current_level
+            stats["targetLevel"] = target_level
+            stats["isUpgrade"] = owned is not None
+            stats["effectText"] = _effect_text(stats)
+            candidates.append(stats)
+    return {
+        "trials": trials,
+        "status": data.get("status", "choose"),
+        "trialId": data.get("trialId"),
+        "candidates": candidates,
+        "hasCandidates": bool(candidates),
+        "failureGold": TRIAL["failureGold"],
+    }
+
+
 def public_state(state):
     node = current_node(state)
     return {
@@ -874,6 +1181,8 @@ def public_state(state):
         "calibration": _calibration_view(state),
         "recycle": _recycle_view(state),
         "drift": _drift_view(state),
+        "shop": _shop_view(state),
+        "trial": _trial_view(state),
         "map": map_view(state),
         "complete": state["phase"] == "complete",
     }

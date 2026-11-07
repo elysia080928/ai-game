@@ -585,6 +585,55 @@ async function main() {
     await waitFor(async () => await visible("story-view"), "卡匣选择后剧情");
     await click("#story-next");
     await waitFor(async () => await visible("map-view"), "卡匣后选关");
+    const fourthLayer = await evaluate(`(() => {
+      const status = (id) => {
+        const node = document.querySelector('.map-node[data-id="' + id + '"]');
+        return node && ['available', 'locked', 'completed', 'closed']
+          .find((name) => node.classList.contains('status-' + name));
+      };
+      return { shop: status('shop'), trial: status('trial'), battle: status('battle2') };
+    })()`);
+    if (fourthLayer.shop !== "available" || fourthLayer.trial !== "available" ||
+        fourthLayer.battle !== "locked") {
+      throw new Error(`第四层分支未正确开放：${JSON.stringify(fourthLayer)}`);
+    }
+    await click('.map-node[data-id="trial"]');
+    await waitFor(async () => await visible("story-view"), "观测塔前置剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("trial-view"), "观测塔界面");
+    const trialOptions = await evaluate(
+      "document.querySelectorAll('#trial-options .target').length"
+    );
+    if (trialOptions !== 2) throw new Error(`观测塔应给出 2 个试炼，实际 ${trialOptions}`);
+    const picked = await evaluate(`(() => {
+      const target = [...document.querySelectorAll('#trial-options .target')]
+        .find((element) => element.textContent.includes("当前可达成"));
+      if (!target) return null;
+      target.click();
+      return target.dataset.trial;
+    })()`);
+    if (!picked) throw new Error("没有当前可达成的试炼");
+    await waitFor(async () => !(await evaluate("document.getElementById('trial-confirm').hidden")), "开始试炼按钮");
+    await click("#trial-confirm");
+    await waitFor(async () => await visible("trial-rewards"), "试炼奖励");
+    const rewardCount = await evaluate("document.querySelectorAll('#trial-rewards .offer').length");
+    if (rewardCount !== 3) throw new Error(`试炼奖励应为 3 张，实际 ${rewardCount}`);
+    await screenshot("ai-game-trial.png");
+    await click("#trial-rewards .offer .buy-btn");
+    await waitFor(async () => await visible("story-view"), "观测塔后剧情");
+    await click("#story-next");
+    await waitFor(async () => await visible("map-view"), "观测塔后选关");
+    const afterEconomy = await evaluate(`(() => {
+      const status = (id) => {
+        const node = document.querySelector('.map-node[data-id="' + id + '"]');
+        return node && ['available', 'locked', 'completed', 'closed']
+          .find((name) => node.classList.contains('status-' + name));
+      };
+      return { shop: status('shop'), battle: status('battle2') };
+    })()`);
+    if (afterEconomy.shop !== "closed" || afterEconomy.battle !== "available") {
+      throw new Error(`观测塔路线未收束：${JSON.stringify(afterEconomy)}`);
+    }
     await click('.map-node[data-id="battle2"]');
     await waitFor(async () => await visible("story-view"), "战斗 2 前置剧情");
     await click("#story-next");

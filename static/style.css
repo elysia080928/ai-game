@@ -1076,7 +1076,7 @@ input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .book-page { min-height: 470px; padding: 30px clamp(18px, 3vw, 34px); }
 .page-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; color: var(--text); letter-spacing: .12em; }
 .page-title span { color: var(--cyan); font-size: 10px; letter-spacing: .2em; }
-.route-track { display: grid; grid-template-columns: minmax(110px, 1fr) 30px minmax(150px, 1.4fr) 30px minmax(150px, 1.4fr) 30px minmax(150px, 1.4fr) 30px minmax(110px, 1fr); align-items: center; gap: 0; width: 100%; }
+.route-track { display: grid; grid-template-columns: minmax(96px, 1fr) 22px minmax(120px, 1.35fr) 22px minmax(120px, 1.35fr) 22px minmax(120px, 1.35fr) 22px minmax(120px, 1.35fr) 22px minmax(96px, 1fr); align-items: center; gap: 0; width: 100%; }
 .route-track > .map-node { width: 100%; min-height: 108px; }
 .route-branch { display: flex; flex-direction: column; gap: 28px; align-items: stretch; }
 .route-branch .map-node { width: 100%; min-height: 92px; }

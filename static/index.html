@@ -190,6 +190,33 @@
         </div>
       </section>
 
+      <section id="shop-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>断线商船</h2>
+          <p class="node-hint">每次最多购买一件商品，也可以直接离开。新机体比升级和强化更贵。</p>
+          <div class="offers" id="shop-offers"></div>
+          <div class="node-actions">
+            <button id="shop-leave" class="ghost">离开</button>
+          </div>
+          <div class="node-note" id="shop-note"></div>
+        </div>
+      </section>
+
+      <section id="trial-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>观测塔</h2>
+          <p class="node-hint">从两个试炼中选一个；成功后三选一，失败可以领取少量金币，也可以离开。</p>
+          <div class="targets" id="trial-options"></div>
+          <div class="offers" id="trial-rewards" hidden></div>
+          <div class="node-actions">
+            <button id="trial-confirm" class="primary" hidden>开始试炼</button>
+            <button id="trial-claim" class="primary" hidden>领取金币</button>
+            <button id="trial-leave" class="ghost">离开</button>
+          </div>
+          <div class="node-note" id="trial-note"></div>
+        </div>
+      </section>
+
       <section id="complete-view" class="view" hidden>
         <div class="complete-panel">
           <h1>MVP 完成</h1>

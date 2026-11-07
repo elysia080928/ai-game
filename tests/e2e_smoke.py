@@ -1,6 +1,6 @@
 """端到端冒烟测试：python tests/e2e_smoke.py（需要先启动服务）。
 
-验证注册、剧情选项与跳过、选关、两条五节点路线、奇遇、预告、重复请求与账号隔离。
+验证注册、剧情选项与跳过、选关、两条六节点路线、奇遇、预告、重复请求与账号隔离。
 """
 
 import http.cookiejar
@@ -185,7 +185,8 @@ def battle1_to_map(client, branch_option):
     assert status["battle1"] == "completed"
     assert status["recruit"] == "available" and status["signal"] == "available", status
     assert status["adventure"] == "locked" and status["battle2"] == "locked", status
-    for illegal in ("adventure", "calibration", "battle2", "battle1"):
+    assert status["shop"] == "locked" and status["trial"] == "locked", status
+    for illegal in ("adventure", "calibration", "shop", "trial", "battle2", "battle1"):
         client.fail("/api/map/select", {"nodeId": illegal})
     return state
 
@@ -272,6 +273,46 @@ def recycle_phase(client, card_id):
     return state
 
 
+def shop_phase(client):
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "shop", state
+    shop = state["shop"]
+    assert len(shop["offers"]) == 3, shop
+    upgrade = next(offer for offer in shop["offers"] if offer["id"] == "ship_upgrade")
+    assert upgrade["buyable"] and upgrade["price"] == 8, upgrade
+    gold_before = state["gold"]
+    client.ok("/api/shop/buy", {"offerId": "ship_upgrade"})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    assert state["gold"] == gold_before - upgrade["price"], (gold_before, state["gold"])
+    client.ok("/api/shop/buy", {"offerId": "ship_guard"})
+    assert client.state()["gold"] == gold_before - upgrade["price"], "同节点不能购买第二件"
+    return state
+
+
+def trial_phase(client):
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "trial", state
+    trial = state["trial"]
+    assert trial["status"] == "choose" and len(trial["trials"]) == 2, trial
+    pick = next(item for item in trial["trials"] if item["passed"])
+    client.fail("/api/trial/choose", {"trialId": "not-a-trial"})
+    client.ok("/api/trial/choose", {"trialId": pick["id"]})
+    state = client.state()
+    trial = state["trial"]
+    assert trial["status"] == "success" and trial["candidates"], trial
+    client.fail("/api/trial/claim", {})
+    candidate = trial["candidates"][0]["cardId"]
+    client.ok("/api/trial/choose-card", {"cardId": candidate})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    client.ok("/api/trial/leave", {})
+    assert client.state()["phase"] == "after_story"
+    return state
+
+
 def recruit_route():
     name = "u" + "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10))
     client = Client()
@@ -328,7 +369,21 @@ def recruit_route():
     }, state
 
     state = advance_to_map(client)
-    assert map_status(state)["battle2"] == "available"
+    status = map_status(state)
+    assert status["shop"] == "available" and status["trial"] == "available", status
+    assert status["battle2"] == "locked", status
+    client.ok("/api/map/select", {"nodeId": "trial"})
+    state = trial_phase(client)
+    assert state["route"] == {
+        "supply": "recruit",
+        "repair": "calibration",
+        "salvage": "drift",
+        "economy": "trial",
+    }, state
+
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["shop"] == "closed" and status["battle2"] == "available", status
     client.ok("/api/map/select", {"nodeId": "battle2"})
     advance_to_node(client)
     assert client.state()["node"]["id"] == "battle2"
@@ -342,7 +397,7 @@ def recruit_route():
         client.ok("/api/story/advance", {"skip": True})
     assert client.state()["phase"] == "complete"
     client.fail("/api/map/select", {"nodeId": "battle2"})
-    print("ok 招募路线：战斗 1 → 招募 → 校准 → 卡匣 → 战斗 2 → 完成")
+    print("ok 招募路线：战斗 1 → 招募 → 校准 → 卡匣 → 观测塔 → 战斗 2 → 完成")
     return client
 
 
@@ -388,19 +443,34 @@ def signal_route():
     }, state
 
     state = advance_to_map(client)
-    assert map_status(state)["battle2"] == "available"
+    status = map_status(state)
+    assert status["shop"] == "available" and status["trial"] == "available", status
+    assert status["battle2"] == "locked", status
+    client.ok("/api/map/select", {"nodeId": "shop"})
+    state = shop_phase(client)
+    assert state["gold"] == 22, state
+    assert state["route"] == {
+        "supply": "signal",
+        "repair": "adventure",
+        "salvage": "recycle",
+        "economy": "shop",
+    }, state
+
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["trial"] == "closed" and status["battle2"] == "available", status
     client.ok("/api/map/select", {"nodeId": "battle2"})
     advance_to_node(client)
     win_battle(client, "battle2")
     state = client.state()
-    assert state["gold"] == 30, "回收获得 10 金币，战斗 2 不发金币"
+    assert state["gold"] == 22, "回收获得 10 金币、商船花费 8 金币，战斗 2 不发金币"
     for _ in range(5):
         state = client.state()
         if state["phase"] == "complete":
             break
         client.ok("/api/story/advance", {"skip": True})
     assert client.state()["phase"] == "complete"
-    print("ok 信号路线：战斗 1 → 信号 → 维修 → 回收 → 战斗 2 → 完成")
+    print("ok 信号路线：战斗 1 → 信号 → 维修 → 回收 → 商船 → 战斗 2 → 完成")
     return client
 
 
@@ -420,7 +490,7 @@ def main():
 
     signal = signal_route()
     signal_state = signal.state()
-    assert signal_state["complete"] and signal_state["gold"] == 30
+    assert signal_state["complete"] and signal_state["gold"] == 22
     print("ok 两条路线互斥、汇合与完成画面")
 
     # 新游戏需要确认；不影响另一账号
@@ -429,7 +499,7 @@ def main():
     state = recruit.state()
     assert state["phase"] == "before_story" and state["gold"] == 0
     assert state["node"]["id"] == "battle1"
-    assert signal.state()["gold"] == 30, "账号隔离失败"
+    assert signal.state()["gold"] == 22, "账号隔离失败"
     print("ok 新游戏覆盖确认与账号隔离")
 
     recruit.ok("/api/logout", {})
