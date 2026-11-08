@@ -981,6 +981,68 @@ def test_rail_guard_interception():
     assert bean["hp"] == 1, "不相邻的目标不应被拦截"
 
 
+def test_shift_movement():
+    b = make(0)
+    b["plan"] = []
+    hunter = put_enemy(b, "漂移猎手", 2, 2, 3, shift=1)
+    B._enemy_phase(b)
+    assert hunter["column"] == 3
+    assert b["board"]["enemy"][1] is None and b["board"]["enemy"][2] is hunter
+    assert any("向右移动到 3 列" in line for line in b["log"])
+
+    b = make(1)
+    b["plan"] = []
+    hunter = put_enemy(b, "漂移猎手", 2, 2, 3, shift=1)
+    blocker = put_enemy(b, "阻挡", 3, 1, 4)
+    B._enemy_phase(b)
+    assert hunter["column"] == 2 and b["board"]["enemy"][2] is blocker
+    assert any("无法移动：3 列已有单位" in line for line in b["log"])
+
+    b = make(2)
+    b["plan"] = []
+    hunter = put_enemy(b, "漂移猎手", 4, 2, 3, shift=1)
+    B._enemy_phase(b)
+    assert hunter["column"] == 4
+    assert not any("向右移动" in line for line in b["log"])
+
+
+def test_null_anchor_blocks_guard():
+    b = make(0)
+    b["plan"] = []
+    guard = put_unit(b, "player", "rail_guard", 1)
+    bean = put_unit(b, "player", "bean", 2)
+    put_enemy(b, "突击", 2, 2, 5)
+    put_enemy(b, "空间锚", 3, 0, 5, anchor=1)
+    B._enemy_phase(b)
+    assert bean["hp"] == 0, "锚定目标不能被相邻守卫拦截"
+    assert guard["hp"] == 5 and guard["guard"] == 1
+    assert any("空间锚锁定" in line and "无法拦截" in line for line in b["log"])
+
+    b = make(1)
+    b["plan"] = []
+    guard = put_unit(b, "player", "rail_guard", 1)
+    bean = put_unit(b, "player", "bean", 2)
+    put_enemy(b, "突击", 2, 2, 5)
+    put_enemy(b, "空间锚", 4, 0, 5, anchor=1)
+    B._enemy_phase(b)
+    assert guard["hp"] == 3 and guard["guard"] == 0
+    assert bean["hp"] == 2, "不相邻的空间锚不应阻止拦截"
+    assert not any("空间锚锁定" in line for line in b["log"])
+
+
+def test_elite_encounter():
+    assert G.NODE_BY_ID["elite"]["next"] == ["battle2"]
+    b = B.make_battle(
+        initial_cards(), G.ENCOUNTERS["elite"], G.CARDS, G.ENEMIES, rng=random.Random(1)
+    )
+    forecast = B.view(b)["forecast"]
+    assert any(item["name"] == "漂移猎手" and item["shift"] == 1 for item in forecast)
+    assert any(item["name"] == "重装运载机" and item["width"] == 2 for item in forecast)
+    B.end_turn(b, random.Random(2))
+    hunter = next(unit for unit in B._side_units(b, "enemy") if unit["name"] == "漂移猎手")
+    assert hunter["column"] == 4, "漂移猎手应在敌方阶段结束后右移一格"
+
+
 def test_signal_jammer_energy_penalty():
     encounter = {
         "playerHp": 15,
@@ -1082,7 +1144,7 @@ def test_four_layer_map_route():
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
     assert status["drift_capsule"] == "closed"
     assert status["shop"] == "available" and status["trial"] == "available"
-    assert status["training"] == "available"
+    assert status["training"] == "available" and status["elite"] == "available"
     assert status["battle2"] == "locked"
 
     G.select_node(state, "shop")
@@ -1093,7 +1155,7 @@ def test_four_layer_map_route():
     G.advance_story(state)
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
     assert status["trial"] == "closed" and status["shop"] == "completed"
-    assert status["training"] == "closed"
+    assert status["training"] == "closed" and status["elite"] == "closed"
     assert status["battle2"] == "available"
 
     G.select_node(state, "battle2")

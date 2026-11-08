@@ -649,10 +649,15 @@ async function main() {
         return node && ['available', 'locked', 'completed', 'closed']
           .find((name) => node.classList.contains('status-' + name));
       };
-      return { shop: status('shop'), trial: status('trial'), battle: status('battle2') };
+      return {
+        shop: status('shop'),
+        trial: status('trial'),
+        elite: status('elite'),
+        battle: status('battle2'),
+      };
     })()`);
     if (fourthLayer.shop !== "available" || fourthLayer.trial !== "available" ||
-        fourthLayer.battle !== "locked") {
+        fourthLayer.elite !== "available" || fourthLayer.battle !== "locked") {
       throw new Error(`第四层分支未正确开放：${JSON.stringify(fourthLayer)}`);
     }
     await click('.map-node[data-id="trial"]');
@@ -687,9 +692,14 @@ async function main() {
         return node && ['available', 'locked', 'completed', 'closed']
           .find((name) => node.classList.contains('status-' + name));
       };
-      return { shop: status('shop'), battle: status('battle2') };
+      return {
+        shop: status('shop'),
+        elite: status('elite'),
+        battle: status('battle2'),
+      };
     })()`);
-    if (afterEconomy.shop !== "closed" || afterEconomy.battle !== "available") {
+    if (afterEconomy.shop !== "closed" || afterEconomy.elite !== "closed" ||
+        afterEconomy.battle !== "available") {
       throw new Error(`观测塔路线未收束：${JSON.stringify(afterEconomy)}`);
     }
     await click('.map-node[data-id="battle2"]');

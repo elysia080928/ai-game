@@ -307,6 +307,7 @@ function renderMap() {
         ${mapNodeButton(byId.shop)}
         ${mapNodeButton(byId.trial)}
         ${mapNodeButton(byId.training)}
+        ${mapNodeButton(byId.elite)}
       </div>
       <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.battle2)}
@@ -381,7 +382,15 @@ function unitHtml(unit, side, column) {
   const width = unit ? (unit.width || 1) : 1;
   const span = unit && width > 1 ? `${unit.column}-${unit.column + width - 1}` : `${column}`;
   const charges = unit
-    ? [unit.shield ? `护盾 ${unit.shield}` : "", unit.guard ? `拦截 ${unit.guard}` : ""].filter(Boolean).join("，")
+    ? [
+        unit.shield ? `护盾 ${unit.shield}` : "",
+        unit.guard ? `拦截 ${unit.guard}` : "",
+        unit.shift ? "右移" : "",
+        unit.anchor ? "锚定" : "",
+      ].filter(Boolean).join("，")
+    : "";
+  const notes = unit
+    ? [width > 1 ? `占 ${width} 格` : "", unit.shift ? "右移" : "", unit.anchor ? "锚定" : ""].filter(Boolean).join(" · ")
     : "";
   const label = unit
     ? `${span} 列，${unit.name}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
@@ -392,7 +401,7 @@ function unitHtml(unit, side, column) {
   const style = width > 1 ? ` style="grid-column: span ${width};"` : "";
   return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${esc(unit.name.slice(0, 1))}</div>
-      <div class="unit-name">${esc(unit.name)}${width > 1 ? ` <small>占 ${width} 格</small>` : ""}</div>
+      <div class="unit-name">${esc(unit.name)}${notes ? ` <small>${notes}</small>` : ""}</div>
       <div class="unit-stats"><span class="atk">⚔ ${unit.atk}</span><span class="hp">❤ ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">🛡 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">⛨ ${unit.guard}</span>` : ""}</div>
     </div>`;
 }
@@ -406,6 +415,8 @@ function unitTrait(card) {
   if ((card.abilities || []).includes("reach")) traits.push("可攻击飞行单位");
   if (card.shield) traits.push(`护盾 ${card.shield} 次（首次伤害 -1）`);
   if (card.guard) traits.push(`相邻拦截 ${card.guard} 次`);
+  if (card.shift) traits.push("敌方阶段结束时右移一格");
+  if (card.anchor) traits.push("相邻玩家单位无法被拦截");
   if (card.onDeploy === "energy_penalty") traits.push("部署时下回合能量 -1");
   if (card.onDestroy === "burst_adjacent") traits.push("死亡时左右相邻各 1 伤害");
   else if (card.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
@@ -446,6 +457,8 @@ function renderForecast() {
       if ((item.abilities || []).includes("flying")) traits.push("飞行");
       if (item.shield) traits.push(`护盾 ${item.shield}`);
       if (item.guard) traits.push(`拦截 ${item.guard}`);
+      if (item.shift) traits.push("回合结束右移");
+      if (item.anchor) traits.push("相邻无法拦截");
       if (item.onDeploy === "energy_penalty") traits.push("部署时：下回合能量 -1");
       if (item.onDestroy === "burst_adjacent") traits.push("死亡时相邻各 1 伤害");
       else if (item.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");

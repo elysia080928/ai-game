@@ -70,7 +70,7 @@ def validate_content():
             trigger = definition.get(field)
             if trigger is not None and trigger not in allowed:
                 raise RuntimeError(f"{label} {field} 非法")
-        for field in ("shield", "guard"):
+        for field in ("shield", "guard", "shift", "anchor"):
             value = definition.get(field, 0)
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise RuntimeError(f"{label} {field} 非法")
@@ -107,6 +107,8 @@ def validate_content():
             or abilities
             or card.get("shield", 0)
             or card.get("guard", 0)
+            or card.get("shift", 0)
+            or card.get("anchor", 0)
             or card.get("onDeploy")
             or card.get("onDestroy")
         ):

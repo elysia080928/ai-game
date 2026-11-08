@@ -38,6 +38,8 @@ def card_stats(cards, card_id, level, atk_bonus=0, hp_bonus=0):
         result["abilities"] = list(definition.get("abilities", []))
         result["shield"] = definition.get("shield", 0)
         result["guard"] = definition.get("guard", 0)
+        result["shift"] = definition.get("shift", 0)
+        result["anchor"] = definition.get("anchor", 0)
         result["onDeploy"] = definition.get("onDeploy")
         result["onDestroy"] = definition.get("onDestroy")
     else:
@@ -269,6 +271,20 @@ def _guard_for(b, target):
     return None
 
 
+def _anchor_blocks(b, target):
+    target_columns = set(_unit_columns(target))
+    for unit in _side_units(b, "enemy"):
+        if unit.get("anchor", 0) <= 0:
+            continue
+        if any(
+            abs(anchor_column - column) == 1
+            for anchor_column in _unit_columns(unit)
+            for column in target_columns
+        ):
+            return True
+    return False
+
+
 def _damage_unit(b, unit, amount):
     if amount > 0 and unit.get("shield", 0) > 0:
         unit["shield"] -= 1
@@ -301,6 +317,8 @@ def _make_unit(b, side, card_id, stats, paid, column, level):
         "abilities": list(stats.get("abilities", [])),
         "shield": stats.get("shield", 0),
         "guard": stats.get("guard", 0),
+        "shift": stats.get("shift", 0),
+        "anchor": stats.get("anchor", 0),
         "onDeploy": stats.get("onDeploy"),
         "onDestroy": stats.get("onDestroy"),
     }
@@ -442,7 +460,9 @@ def _resolve_attack(b, attacker, column):
         return
     if target is not None and attacker["side"] == "enemy":
         guard = _guard_for(b, target)
-        if guard is not None:
+        if guard is not None and _anchor_blocks(b, target):
+            _log(b, f"{target['name']} 被空间锚锁定，{guard['name']} 无法拦截")
+        elif guard is not None:
             guard["guard"] -= 1
             _log(b, f"{guard['name']} 替 {target['name']} 拦截攻击")
             target = guard
@@ -467,6 +487,25 @@ def _player_attack(b):
                 return
 
 
+def _shift_enemies(b):
+    for unit in sorted(_side_units(b, "enemy"), key=lambda item: item["column"], reverse=True):
+        if unit.get("shift", 0) <= 0:
+            continue
+        target = unit["column"] + 1
+        width = unit.get("width", 1)
+        if target + width - 1 > COLUMNS:
+            continue
+        columns = range(target, target + width)
+        if any(b["board"]["enemy"][column - 1] is not None for column in columns):
+            _log(b, f"{unit['name']} 无法移动：{target} 列已有单位")
+            continue
+        _remove_unit(b, unit)
+        unit["column"] = target
+        for column in columns:
+            b["board"]["enemy"][column - 1] = unit
+        _log(b, f"{unit['name']} 向右移动到 {target} 列")
+
+
 def _enemy_phase(b):
     for item in b["plan"]:
         if item["turn"] != b["turn"]:
@@ -489,6 +528,8 @@ def _enemy_phase(b):
             "abilities": list(enemy.get("abilities", [])),
             "shield": enemy.get("shield", 0),
             "guard": enemy.get("guard", 0),
+            "shift": enemy.get("shift", 0),
+            "anchor": enemy.get("anchor", 0),
             "onDeploy": enemy.get("onDeploy"),
             "onDestroy": enemy.get("onDestroy"),
         }
@@ -504,6 +545,7 @@ def _enemy_phase(b):
             _resolve_attack(b, unit, column)
             if b["phase"] == "over":
                 return
+    _shift_enemies(b)
 
 
 def _win(b):
@@ -555,6 +597,8 @@ def _unit_view(unit):
         "abilities": list(unit.get("abilities", [])),
         "shield": unit.get("shield", 0),
         "guard": unit.get("guard", 0),
+        "shift": unit.get("shift", 0),
+        "anchor": unit.get("anchor", 0),
         "onDeploy": unit.get("onDeploy"),
         "onDestroy": unit.get("onDestroy"),
         "side": unit["side"],
@@ -586,6 +630,8 @@ def view(b):
                 "abilities": list(b["enemies"][item["enemy"]].get("abilities", [])),
                 "shield": b["enemies"][item["enemy"]].get("shield", 0),
                 "guard": b["enemies"][item["enemy"]].get("guard", 0),
+                "shift": b["enemies"][item["enemy"]].get("shift", 0),
+                "anchor": b["enemies"][item["enemy"]].get("anchor", 0),
                 "onDeploy": b["enemies"][item["enemy"]].get("onDeploy"),
                 "onDestroy": b["enemies"][item["enemy"]].get("onDestroy"),
                 "name": b["enemies"][item["enemy"]]["name"],

@@ -604,6 +604,44 @@ def challenge_route():
     return client
 
 
+def elite_route(client):
+    battle1_to_map(client, "battle1_signal")
+    client.ok("/api/map/select", {"nodeId": "relay"})
+    relay_phase(client)
+    state = advance_to_map(client)
+    client.ok("/api/map/select", {"nodeId": "drones"})
+    drones_phase(client)
+    state = advance_to_map(client)
+    client.ok("/api/map/select", {"nodeId": "drift_capsule"})
+    drift_choose(client)
+
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["elite"] == "available" and status["shop"] == "available", status
+    assert status["battle2"] == "locked", status
+    client.ok("/api/map/select", {"nodeId": "elite"})
+    advance_to_node(client)
+    assert client.state()["node"]["id"] == "elite"
+    win_battle(client, "elite", expected_hand=7)
+    state = client.state()
+    assert state["gold"] == 50, "战斗 1 +20、精英战 +30，战斗 2 不发金币"
+    assert state["route"]["economy"] == "elite", state["route"]
+
+    state = advance_to_map(client)
+    assert map_status(state)["battle2"] == "available", state["map"]
+    client.ok("/api/map/select", {"nodeId": "battle2"})
+    advance_to_node(client)
+    win_battle(client, "battle2")
+    for _ in range(5):
+        state = client.state()
+        if state["phase"] == "complete":
+            break
+        client.ok("/api/story/advance", {"skip": True})
+    assert client.state()["phase"] == "complete"
+    print("ok 精英路线：战斗 1 → 中继站 → 无人机 → 卡匣 → 精英战 → 战斗 2 → 完成")
+    return client
+
+
 def main():
     wait_for_server()
 
@@ -636,6 +674,9 @@ def main():
     assert signal.state()["gold"] == 22, "账号隔离失败"
     assert challenge.state()["gold"] == 38, "账号隔离失败"
     print("ok 新游戏覆盖确认与账号隔离")
+
+    elite_route(recruit)
+    assert signal.state()["gold"] == 22, "精英路线不应影响其他账号"
 
     recruit.ok("/api/logout", {})
     recruit.fail("/api/state", status=401)

@@ -157,7 +157,10 @@
     "reach_turret": {"name": "牵引炮塔", "atk": 1, "hp": 4, "abilities": ["reach"]},
     "phase_hunter": {"name": "相位猎手", "atk": 2, "hp": 2, "abilities": ["flying"]},
     "mine_beetle": {"name": "雷壳虫", "atk": 1, "hp": 2, "onDestroy": "hit_opposite"},
-    "signal_jammer": {"name": "信号干扰器", "atk": 0, "hp": 4, "onDeploy": "energy_penalty"}
+    "signal_jammer": {"name": "信号干扰器", "atk": 0, "hp": 4, "onDeploy": "energy_penalty"},
+    "drift_hunter": {"name": "漂移猎手", "atk": 2, "hp": 3, "shift": 1},
+    "null_anchor": {"name": "空间锚", "atk": 0, "hp": 5, "anchor": 1},
+    "siege_carrier": {"name": "重装运载机", "atk": 2, "hp": 6, "width": 2, "abilities": ["wide_2"]}
   },
   "encounters": {
     "battle1": {
@@ -182,6 +185,19 @@
         {"turn": 3, "column": 1, "enemy": "wide_bulwark"}
       ],
       "reward": {"gold": 0}
+    },
+    "elite": {
+      "name": "精英战",
+      "playerHp": 15,
+      "enemyHp": 18,
+      "plan": [
+        {"turn": 1, "column": 3, "enemy": "drift_hunter"},
+        {"turn": 2, "column": 1, "enemy": "siege_carrier"},
+        {"turn": 3, "column": 3, "enemy": "null_anchor"},
+        {"turn": 4, "column": 4, "enemy": "signal_jammer"},
+        {"turn": 5, "column": 3, "enemy": "phase_hunter"}
+      ],
+      "reward": {"gold": 30}
     }
   },
   "recruit": {
@@ -425,7 +441,7 @@
       "name": "漂流卡匣",
       "branchGroup": "salvage",
       "branch": "drift",
-      "next": ["shop", "trial", "training"],
+      "next": ["shop", "trial", "training", "elite"],
       "before": [
         {
           "speaker": "爱",
@@ -443,7 +459,7 @@
       "name": "记忆回收站",
       "branchGroup": "salvage",
       "branch": "recycle",
-      "next": ["shop", "trial", "training"],
+      "next": ["shop", "trial", "training", "elite"],
       "before": [
         {
           "speaker": "爱",
@@ -516,6 +532,25 @@
       ],
       "after": [
         {"speaker": "爱", "text": "演算协议已挂载。下一场战斗见分晓。"}
+      ]
+    },
+    {
+      "id": "elite",
+      "type": "battle",
+      "name": "精英战",
+      "branchGroup": "economy",
+      "branch": "elite",
+      "encounter": "elite",
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "航道深处，一台被重置的精英机偶挡住了去路。它的锚定场会让相邻单位无法互相拦截。",
+          "background": "battle"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "精英机偶停转了。它的核心记录里，还有战斗 2 的部署数据。"}
       ]
     },
     {
