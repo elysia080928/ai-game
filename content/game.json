@@ -160,7 +160,9 @@
     "signal_jammer": {"name": "信号干扰器", "atk": 0, "hp": 4, "onDeploy": "energy_penalty"},
     "drift_hunter": {"name": "漂移猎手", "atk": 2, "hp": 3, "shift": 1},
     "null_anchor": {"name": "空间锚", "atk": 0, "hp": 5, "anchor": 1},
-    "siege_carrier": {"name": "重装运载机", "atk": 2, "hp": 6, "width": 2, "abilities": ["wide_2"]}
+    "siege_carrier": {"name": "重装运载机", "atk": 2, "hp": 6, "width": 2, "abilities": ["wide_2"]},
+    "mirror_core": {"name": "镜像核心", "atk": 1, "hp": 16, "attackPattern": "sweep", "shield": 2},
+    "mirror_drone": {"name": "镜像无人机", "atk": 2, "hp": 3, "onDeploy": "copy_opposite"}
   },
   "encounters": {
     "battle1": {
@@ -198,6 +200,23 @@
         {"turn": 5, "column": 3, "enemy": "phase_hunter"}
       ],
       "reward": {"gold": 30}
+    },
+    "boss": {
+      "name": "镜像核心",
+      "playerHp": 15,
+      "enemyHp": 18,
+      "plan": [
+        {"turn": 1, "column": 2, "enemy": "mirror_core"},
+        {"turn": 2, "column": 1, "enemy": "defender"},
+        {"turn": 2, "column": 4, "enemy": "mirror_drone"},
+        {"turn": 3, "column": 3, "enemy": "signal_jammer"},
+        {"turn": 3, "column": 4, "enemy": "mine_beetle"},
+        {"turn": 4, "column": 1, "enemy": "phase_hunter"},
+        {"turn": 4, "column": 3, "enemy": "drift_hunter"},
+        {"turn": 5, "column": 3, "enemy": "wide_bulwark"},
+        {"turn": 5, "column": 1, "enemy": "double_striker"}
+      ],
+      "reward": {"gold": 0}
     }
   },
   "recruit": {
@@ -262,7 +281,7 @@
     ]
   },
   "relay": {"atkBonus": 1, "flag": "relay_kept"},
-  "runLength": 6,
+  "runLength": 7,
   "firstNode": "battle1",
   "nodes": [
     {
@@ -558,7 +577,7 @@
       "type": "battle",
       "name": "战斗 2",
       "encounter": "battle2",
-      "next": [],
+      "next": ["boss"],
       "before": [
         {
           "speaker": "爱",
@@ -567,7 +586,36 @@
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "结束了……谢谢你陪我走到这里。"},
+        {
+          "speaker": "爱",
+          "text": "战斗 2 的封锁解除了。可航道尽头还有一段信号，和我的频率完全一致。"
+        },
+        {
+          "speaker": "爱",
+          "text": "中继站留下的那段信号还在。它没有消失。",
+          "if": {"relay_kept": true}
+        }
+      ]
+    },
+    {
+      "id": "boss",
+      "type": "battle",
+      "name": "镜像核心",
+      "encounter": "boss",
+      "next": [],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "那是我的镜像核心。它把整条航道的战斗记录都学会了。",
+          "background": "battle"
+        },
+        {
+          "speaker": "爱",
+          "text": "小心，它会同时攻击所有列；它的无人机还会复制对位单位的攻击方式。"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "镜像核心停下了。谢谢你陪我走到这里。"},
         {
           "speaker": "爱",
           "text": "中继站留下的那段信号还在。它没有消失。",

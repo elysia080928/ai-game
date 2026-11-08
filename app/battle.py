@@ -9,9 +9,9 @@ COLUMNS = 4
 LOG_LIMIT = 60
 FIRST_TURN_ENERGY = 4
 OPENING_DRAW = 6
-ATTACK_PATTERNS = ("forward", "split_attack", "double_strike")
+ATTACK_PATTERNS = ("forward", "split_attack", "double_strike", "sweep")
 KNOWN_ABILITIES = ("wide_2", "flying", "reach")
-ON_DEPLOY_TRIGGERS = ("energy_penalty",)
+ON_DEPLOY_TRIGGERS = ("energy_penalty", "copy_opposite")
 ON_DESTROY_TRIGGERS = ("burst_adjacent", "hit_opposite")
 
 
@@ -224,11 +224,20 @@ def _remove_unit(b, unit):
 
 
 def _resolve_on_deploy(b, unit):
-    if unit.get("onDeploy") != "energy_penalty" or b["jammerUsed"]:
-        return
-    b["jammerUsed"] = True
-    b["nextTurnEnergyPenalty"] = 1
-    _log(b, f"{unit['name']} 干扰能量回路：下回合能量 -1")
+    trigger = unit.get("onDeploy")
+    if trigger == "energy_penalty":
+        if b["jammerUsed"]:
+            return
+        b["jammerUsed"] = True
+        b["nextTurnEnergyPenalty"] = 1
+        _log(b, f"{unit['name']} 干扰能量回路：下回合能量 -1")
+    elif trigger == "copy_opposite":
+        target = b["board"]["player"][unit["column"] - 1]
+        if target is None:
+            _log(b, f"{unit['name']} 没有可镜像的对位单位")
+            return
+        unit["attackPattern"] = target.get("attackPattern", "forward")
+        _log(b, f"{unit['name']} 镜像 {target['name']} 的攻击模式")
 
 
 def _resolve_on_destroy(b, unit):
@@ -444,6 +453,8 @@ def _target_columns(unit):
         columns = list(range(start, start + width)) if width > 1 else [start, start + 1]
     elif pattern == "double_strike":
         columns = [start, start]
+    elif pattern == "sweep":
+        columns = list(range(1, COLUMNS + 1))
     else:
         columns = [start]
     return [column for column in columns if column <= COLUMNS]
@@ -457,6 +468,8 @@ def _resolve_attack(b, attacker, column):
         target = None
     if target is not None and _has_ability(target, "flying") and not _has_ability(attacker, "reach"):
         _log(b, f"{attacker['name']} 无法攻击飞行单位 {target['name']}")
+        return
+    if target is None and attacker.get("attackPattern") == "sweep":
         return
     if target is not None and attacker["side"] == "enemy":
         guard = _guard_for(b, target)

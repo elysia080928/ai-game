@@ -311,6 +311,8 @@ function renderMap() {
       </div>
       <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.battle2)}
+      <div class="route-rail"><span></span></div>
+      ${mapNodeButton(byId.boss)}
     </div>`;
   $("map-page-right").innerHTML = `
     <h3 class="page-title">航线记录 <span>RUN ${String(state.progress).padStart(2, "0")}</span></h3>
@@ -411,6 +413,7 @@ function unitTrait(card) {
   if ((card.width || 1) > 1) traits.push(`占 ${card.width} 列`);
   if (card.attackPattern === "split_attack") traits.push("攻击当前列与右侧列");
   else if (card.attackPattern === "double_strike") traits.push("对同列攻击两次");
+  else if (card.attackPattern === "sweep") traits.push("横扫全部单位");
   if ((card.abilities || []).includes("flying")) traits.push("飞行");
   if ((card.abilities || []).includes("reach")) traits.push("可攻击飞行单位");
   if (card.shield) traits.push(`护盾 ${card.shield} 次（首次伤害 -1）`);
@@ -418,6 +421,7 @@ function unitTrait(card) {
   if (card.shift) traits.push("敌方阶段结束时右移一格");
   if (card.anchor) traits.push("相邻玩家单位无法被拦截");
   if (card.onDeploy === "energy_penalty") traits.push("部署时下回合能量 -1");
+  else if (card.onDeploy === "copy_opposite") traits.push("部署时复制对位单位的攻击模式");
   if (card.onDestroy === "burst_adjacent") traits.push("死亡时左右相邻各 1 伤害");
   else if (card.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
   return traits.join(" · ");
@@ -454,12 +458,14 @@ function renderForecast() {
       const traits = [];
       if (item.attackPattern === "split_attack") traits.push("攻击两列");
       else if (item.attackPattern === "double_strike") traits.push("同列攻击两次");
+      else if (item.attackPattern === "sweep") traits.push("横扫全部单位");
       if ((item.abilities || []).includes("flying")) traits.push("飞行");
       if (item.shield) traits.push(`护盾 ${item.shield}`);
       if (item.guard) traits.push(`拦截 ${item.guard}`);
       if (item.shift) traits.push("回合结束右移");
       if (item.anchor) traits.push("相邻无法拦截");
       if (item.onDeploy === "energy_penalty") traits.push("部署时：下回合能量 -1");
+      else if (item.onDeploy === "copy_opposite") traits.push("部署时复制对位攻击模式");
       if (item.onDestroy === "burst_adjacent") traits.push("死亡时相邻各 1 伤害");
       else if (item.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
       const trait = traits.join(" · ");

@@ -1043,6 +1043,54 @@ def test_elite_encounter():
     assert hunter["column"] == 4, "漂移猎手应在敌方阶段结束后右移一格"
 
 
+def test_sweep_attack():
+    b = make(0)
+    b["plan"] = []
+    shell = put_unit(b, "player", "shell", 1)
+    worker = put_unit(b, "player", "worker", 3)
+    put_enemy(b, "镜像核心", 2, 2, 16, attackPattern="sweep", shield=2)
+    B._enemy_phase(b)
+    assert shell["hp"] == 2 and worker["hp"] == 0
+    assert b["hp"]["player"] == 15, "横扫只攻击场上单位，空列不伤领袖"
+
+
+def test_mirror_drone_copy():
+    b = make(0)
+    b["plan"] = []
+    put_unit(b, "player", "arc_drone", 2)
+    drone = put_enemy(b, "镜像无人机", 2, 2, 3, onDeploy="copy_opposite")
+    B._resolve_on_deploy(b, drone)
+    assert drone["attackPattern"] == "split_attack"
+    assert any("镜像" in line and "攻击模式" in line for line in b["log"])
+
+    b = make(1)
+    b["plan"] = []
+    drone = put_enemy(b, "镜像无人机", 4, 2, 3, onDeploy="copy_opposite")
+    B._resolve_on_deploy(b, drone)
+    assert drone["attackPattern"] == "forward"
+    assert any("没有可镜像" in line for line in b["log"])
+
+
+def test_boss_encounter():
+    assert G.NODE_BY_ID["battle2"]["next"] == ["boss"]
+    assert G.NODE_BY_ID["boss"]["next"] == []
+    assert G.RUN_LENGTH == 7
+    b = B.make_battle(
+        initial_cards(), G.ENCOUNTERS["boss"], G.CARDS, G.ENEMIES, rng=random.Random(1)
+    )
+    forecast = B.view(b)["forecast"]
+    assert any(
+        item["name"] == "镜像核心"
+        and item["attackPattern"] == "sweep"
+        and item["shield"] == 2
+        for item in forecast
+    )
+    assert any(
+        item["name"] == "镜像无人机" and item["onDeploy"] == "copy_opposite"
+        for item in forecast
+    )
+
+
 def test_signal_jammer_energy_penalty():
     encounter = {
         "playerHp": 15,
@@ -1100,7 +1148,8 @@ def test_relay():
 
     plain = state_at("battle2", "after_story", completed=["battle1", "relay"])
     G.advance_story(plain)
-    assert plain["phase"] == "complete", "未保留信号时不应出现条件台词"
+    assert plain["phase"] == "map", "未保留信号时不应出现条件台词"
+    assert G.available_nodes(plain) == ["boss"]
 
 
 def test_four_layer_map_route():

@@ -162,11 +162,32 @@ def win_battle(client, encounter_id, extra_forecast=(), expected_hand=6):
             entries = {(item["turn"], item["column"]) for item in battle["forecast"]}
             assert entries == {(1, 2), (1, 4), (2, 3)} | set(extra_forecast), entries
             assert all(item["turn"] in (1, 2) for item in battle["forecast"])
+        if attempt == 0 and encounter_id == "boss":
+            entries = {(item["turn"], item["column"]) for item in battle["forecast"]}
+            assert entries == {(1, 2), (2, 1), (2, 4)}, entries
+            core = next(item for item in battle["forecast"] if item["name"] == "镜像核心")
+            assert core["attackPattern"] == "sweep" and core["shield"] == 2, core
         battle = play_loop(client, battle)
         if battle["result"] == "win":
             client.ok("/api/battle/confirm", {})
             return
     raise AssertionError(f"{encounter_id} 多次重试仍未获胜")
+
+
+def finish_boss(client):
+    state = advance_to_map(client)
+    assert map_status(state)["boss"] == "available", state["map"]
+    client.ok("/api/map/select", {"nodeId": "boss"})
+    advance_to_node(client)
+    assert client.state()["node"]["id"] == "boss"
+    win_battle(client, "boss")
+    for _ in range(8):
+        state = client.state()
+        if state["phase"] == "complete":
+            break
+        client.ok("/api/story/advance", {"skip": True})
+    assert client.state()["phase"] == "complete"
+    print("ok Boss 战：镜像核心 → 完成")
 
 
 def battle1_to_map(client, branch_option):
@@ -465,14 +486,9 @@ def recruit_route():
     win_battle(client, "battle2")
     state = client.state()
     assert state["gold"] == 0, "招募 + 卡匣重抽后金币应为 0，战斗 2 不发金币"
-    for _ in range(5):
-        state = client.state()
-        if state["phase"] == "complete":
-            break
-        client.ok("/api/story/advance", {"skip": True})
-    assert client.state()["phase"] == "complete"
+    finish_boss(client)
     client.fail("/api/map/select", {"nodeId": "battle2"})
-    print("ok 招募路线：战斗 1 → 招募 → 校准 → 卡匣 → 观测塔 → 战斗 2 → 完成")
+    print("ok 招募路线：战斗 1 → 招募 → 校准 → 卡匣 → 观测塔 → 战斗 2 → 镜像核心 → 完成")
     return client
 
 
@@ -539,13 +555,8 @@ def signal_route():
     win_battle(client, "battle2")
     state = client.state()
     assert state["gold"] == 22, "回收获得 10 金币、商船花费 8 金币，战斗 2 不发金币"
-    for _ in range(5):
-        state = client.state()
-        if state["phase"] == "complete":
-            break
-        client.ok("/api/story/advance", {"skip": True})
-    assert client.state()["phase"] == "complete"
-    print("ok 信号路线：战斗 1 → 信号 → 维修 → 回收 → 商船 → 战斗 2 → 完成")
+    finish_boss(client)
+    print("ok 信号路线：战斗 1 → 信号 → 维修 → 回收 → 商船 → 战斗 2 → 镜像核心 → 完成")
     return client
 
 
@@ -594,13 +605,13 @@ def challenge_route():
     texts = []
     for _ in range(6):
         state = client.state()
-        if state["phase"] == "complete":
+        if state["phase"] == "map":
             break
         texts.append(state["story"]["text"])
         client.ok("/api/story/advance", {"skip": False})
-    assert state["phase"] == "complete", state
     assert any("中继站" in text for text in texts), texts
-    print("ok 挑战路线：战斗 1 → 中继站 → 无人机 → 卡匣 → 训练场 → 战斗 2 → 完成")
+    finish_boss(client)
+    print("ok 挑战路线：战斗 1 → 中继站 → 无人机 → 卡匣 → 训练场 → 战斗 2 → 镜像核心 → 完成")
     return client
 
 
@@ -632,13 +643,8 @@ def elite_route(client):
     client.ok("/api/map/select", {"nodeId": "battle2"})
     advance_to_node(client)
     win_battle(client, "battle2")
-    for _ in range(5):
-        state = client.state()
-        if state["phase"] == "complete":
-            break
-        client.ok("/api/story/advance", {"skip": True})
-    assert client.state()["phase"] == "complete"
-    print("ok 精英路线：战斗 1 → 中继站 → 无人机 → 卡匣 → 精英战 → 战斗 2 → 完成")
+    finish_boss(client)
+    print("ok 精英路线：战斗 1 → 中继站 → 无人机 → 卡匣 → 精英战 → 战斗 2 → 镜像核心 → 完成")
     return client
 
 
