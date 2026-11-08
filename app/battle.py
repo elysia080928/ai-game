@@ -7,6 +7,7 @@ HIGH_COST = 6
 HIGH_COST_UNLOCK_TURN = 3
 COLUMNS = 4
 LOG_LIMIT = 60
+FIRST_TURN_ENERGY = 4
 
 
 class GameError(Exception):
@@ -49,20 +50,25 @@ def _card_cost(b, card):
     )["cost"]
 
 
-def make_battle(deck_cards, encounter, cards, enemies, rng=None):
+def make_battle(
+    deck_cards, encounter, cards, enemies, rng=None, first_turn_energy=None, extra_plan=None
+):
     rng = rng or random.Random()
     b = {
         "cards": cards,
         "enemies": enemies,
         "turn": 0,
         "energy": 0,
+        "firstTurnEnergy": (
+            FIRST_TURN_ENERGY if first_turn_energy is None else max(0, first_turn_energy)
+        ),
         "hp": {"player": encounter["playerHp"], "enemy": encounter["enemyHp"]},
         "board": {"player": [None] * COLUMNS, "enemy": [None] * COLUMNS},
         "hand": [],
         "deck": [],
         "used": [],
         "discarded": [],
-        "plan": encounter["plan"],
+        "plan": list(encounter["plan"]) + list(extra_plan or []),
         "phase": "player",
         "result": None,
         "next_uid": 1,
@@ -87,8 +93,8 @@ def make_battle(deck_cards, encounter, cards, enemies, rng=None):
 def _start_turn(b, rng):
     b["turn"] += 1
     if b["turn"] == 1:
-        b["energy"] = 4
-        _log(b, "第 1 回合：获得 4 点能量，抽取起手 6 张")
+        b["energy"] = b["firstTurnEnergy"]
+        _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 6 张")
         _draw_opening(b, rng)
     else:
         b["energy"] += 2

@@ -377,6 +377,7 @@ def test_migration_old_saves():
     migrated, changed = G.migrate_state(copy.deepcopy(old))
     assert changed and migrated["nodeId"] == "recruit" and migrated["route"] == {"supply": "recruit"}
     assert migrated["cards"][0]["hpBonus"] == 0
+    assert migrated["pendingChallenges"] == []
 
     old = dict(base, nodeIndex=0, phase="after_story")
     migrated, _ = G.migrate_state(copy.deepcopy(old))
@@ -413,6 +414,8 @@ def test_migration_old_saves():
         dict(base, nodeId="battle1", storyLine=-1),
         dict(base, nodeId="battle1", completed=["battle1", "battle1"]),
         dict(base, nodeId="battle1", cards=[{"cardId": "bean", "level": 1, "hpBonus": -1}]),
+        dict(base, nodeId="battle1", pendingChallenges="overload"),
+        dict(base, nodeId="battle1", pendingChallenges=[{"id": "missing"}]),
     ]
     for bad in bad_saves:
         try:
@@ -603,6 +606,139 @@ def test_drift_capsule():
         raise AssertionError("候选外的卡不能选择")
 
 
+def test_drones():
+    state = state_at(
+        "drones", "node", completed=["battle1", "signal"], route="signal"
+    )
+    view = G.public_state(state)["drones"]
+    assert view["atkBonus"] == 1 and view["hpBonus"] == 1
+    assert all(card["cardId"] != "spark" for card in view["targets"])
+
+    striker = next(card for card in state["cards"] if card["cardId"] == "striker")
+    before = G.card_stats(G.CARDS, "striker", 1, striker["atkBonus"], striker["hpBonus"])
+    G.drones_apply(state, "striker", "atk")
+    after = G.card_stats(G.CARDS, "striker", 1, striker["atkBonus"], striker["hpBonus"])
+    assert after["atk"] == before["atk"] + 1
+    assert state["phase"] == "after_story"
+    G.drones_apply(state, "striker", "atk")
+    assert striker["atkBonus"] == 1, "重复提交不能重复强化"
+
+    hp_state = state_at("drones", "node", completed=["battle1", "signal"], route="signal")
+    worker = next(card for card in hp_state["cards"] if card["cardId"] == "worker")
+    G.drones_apply(hp_state, "worker", "hp")
+    assert worker["hpBonus"] == 1
+
+    for card_id, effect in (("spark", "atk"), ("striker", "level")):
+        bad = state_at("drones", "node", completed=["battle1", "signal"], route="signal")
+        try:
+            G.drones_apply(bad, card_id, effect)
+        except B.GameError:
+            pass
+        else:
+            raise AssertionError("无人机只接受已有单位的攻击/生命强化")
+        assert bad["phase"] == "node"
+
+    leave = state_at("drones", "node", completed=["battle1", "signal"], route="signal")
+    G.drones_leave(leave)
+    assert leave["phase"] == "after_story"
+
+
+def test_training_and_challenge_settlement():
+    state = state_at(
+        "training", "node",
+        completed=["battle1", "relay", "adventure", "drift_capsule"], route="relay",
+    )
+    view = G.public_state(state)["training"]
+    assert [item["id"] for item in view["challenges"]] == ["overload", "low_power"]
+    try:
+        G.training_choose(state, "missing")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("未知训练挑战不能选择")
+
+    G.training_choose(state, "overload")
+    assert state["pendingChallenges"] == [{"id": "overload"}]
+    assert state["phase"] == "after_story"
+    assert G.public_state(state)["pendingChallenge"]["name"] == "过载演算"
+    G.training_choose(state, "low_power")
+    assert state["pendingChallenges"] == [{"id": "overload"}], "重复提交不能改挂挑战"
+
+    settle = state_at(
+        "battle2", "node",
+        completed=["battle1", "relay", "adventure", "drift_capsule", "training"],
+        route="relay",
+    )
+    settle["pendingChallenges"] = [{"id": "overload"}]
+    gold = settle["gold"]
+    G.confirm_battle_result(settle)
+    assert settle["gold"] == gold + G.CHALLENGE_BY_ID["overload"]["reward"]
+    assert settle["pendingChallenges"] == []
+    G.confirm_battle_result(settle)
+    assert settle["gold"] == gold + G.CHALLENGE_BY_ID["overload"]["reward"], "奖励只发一次"
+    assert settle["phase"] == "after_story"
+
+    leave = state_at("training", "node", completed=["battle1", "relay"], route="relay")
+    G.training_leave(leave)
+    assert leave["pendingChallenges"] == [] and leave["phase"] == "after_story"
+
+
+def test_challenge_battle_modifiers():
+    extra = [{"turn": 1, "column": 1, "enemy": "assault_sentry"}]
+    b = B.make_battle(
+        initial_cards(), G.ENCOUNTERS["battle2"], G.CARDS, G.ENEMIES,
+        rng=random.Random(0), first_turn_energy=3, extra_plan=extra,
+    )
+    assert b["energy"] == 3
+    assert any(item["column"] == 1 and item["enemy"] == "assault_sentry" for item in b["plan"])
+    forecast = B.view(b)["forecast"]
+    assert any(item["column"] == 1 and item["turn"] == 1 for item in forecast)
+
+    normal = B.make_battle(
+        initial_cards(), G.ENCOUNTERS["battle2"], G.CARDS, G.ENEMIES, rng=random.Random(0)
+    )
+    assert normal["energy"] == B.FIRST_TURN_ENERGY
+
+
+def test_relay():
+    keep = state_at("relay", "node", completed=["battle1"], route=None)
+    assert G.public_state(keep)["relay"]["kept"] is False
+    G.relay_keep(keep)
+    assert keep["flags"]["relay_kept"] is True
+    assert keep["phase"] == "after_story"
+    G.relay_keep(keep)
+    assert keep["phase"] == "after_story"
+
+    cut = state_at("relay", "node", completed=["battle1"], route=None)
+    striker = next(card for card in cut["cards"] if card["cardId"] == "striker")
+    G.relay_cut(cut, "striker")
+    assert striker["atkBonus"] == G.RELAY["atkBonus"]
+    assert "relay_kept" not in cut["flags"]
+    G.relay_cut(cut, "striker")
+    assert striker["atkBonus"] == G.RELAY["atkBonus"], "重复提交不能重复强化"
+
+    bad = state_at("relay", "node", completed=["battle1"], route=None)
+    try:
+        G.relay_cut(bad, "spark")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("指令卡不能作为中继站强化目标")
+    assert bad["phase"] == "node"
+
+    leave = state_at("relay", "node", completed=["battle1"], route=None)
+    G.relay_leave(leave)
+    assert leave["phase"] == "after_story"
+
+    flagged = state_at("battle2", "after_story", completed=["battle1", "relay"], flags={"relay_kept": True})
+    G.advance_story(flagged)
+    assert "中继站" in G.public_state(flagged)["story"]["text"]
+
+    plain = state_at("battle2", "after_story", completed=["battle1", "relay"])
+    G.advance_story(plain)
+    assert plain["phase"] == "complete", "未保留信号时不应出现条件台词"
+
+
 def test_four_layer_map_route():
     state = map_after_battle1()
     G.select_node(state, "recruit")
@@ -612,7 +748,9 @@ def test_four_layer_map_route():
     G.advance_story(state)
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
     assert status["adventure"] == "available" and status["calibration"] == "available"
+    assert status["drones"] == "available" and status["relay"] == "closed"
     assert status["drift_capsule"] == "locked" and status["recycle_station"] == "locked"
+    assert status["training"] == "locked"
 
     G.select_node(state, "calibration")
     assert state["route"] == {"supply": "recruit", "repair": "calibration"}
@@ -621,6 +759,7 @@ def test_four_layer_map_route():
     G.advance_story(state)
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
     assert status["adventure"] == "closed" and status["calibration"] == "completed"
+    assert status["drones"] == "closed"
     assert status["drift_capsule"] == "available" and status["battle2"] == "locked"
     try:
         G.select_node(state, "adventure")
@@ -641,6 +780,7 @@ def test_four_layer_map_route():
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
     assert status["drift_capsule"] == "closed"
     assert status["shop"] == "available" and status["trial"] == "available"
+    assert status["training"] == "available"
     assert status["battle2"] == "locked"
 
     G.select_node(state, "shop")
@@ -651,6 +791,7 @@ def test_four_layer_map_route():
     G.advance_story(state)
     status = {node["id"]: node["status"] for node in G.public_state(state)["map"]["nodes"]}
     assert status["trial"] == "closed" and status["shop"] == "completed"
+    assert status["training"] == "closed"
     assert status["battle2"] == "available"
 
     G.select_node(state, "battle2")

@@ -13,6 +13,9 @@ let adventureEffect = null;
 let enhanceKind = "adventure";
 let recycleTarget = null;
 let trialPick = null;
+let trainingPick = null;
+let relayAction = null;
+let relayTarget = null;
 let signalAction = null;
 let signalTarget = null;
 let draggingUid = null;
@@ -31,6 +34,9 @@ const NODE_TYPES = {
   recycle: "回收",
   shop: "商船",
   trial: "试炼",
+  drones: "无人机",
+  training: "训练",
+  relay: "中继",
 };
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
 
@@ -77,7 +83,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "complete-view"].forEach((id) => {
+  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -134,6 +140,18 @@ function render() {
   }
   if (state.node && state.node.type === "calibration") {
     renderAdventure("calibration");
+    return;
+  }
+  if (state.node && state.node.type === "drones") {
+    renderAdventure("drones");
+    return;
+  }
+  if (state.node && state.node.type === "relay") {
+    renderRelay();
+    return;
+  }
+  if (state.node && state.node.type === "training") {
+    renderTraining();
     return;
   }
   if (state.node && state.node.type === "drift") {
@@ -271,11 +289,13 @@ function renderMap() {
       <div class="branch-row route-branch">
         ${mapNodeButton(byId.recruit)}
         ${mapNodeButton(byId.signal)}
+        ${mapNodeButton(byId.relay)}
       </div>
       <div class="route-rail route-rail-split"><span></span><span></span></div>
       <div class="branch-row route-branch">
         ${mapNodeButton(byId.adventure)}
         ${mapNodeButton(byId.calibration)}
+        ${mapNodeButton(byId.drones)}
       </div>
       <div class="route-rail route-rail-split"><span></span><span></span></div>
       <div class="branch-row route-branch">
@@ -286,6 +306,7 @@ function renderMap() {
       <div class="branch-row route-branch">
         ${mapNodeButton(byId.shop)}
         ${mapNodeButton(byId.trial)}
+        ${mapNodeButton(byId.training)}
       </div>
       <div class="route-rail"><span></span></div>
       ${mapNodeButton(byId.battle2)}
@@ -305,9 +326,12 @@ function renderMap() {
   $("map-route").textContent = routeNames
     ? `已选择路线：${routeNames}`
     : "尚未选择分支";
-  $("map-hint").textContent = available.length > 1
-    ? "选择一条分支；确认后另一条分支会关闭。"
+  const hint = available.length > 1
+    ? "选择一条分支；确认后其余分支会关闭。"
     : "选择下一个节点，进入其前置剧情。";
+  $("map-hint").textContent = state.pendingChallenge
+    ? `${hint} 下一场战斗挂载：${state.pendingChallenge.name}。`
+    : hint;
 }
 
 async function selectMapNode(nodeId) {
@@ -764,10 +788,14 @@ function renderAdventure(kind) {
     return;
   }
   $("adventure-view").hidden = false;
-  $("adventure-title").textContent = kind === "calibration" ? "校准平台" : "废弃维修站";
+  $("adventure-title").textContent = kind === "calibration"
+    ? "校准平台"
+    : kind === "drones" ? "维修无人机群" : "废弃维修站";
   $("adventure-hint").textContent = kind === "calibration"
     ? "选择一张已有单位，三选一：攻击强化、生命强化或直接升一级；先预览再确认，也可以离开。"
-    : "选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。";
+    : kind === "drones"
+      ? "选择一台无人机（攻击 +1 或最大生命 +1），再指定一张单位；先预览再确认，也可以离开。"
+      : "选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。";
   $("targets").innerHTML = data.targets.length
     ? data.targets.map((card) => `
         <div class="target${adventureTarget && adventureTarget.cardId === card.cardId ? " selected" : ""}" data-card="${esc(card.cardId)}">
@@ -929,6 +957,73 @@ function renderTrial() {
     ? "试炼成功：选择一张奖励。"
     : "试炼成功，但当前没有可用的奖励卡，可以直接离开。";
   else $("trial-note").textContent = "试炼失败：可以领取补偿金币，或直接离开。";
+}
+
+/* ---------- 爱的中继站 ---------- */
+
+function renderRelay() {
+  const data = state.relay;
+  if (!data) {
+    render();
+    return;
+  }
+  $("relay-view").hidden = false;
+  $("relay-actions").innerHTML = `
+    <button class="signal-action${relayAction === "keep" ? " selected" : ""}" data-choice="keep">
+      <b>保留信号</b><span>获得持久剧情标记，不立即获得强化；后续对白会变化。</span>
+    </button>
+    <button class="signal-action${relayAction === "cut" ? " selected" : ""}" data-choice="cut">
+      <b>切断回路</b><span>选择一张单位，攻击 +${data.atkBonus}；不会获得剧情标记。</span>
+    </button>`;
+
+  const showTargets = relayAction === "cut";
+  $("relay-targets").innerHTML = showTargets
+    ? data.targets.length
+      ? data.targets.map((card) => `
+        <div class="target${relayTarget && relayTarget.cardId === card.cardId ? " selected" : ""}"
+            data-card="${esc(card.cardId)}" role="button" tabindex="0">
+          <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
+          <div class="target-meta">攻击 ${card.atk} → ${card.atkPreview.atk}　生命 ${card.maxHp}</div>
+        </div>`).join("")
+      : "<p class='hint'>没有可强化的单位。</p>"
+    : "";
+
+  const preview = $("relay-preview");
+  if (relayAction === "keep") {
+    preview.hidden = false;
+    $("relay-preview-text").textContent =
+      "保留信号：设置持久剧情标记；不立即获得金币或强化。";
+  } else if (relayAction === "cut" && relayTarget) {
+    preview.hidden = false;
+    $("relay-preview-text").textContent =
+      `${relayTarget.name}：攻击 ${relayTarget.atk} → ${relayTarget.atkPreview.atk}（仅本趟冒险保留）。此操作不可撤销。`;
+  } else {
+    preview.hidden = true;
+  }
+  $("relay-note").textContent = relayAction
+    ? "确认后立即结算，也可以离开。"
+    : "先选择一种方案。";
+}
+
+/* ---------- 失控训练场 ---------- */
+
+function renderTraining() {
+  const data = state.training;
+  if (!data) {
+    render();
+    return;
+  }
+  $("training-view").hidden = false;
+  $("training-options").innerHTML = data.challenges.map((item) => `
+    <div class="target${trainingPick === item.id ? " selected" : ""}"
+        data-challenge="${esc(item.id)}" role="button" tabindex="0">
+      <div class="target-name">${esc(item.name)} <small>奖励 ${item.reward} 金币</small></div>
+      <div class="target-meta">${esc(item.description)}</div>
+    </div>`).join("");
+  $("training-confirm").hidden = trainingPick == null;
+  $("training-note").textContent = trainingPick
+    ? "接受后代价会挂载到下一场战斗，获胜后发放奖励。"
+    : "选择一个挑战；接受后不能反悔。";
 }
 
 /* ---------- 启动与事件 ---------- */
@@ -1181,6 +1276,62 @@ function bindEvents() {
   });
   $("trial-claim").addEventListener("click", () => act("/api/trial/claim", {}));
   $("trial-leave").addEventListener("click", () => act("/api/trial/leave", {}));
+
+  const chooseRelay = (event) => {
+    const button = event.target.closest(".signal-action");
+    if (!button || !state.relay) return;
+    relayAction = button.dataset.choice;
+    if (relayAction !== "cut") relayTarget = null;
+    renderRelay();
+  };
+  $("relay-actions").addEventListener("click", chooseRelay);
+  $("relay-targets").addEventListener("click", (event) => {
+    const element = event.target.closest(".target");
+    if (!element || !state.relay) return;
+    relayTarget = state.relay.targets.find((card) => card.cardId === element.dataset.card) || null;
+    renderRelay();
+  });
+  $("relay-targets").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const element = event.target.closest(".target");
+    if (!element || !state.relay) return;
+    event.preventDefault();
+    relayTarget = state.relay.targets.find((card) => card.cardId === element.dataset.card) || null;
+    renderRelay();
+  });
+  $("relay-confirm").addEventListener("click", () => {
+    if (relayAction === "keep") {
+      act("/api/relay/choose", { choice: "keep" });
+    } else if (relayAction === "cut" && relayTarget) {
+      act("/api/relay/cut", { cardId: relayTarget.cardId });
+    }
+  });
+  $("relay-cancel").addEventListener("click", () => {
+    relayAction = null;
+    relayTarget = null;
+    renderRelay();
+  });
+  $("relay-leave").addEventListener("click", () => act("/api/relay/leave", {}));
+
+  const pickTraining = (event) => {
+    const element = event.target.closest(".target");
+    if (!element || !state.training) return;
+    trainingPick = element.dataset.challenge;
+    renderTraining();
+  };
+  $("training-options").addEventListener("click", pickTraining);
+  $("training-options").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    pickTraining(event);
+  });
+  $("training-confirm").addEventListener("click", () => {
+    if (!trainingPick) return;
+    const challengeId = trainingPick;
+    trainingPick = null;
+    act("/api/training/choose", { challengeId });
+  });
+  $("training-leave").addEventListener("click", () => act("/api/training/leave", {}));
 
   $("restart-btn").addEventListener("click", () => {
     if (!confirm("重新开始会覆盖当前冒险进度，确定吗？")) return;

@@ -140,6 +140,30 @@
     "failureGold": 5,
     "candidateCount": 3
   },
+  "drones": {"atkBonus": 1, "hpBonus": 1},
+  "training": {
+    "challenges": [
+      {
+        "id": "overload",
+        "name": "过载演算",
+        "description": "下一场战斗首回合额外出现一个突击哨兵；获胜后获得 14 金币。",
+        "extraEnemy": "assault_sentry",
+        "column": 1,
+        "energyPenalty": 0,
+        "reward": 14
+      },
+      {
+        "id": "low_power",
+        "name": "低功率演算",
+        "description": "下一场战斗首回合能量 -1；获胜后获得 8 金币。",
+        "extraEnemy": null,
+        "column": 0,
+        "energyPenalty": 1,
+        "reward": 8
+      }
+    ]
+  },
+  "relay": {"atkBonus": 1, "flag": "relay_kept"},
   "runLength": 6,
   "firstNode": "battle1",
   "nodes": [
@@ -148,7 +172,7 @@
       "type": "battle",
       "name": "战斗 1",
       "encounter": "battle1",
-      "next": ["recruit", "signal"],
+      "next": ["recruit", "signal", "relay"],
       "before": [
         {
           "speaker": "爱",
@@ -183,7 +207,7 @@
       "name": "补给站",
       "branchGroup": "supply",
       "branch": "recruit",
-      "next": ["adventure", "calibration"],
+      "next": ["adventure", "calibration", "drones"],
       "before": [
         {
           "speaker": "爱",
@@ -211,7 +235,7 @@
       "name": "旧型号信号",
       "branchGroup": "supply",
       "branch": "signal",
-      "next": ["adventure", "calibration"],
+      "next": ["adventure", "calibration", "drones"],
       "before": [
         {
           "speaker": "爱",
@@ -231,6 +255,28 @@
       ],
       "after": [
         {"speaker": "爱", "text": "信号安静下来了。它好像把东西留给了你。"}
+      ]
+    },
+    {
+      "id": "relay",
+      "type": "relay",
+      "name": "爱的中继站",
+      "branchGroup": "supply",
+      "branch": "relay",
+      "next": ["adventure", "calibration", "drones"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "中继站里有一段完整的我。留下来，它也许会在之后帮上忙。",
+          "background": "signal"
+        },
+        {
+          "speaker": "爱",
+          "text": "也可以切断回路，换一点即时算力。决定之前，我会把两种结果都说清楚。"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "选择已经写进回路了。"}
       ]
     },
     {
@@ -270,12 +316,34 @@
       ]
     },
     {
+      "id": "drones",
+      "type": "drones",
+      "name": "维修无人机群",
+      "branchGroup": "repair",
+      "branch": "drones",
+      "next": ["drift_capsule", "recycle_station"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "三台维修无人机只剩两台还能动。它们各自带着一种强化协议。",
+          "background": "repair"
+        },
+        {
+          "speaker": "爱",
+          "text": "挑一台，然后指定一台机偶。只有一次机会。"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "无人机已经完成接线。"}
+      ]
+    },
+    {
       "id": "drift_capsule",
       "type": "drift",
       "name": "漂流卡匣",
       "branchGroup": "salvage",
       "branch": "drift",
-      "next": ["shop", "trial"],
+      "next": ["shop", "trial", "training"],
       "before": [
         {
           "speaker": "爱",
@@ -293,7 +361,7 @@
       "name": "记忆回收站",
       "branchGroup": "salvage",
       "branch": "recycle",
-      "next": ["shop", "trial"],
+      "next": ["shop", "trial", "training"],
       "before": [
         {
           "speaker": "爱",
@@ -346,6 +414,29 @@
       ]
     },
     {
+      "id": "training",
+      "type": "training",
+      "name": "失控训练场",
+      "branchGroup": "economy",
+      "branch": "training",
+      "next": ["battle2"],
+      "before": [
+        {
+          "speaker": "爱",
+          "text": "你保留了中继站的信号。训练场的屏幕闪了一下，像是认出了它。",
+          "if": {"relay_kept": true}
+        },
+        {
+          "speaker": "爱",
+          "text": "失控训练场开放了两项演算。代价会带进下一场战斗，赢了才有奖励。",
+          "background": "battle"
+        }
+      ],
+      "after": [
+        {"speaker": "爱", "text": "演算协议已挂载。下一场战斗见分晓。"}
+      ]
+    },
+    {
       "id": "battle2",
       "type": "battle",
       "name": "战斗 2",
@@ -359,7 +450,12 @@
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "结束了……谢谢你陪我走到这里。"}
+        {"speaker": "爱", "text": "结束了……谢谢你陪我走到这里。"},
+        {
+          "speaker": "爱",
+          "text": "中继站留下的那段信号还在。它没有消失。",
+          "if": {"relay_kept": true}
+        }
       ]
     }
   ]

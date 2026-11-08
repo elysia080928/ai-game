@@ -217,6 +217,37 @@
         </div>
       </section>
 
+      <section id="relay-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>爱的中继站</h2>
+          <p class="node-hint">保留信号会留下持久剧情标记；切断回路可立即强化一张单位，但不会留下标记。确认前会说明结果。</p>
+          <div class="signal-actions" id="relay-actions"></div>
+          <div class="targets" id="relay-targets"></div>
+          <div class="preview" id="relay-preview" hidden>
+            <p id="relay-preview-text"></p>
+            <button id="relay-confirm" class="primary">确认</button>
+            <button id="relay-cancel" class="ghost">取消</button>
+          </div>
+          <div class="node-actions">
+            <button id="relay-leave" class="ghost">离开</button>
+          </div>
+          <div class="node-note" id="relay-note"></div>
+        </div>
+      </section>
+
+      <section id="training-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>失控训练场</h2>
+          <p class="node-hint">选择一项挑战，代价会带入下一场战斗；获胜后领取奖励。也可以离开。</p>
+          <div class="targets" id="training-options"></div>
+          <div class="node-actions">
+            <button id="training-confirm" class="primary" hidden>接受挑战</button>
+            <button id="training-leave" class="ghost">离开</button>
+          </div>
+          <div class="node-note" id="training-note"></div>
+        </div>
+      </section>
+
       <section id="complete-view" class="view" hidden>
         <div class="complete-panel">
           <h1>MVP 完成</h1>

@@ -1,6 +1,6 @@
 """端到端冒烟测试：python tests/e2e_smoke.py（需要先启动服务）。
 
-验证注册、剧情选项与跳过、选关、两条六节点路线、奇遇、预告、重复请求与账号隔离。
+验证注册、剧情选项与跳过、选关、三条分支路线、奇遇、挑战、预告、重复请求与账号隔离。
 """
 
 import http.cookiejar
@@ -146,7 +146,7 @@ def play_loop(client, battle):
     raise AssertionError("战斗没有在合理回合内结束")
 
 
-def win_battle(client, encounter_id):
+def win_battle(client, encounter_id, extra_forecast=()):
     for attempt in range(8):
         battle = client.ok("/api/battle/reset", {})["battle"]
         assert battle["turn"] == 1 and battle["energy"] == 4 and len(battle["hand"]) == 6
@@ -155,7 +155,7 @@ def win_battle(client, encounter_id):
             assert entries == {(1, 1), (2, 3)}, entries
         if attempt == 0 and encounter_id == "battle2":
             entries = {(item["turn"], item["column"]) for item in battle["forecast"]}
-            assert entries == {(1, 2), (1, 4), (2, 3)}, entries
+            assert entries == {(1, 2), (1, 4), (2, 3)} | set(extra_forecast), entries
             assert all(item["turn"] in (1, 2) for item in battle["forecast"])
         battle = play_loop(client, battle)
         if battle["result"] == "win":
@@ -186,7 +186,9 @@ def battle1_to_map(client, branch_option):
     assert status["recruit"] == "available" and status["signal"] == "available", status
     assert status["adventure"] == "locked" and status["battle2"] == "locked", status
     assert status["shop"] == "locked" and status["trial"] == "locked", status
-    for illegal in ("adventure", "calibration", "shop", "trial", "battle2", "battle1"):
+    for illegal in (
+        "adventure", "calibration", "shop", "trial", "training", "drones", "battle2", "battle1"
+    ):
         client.fail("/api/map/select", {"nodeId": illegal})
     return state
 
@@ -310,6 +312,75 @@ def trial_phase(client):
     assert state["phase"] == "after_story"
     client.ok("/api/trial/leave", {})
     assert client.state()["phase"] == "after_story"
+    return state
+
+
+def relay_phase(client):
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "relay", state
+    assert state["relay"]["kept"] is False and state["relay"]["targets"], state["relay"]
+    client.fail("/api/relay/choose", {"choice": "cut"})
+    client.fail("/api/relay/cut", {"cardId": "spark"})
+    client.ok("/api/relay/choose", {"choice": "keep"})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    client.ok("/api/relay/choose", {"choice": "keep"})
+    assert client.state()["phase"] == "after_story"
+    return state
+
+
+def drones_phase(client):
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "drones", state
+    assert state["drones"]["atkBonus"] == 1 and state["drones"]["hpBonus"] == 1
+    client.fail("/api/drones/apply", {"cardId": "spark", "effect": "atk"})
+    client.fail("/api/drones/apply", {"cardId": "striker", "effect": "level"})
+    before = next(card for card in state["deck"] if card["cardId"] == "striker")
+    client.ok("/api/drones/apply", {"cardId": "striker", "effect": "atk"})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    after = next(card for card in state["deck"] if card["cardId"] == "striker")
+    assert after["atkBonus"] == before["atkBonus"] + 1 and after["hpBonus"] == before["hpBonus"]
+    client.ok("/api/drones/apply", {"cardId": "striker", "effect": "atk"})
+    again = next(card for card in client.state()["deck"] if card["cardId"] == "striker")
+    assert again["atkBonus"] == after["atkBonus"], "重复提交不能重复强化"
+    return state
+
+
+def drift_choose(client):
+    advance_to_node(client)
+    state = client.state()
+    assert state["node"]["type"] == "drift", state
+    candidate = state["drift"]["candidates"][0]
+    client.ok("/api/drift/choose", {"cardId": candidate["cardId"]})
+    assert client.state()["phase"] == "after_story"
+    return client.state()
+
+
+def training_phase(client):
+    seen = []
+    for _ in range(10):
+        state = client.state()
+        if state["phase"] == "node":
+            break
+        assert state["phase"] in ("before_story", "after_story"), state
+        seen.append(state["story"]["text"])
+        client.ok("/api/story/advance", {"skip": False})
+    else:
+        raise AssertionError("无法进入训练场节点")
+    assert any("认出了它" in text for text in seen), seen
+    state = client.state()
+    assert state["node"]["type"] == "training", state
+    assert len(state["training"]["challenges"]) == 2, state["training"]
+    client.fail("/api/training/choose", {"challengeId": "not-a-challenge"})
+    client.ok("/api/training/choose", {"challengeId": "overload"})
+    state = client.state()
+    assert state["phase"] == "after_story"
+    assert state["pendingChallenge"]["id"] == "overload", state
+    client.ok("/api/training/choose", {"challengeId": "low_power"})
+    assert client.state()["pendingChallenge"]["id"] == "overload", "重复提交不能改挂挑战"
     return state
 
 
@@ -474,6 +545,61 @@ def signal_route():
     return client
 
 
+def challenge_route():
+    name = "u" + "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10))
+    client = Client()
+    client.ok("/api/register", {"username": name, "password": "test-pass-789"})
+    battle1_to_map(client, "battle1_signal")
+
+    state = advance_to_map(client)
+    assert map_status(state)["relay"] == "available", state["map"]
+    client.ok("/api/map/select", {"nodeId": "relay"})
+    state = relay_phase(client)
+    assert state["route"] == {"supply": "relay"}, state
+
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["recruit"] == "closed" and status["signal"] == "closed", status
+    assert status["drones"] == "available", status
+    client.ok("/api/map/select", {"nodeId": "drones"})
+    state = drones_phase(client)
+    assert state["route"] == {"supply": "relay", "repair": "drones"}, state
+
+    state = advance_to_map(client)
+    assert map_status(state)["drift_capsule"] == "available", state["map"]
+    client.ok("/api/map/select", {"nodeId": "drift_capsule"})
+    drift_choose(client)
+
+    state = advance_to_map(client)
+    status = map_status(state)
+    assert status["shop"] == "available" and status["training"] == "available", status
+    assert status["battle2"] == "locked", status
+    client.ok("/api/map/select", {"nodeId": "training"})
+    state = training_phase(client)
+    assert state["route"]["economy"] == "training", state
+
+    state = advance_to_map(client)
+    assert map_status(state)["battle2"] == "available", state["map"]
+    client.ok("/api/map/select", {"nodeId": "battle2"})
+    advance_to_node(client)
+    assert client.state()["pendingChallenge"]["id"] == "overload"
+    win_battle(client, "battle2", extra_forecast={(1, 1)})
+    state = client.state()
+    assert state["gold"] == 34, state
+    assert state["pendingChallenge"] is None, "挑战应在胜利后清空"
+    texts = []
+    for _ in range(6):
+        state = client.state()
+        if state["phase"] == "complete":
+            break
+        texts.append(state["story"]["text"])
+        client.ok("/api/story/advance", {"skip": False})
+    assert state["phase"] == "complete", state
+    assert any("中继站" in text for text in texts), texts
+    print("ok 挑战路线：战斗 1 → 中继站 → 无人机 → 卡匣 → 训练场 → 战斗 2 → 完成")
+    return client
+
+
 def main():
     wait_for_server()
 
@@ -491,7 +617,11 @@ def main():
     signal = signal_route()
     signal_state = signal.state()
     assert signal_state["complete"] and signal_state["gold"] == 22
-    print("ok 两条路线互斥、汇合与完成画面")
+
+    challenge = challenge_route()
+    challenge_state = challenge.state()
+    assert challenge_state["complete"] and challenge_state["gold"] == 34
+    print("ok 三条路线互斥、汇合与完成画面")
 
     # 新游戏需要确认；不影响另一账号
     recruit.fail("/api/game/new", {"confirm": False})
@@ -500,6 +630,7 @@ def main():
     assert state["phase"] == "before_story" and state["gold"] == 0
     assert state["node"]["id"] == "battle1"
     assert signal.state()["gold"] == 22, "账号隔离失败"
+    assert challenge.state()["gold"] == 34, "账号隔离失败"
     print("ok 新游戏覆盖确认与账号隔离")
 
     recruit.ok("/api/logout", {})

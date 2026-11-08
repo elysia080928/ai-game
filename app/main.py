@@ -82,6 +82,14 @@ class TrialChooseBody(BaseModel):
     trialId: str
 
 
+class TrainingChooseBody(BaseModel):
+    challengeId: str
+
+
+class RelayBody(BaseModel):
+    choice: str
+
+
 class SignalBody(BaseModel):
     action: str
     cardId: str
@@ -273,12 +281,27 @@ def _make_battle(user_id, state):
     node = game.current_node(state)
     if state["phase"] != "node" or node is None or node["type"] != "battle":
         raise B.GameError("当前不在战斗节点")
+    challenge = game.battle_challenge(state)
+    extra_plan = None
+    first_turn_energy = B.FIRST_TURN_ENERGY
+    if challenge:
+        first_turn_energy -= challenge["energyPenalty"]
+        if challenge.get("extraEnemy"):
+            extra_plan = [
+                {
+                    "turn": 1,
+                    "column": challenge["column"],
+                    "enemy": challenge["extraEnemy"],
+                }
+            ]
     battle_state = B.make_battle(
         state["cards"],
         game.ENCOUNTERS[node["encounter"]],
         game.CARDS,
         game.ENEMIES,
         rng=random.Random(),
+        first_turn_energy=first_turn_energy,
+        extra_plan=extra_plan,
     )
     BATTLES[user_id] = battle_state
     return battle_state
@@ -557,6 +580,78 @@ def trial_leave(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
         game.trial_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/drones/apply")
+def drones_apply(body: AdventureBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.drones_apply(state, body.cardId, body.effect)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/drones/leave")
+def drones_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.drones_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/training/choose")
+def training_choose(body: TrainingChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.training_choose(state, body.challengeId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/training/leave")
+def training_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.training_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/relay/choose")
+def relay_choose(body: RelayBody, user=Depends(current_user)):
+    if body.choice != "keep":
+        raise HTTPException(status_code=400, detail="无效的中继站选项")
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.relay_keep(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/relay/cut")
+def relay_cut(body: DriftChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.relay_cut(state, body.cardId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/relay/leave")
+def relay_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.relay_leave(state)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
