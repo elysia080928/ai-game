@@ -59,18 +59,26 @@ class RecruitBody(BaseModel):
 class AdventureBody(BaseModel):
     cardId: str
     effect: str
+    cardUid: str | None = None
 
 
 class CalibrationBody(BaseModel):
     cardId: str
     effect: str
+    cardUid: str | None = None
 
 
 class RecycleCardBody(BaseModel):
     cardId: str
+    cardUid: str | None = None
 
 
 class DriftChooseBody(BaseModel):
+    cardId: str
+    cardUid: str | None = None
+
+
+class EliteRewardBody(BaseModel):
     cardId: str
 
 
@@ -93,6 +101,7 @@ class RelayBody(BaseModel):
 class SignalBody(BaseModel):
     action: str
     cardId: str
+    cardUid: str | None = None
 
 
 class MapSelectBody(BaseModel):
@@ -399,6 +408,26 @@ def battle_confirm(user=Depends(current_user)):
     return {"state": game.public_state(state), "battle": None}
 
 
+@app.post("/api/elite/reward/choose")
+def elite_reward_choose(body: EliteRewardBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.elite_reward_choose(state, body.cardId)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/elite/reward/leave")
+def elite_reward_leave(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        game.elite_reward_leave(state)
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
 @app.post("/api/recruit/buy")
 def recruit_buy(body: RecruitBody, user=Depends(current_user)):
     with db.LOCK:
@@ -422,7 +451,7 @@ def recruit_leave(user=Depends(current_user)):
 def signal_apply(body: SignalBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.signal_apply(state, body.action, body.cardId)
+        game.signal_apply(state, body.action, body.cardId, body.cardUid)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
@@ -442,7 +471,7 @@ def signal_leave(user=Depends(current_user)):
 def adventure_apply(body: AdventureBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.adventure_apply(state, body.cardId, body.effect)
+        game.adventure_apply(state, body.cardId, body.effect, body.cardUid)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
@@ -462,7 +491,7 @@ def adventure_leave(user=Depends(current_user)):
 def calibration_apply(body: CalibrationBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.calibration_apply(state, body.cardId, body.effect)
+        game.calibration_apply(state, body.cardId, body.effect, body.cardUid)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
@@ -482,7 +511,7 @@ def calibration_leave(user=Depends(current_user)):
 def recycle_apply(body: RecycleCardBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.recycle_apply(state, body.cardId)
+        game.recycle_apply(state, body.cardId, body.cardUid)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
@@ -590,7 +619,7 @@ def trial_leave(user=Depends(current_user)):
 def drones_apply(body: AdventureBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.drones_apply(state, body.cardId, body.effect)
+        game.drones_apply(state, body.cardId, body.effect, body.cardUid)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}
@@ -642,7 +671,7 @@ def relay_choose(body: RelayBody, user=Depends(current_user)):
 def relay_cut(body: DriftChooseBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        game.relay_cut(state, body.cardId)
+        game.relay_cut(state, body.cardId, body.cardUid)
         _save_state(user["id"], state)
         BATTLES.pop(user["id"], None)
     return {"state": game.public_state(state), "battle": None}

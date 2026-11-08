@@ -83,7 +83,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["story-view", "map-view", "battle-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
+  ["story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -120,6 +120,10 @@ function render() {
   }
   if (state.phase === "before_story" || state.phase === "after_story") {
     renderStory();
+    return;
+  }
+  if (state.phase === "elite_reward") {
+    renderEliteReward();
     return;
   }
   if (state.node && state.node.type === "battle") {
@@ -249,21 +253,26 @@ function mapNodeButton(node) {
   const status = MAP_STATUS[node.status] || node.status;
   const disabled = node.status === "available" ? "" : "disabled";
   const icons = {
-    battle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.8 3.5 5.7 5.7-2.2 2.2-2-2-6.7 6.7-2.9-.7.7-2.9 6.7-6.7-2-2 2.7-2.3Z"/><path d="m4 20 3.1-3.1M14.5 5.5l4 4"/></svg>',
-    recruit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/><circle cx="12" cy="12" r="8"/></svg>',
+    battle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 3 4 1 11 14-2 2L5 7 4 3Zm16 0-4 1L5 18l2 2L19 7l1-4ZM3 16l5 5m8-5 5 5"/></svg>',
+    recruit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4v13H3V7Zm0 0 9 4 9-4M12 11v9M8 5l9 4v5"/></svg>',
     signal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 0 1 16 0M7 16a5 5 0 0 1 10 0M10 16a2 2 0 0 1 4 0"/><path d="M12 19v1"/></svg>',
-    adventure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 5.2L20 10l-5.8 1.8L12 17l-2.2-5.2L4 10l5.8-1.8L12 3Z"/><path d="m18 16 .8 1.8L21 18.5l-2.2.7L18 21l-.8-1.8-2.2-.7 2.2-.7L18 16Z"/></svg>',
+    adventure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4a6 6 0 0 0-7 8L3 17a3 3 0 0 0 4 4l5-5a6 6 0 0 0 8-7l-4 4-4-4 2-5Z"/></svg>',
     calibration: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17V9m7 8V5m7 12v-6"/><path d="M3 21h18"/></svg>',
     drift: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M9 5v14"/></svg>',
     recycle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V5h6v3M10 12v4M14 12v4"/></svg>',
-    shop: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-1.5 13h-13L4 7Z"/><path d="M8 7V5a4 4 0 0 1 8 0v2M9 12h6"/></svg>',
-    trial: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 21h12M7 7l5-4 5 4M9 7v5a3 3 0 0 0 6 0V7"/><path d="M9 15h6"/></svg>'
+    shop: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 15 5 6h11l4-6H2ZM12 15V2L4 12h8m2-8 6 8h-6"/></svg>',
+    trial: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21 9 9h6l1 12M6 9V4h3V2h6v2h3v5H6ZM6 21h12M11 14h2"/></svg>',
+    drones: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="9" width="8" height="7" rx="2"/><path d="m8 10-4-4m12 4 4-4M2 6h5m10 0h5M12 9V5m-3 14 3 2 3-2"/></svg>',
+    relay: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21 5-13 5 13M8 17h8M6 10a8 8 0 0 1 0-7m12 7a8 8 0 0 0 0-7M12 8c-6-3-3-7 0-4 3-3 6 1 0 4Z"/></svg>',
+    training: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="13" r="8"/><circle cx="11" cy="13" r="4"/><path d="m11 13 9-10m-4 0h4v4"/></svg>',
+    boss: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12ZM12 1v4m0 14v4M3 3l3 4m12 10 3 4M21 3l-3 4M6 17l-3 4"/><path d="m12 8 3 4-3 4-3-4 3-4Z"/></svg>'
   };
+  const icon = node.role === "boss" ? icons.boss : icons[node.type] || icons.adventure;
   return `<button class="map-node status-${esc(node.status)} type-${esc(node.type)}"
       data-id="${esc(node.id)}" ${disabled}
       aria-label="${esc(node.name)}，${esc(type)}，${esc(status)}">
-      <span class="map-node-icon">${icons[node.type] || icons.adventure}</span>
-      <span class="map-node-copy"><span class="map-node-type">${esc(type)}</span><span class="map-node-name">${esc(node.name)}</span><span class="map-node-status">${esc(status)}</span></span>
+      <span class="map-node-icon">${icon}</span>
+      <span class="map-node-label"><span class="map-node-name">${esc(node.name)}</span><span class="map-node-status">${esc(status)}</span></span>
     </button>`;
 }
 
@@ -276,59 +285,48 @@ function renderMap() {
   $("map-view").hidden = false;
   const byId = Object.fromEntries(map.nodes.map((node) => [node.id, node]));
   const available = map.nodes.filter((node) => node.status === "available");
-  const nextNames = available.map((node) => node.name).join(" / ");
-  const selected = map.nodes.filter(
-    (node) => node.branchGroup && map.route[node.branchGroup] === node.branch
-  );
-  const routeNames = selected.map((node) => node.name).join(" → ");
+  const maxColumn = Math.max(...map.nodes.map((node) => node.column));
+  const columnCounts = {};
+  map.nodes.forEach((node) => { columnCounts[node.column] = (columnCounts[node.column] || 0) + 1; });
+  const positions = new Map();
+  map.nodes.forEach((node) => {
+    const x = 85 + (maxColumn ? node.column / maxColumn : 0) * 1035;
+    const y = 330 + (node.row - (columnCounts[node.column] - 1) / 2) * 140;
+    positions.set(node.id, { x, y });
+  });
+  const currentId = state.completed[state.completed.length - 1];
+  const current = currentId ? byId[currentId] : null;
+  const path = (a, b, status) => `<path class="map-path ${esc(status || "")}" d="M ${a.x} ${a.y} C ${a.x + (b.x - a.x) * .55} ${a.y}, ${b.x - (b.x - a.x) * .55} ${b.y}, ${b.x} ${b.y}"/>`;
+  const paths = map.edges
+    .map((edge) => path(positions.get(edge.from), positions.get(edge.to), edge.status))
+    .join("");
+  const nodes = map.nodes.map((node) => {
+    const { x, y } = positions.get(node.id);
+    const isCurrent = current && node.id === current.id;
+    return `<div class="map-stop${isCurrent ? " is-current" : ""}${node.role === "boss" ? " is-boss" : ""}"
+      style="--x:${x / 12}%;--y:${y / 6.4}%;--mobile-x:${y / 6.4}%;--mobile-y:${x / 12}%"
+      title="${esc(node.name)} · ${esc(MAP_STATUS[node.status])}${isCurrent ? " · 当前位置" : ""}">
+      ${isCurrent ? '<span class="map-pawn" role="img" aria-label="当前位置"><svg viewBox="0 0 30 40" aria-hidden="true"><circle cx="15" cy="8" r="5"/><path d="M11 15h8l2 16H9l2-16ZM7 31h16v5H7z"/></svg></span>' : ""}
+      ${mapNodeButton(node)}</div>`;
+  }).join("");
   $("map-page-left").innerHTML = `
-    <h3 class="page-title">回路航线 <span>SECTOR 01</span></h3>
-    <div class="map-flow route-track">
-      ${mapNodeButton(byId.battle1)}
-      <div class="route-rail route-rail-split"><span></span><span></span></div>
-      <div class="branch-row route-branch">
-        ${mapNodeButton(byId.recruit)}
-        ${mapNodeButton(byId.signal)}
-        ${mapNodeButton(byId.relay)}
-      </div>
-      <div class="route-rail route-rail-split"><span></span><span></span></div>
-      <div class="branch-row route-branch">
-        ${mapNodeButton(byId.adventure)}
-        ${mapNodeButton(byId.calibration)}
-        ${mapNodeButton(byId.drones)}
-      </div>
-      <div class="route-rail route-rail-split"><span></span><span></span></div>
-      <div class="branch-row route-branch">
-        ${mapNodeButton(byId.drift_capsule)}
-        ${mapNodeButton(byId.recycle_station)}
-      </div>
-      <div class="route-rail route-rail-split"><span></span><span></span></div>
-      <div class="branch-row route-branch">
-        ${mapNodeButton(byId.shop)}
-        ${mapNodeButton(byId.trial)}
-        ${mapNodeButton(byId.training)}
-        ${mapNodeButton(byId.elite)}
-      </div>
-      <div class="route-rail"><span></span></div>
-      ${mapNodeButton(byId.battle2)}
-      <div class="route-rail"><span></span></div>
-      ${mapNodeButton(byId.boss)}
+    <div class="map-board" role="group" aria-label="回路边境冒险地图，选择亮起的事件图标前进">
+      <div class="map-terrain" aria-hidden="true"></div>
+      <div class="map-cartouche" aria-hidden="true"><span>THE BORDERLANDS</span><strong>回路边境</strong><i>一张尚未写完的地图</i></div>
+      <svg class="map-paths map-paths-desktop" viewBox="0 0 1200 640" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>
+      <svg class="map-paths map-paths-mobile" viewBox="0 0 640 1200" preserveAspectRatio="none" aria-hidden="true"><g transform="matrix(0 1 1 0 0 0)">${paths}</g></svg>
+      ${nodes}
+      <span class="map-destination" aria-hidden="true">镜像核心</span>
     </div>`;
   $("map-page-right").innerHTML = `
-    <h3 class="page-title">航线记录 <span>RUN ${String(state.progress).padStart(2, "0")}</span></h3>
-    <div class="route-readout"><strong>${esc(routeNames || "未选路线")}</strong><small>当前路径</small></div>
-    <div class="map-route-list"><span class="route-dot complete"></span><span>起始信标</span><span class="route-line"></span><span class="route-dot active"></span><span>下一节点</span></div>
-    <div class="route-next"><small>可进入</small><strong>${esc(nextNames || "无")}</strong></div>
     <div class="map-legend">
-      <span class="legend available">可进入</span>
-      <span class="legend completed">已完成</span>
-      <span class="legend locked">未解锁</span>
-      <span class="legend closed">已关闭</span>
+      <span><i class="legend-open" aria-hidden="true"></i>可前往</span>
+      <span><i class="legend-traveled" aria-hidden="true">✓</i>已走过</span>
+      <span><i class="legend-locked" aria-hidden="true"></i>未解锁</span>
+      <span><i class="legend-closed" aria-hidden="true">×</i>已关闭</span>
     </div>
-    <p class="map-copy">点击发光节点继续前进。分支会在选择后锁定。</p>`;
-  $("map-route").textContent = routeNames
-    ? `已选择路线：${routeNames}`
-    : "尚未选择分支";
+    <p class="map-instruction">每一次选择，都留下一条不同的路。</p>`;
+  $("map-route").textContent = `已行进 ${state.progress} / ${state.runLength}`;
   const hint = available.length > 1
     ? "选择一条分支；确认后其余分支会关闭。"
     : "选择下一个节点，进入其前置剧情。";
@@ -402,9 +400,9 @@ function unitHtml(unit, side, column) {
   }
   const style = width > 1 ? ` style="grid-column: span ${width};"` : "";
   return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
-      <div class="unit-core" aria-hidden="true">${esc(unit.name.slice(0, 1))}</div>
+      <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit, side)}</div>
       <div class="unit-name">${esc(unit.name)}${notes ? ` <small>${notes}</small>` : ""}</div>
-      <div class="unit-stats"><span class="atk">⚔ ${unit.atk}</span><span class="hp">❤ ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">🛡 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">⛨ ${unit.guard}</span>` : ""}</div>
+      <div class="unit-stats"><span class="atk">攻 ${unit.atk}</span><span class="hp">耐 ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">盾 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">拦截 ${unit.guard}</span>` : ""}</div>
     </div>`;
 }
 
@@ -427,19 +425,63 @@ function unitTrait(card) {
   return traits.join(" · ");
 }
 
+const CARD_ART = {
+  bean: "sci-robot-small", shell: "sci-turret", scout: "sci-drone",
+  repair: "sci-medkit", spark: "lightning-bolt-pickup", worker: "companion-robot",
+  striker: "neon-mech", heavy: "sci-robot", guard: "sci-turret", flyer: "sci-fighter",
+  twin_rail: "neon-mech", arc_drone: "sci-drone", double_claw: "crab",
+  phase_flyer: "sci-drone", burst_beetle: "beetle", shield_moth: "butterfly",
+  rail_guard: "sci-turret", generator: "sci-generator"
+};
+const PIXEL_ALIASES = {
+  small_sentry: "scout", defender: "shell", assault_sentry: "striker", fork_sentry: "twin_rail",
+  wide_bulwark: "heavy", double_striker: "striker", reach_turret: "rail_guard",
+  phase_hunter: "phase_flyer", mine_beetle: "burst_beetle", signal_jammer: "generator",
+  drift_hunter: "flyer", null_anchor: "generator", siege_carrier: "flyer",
+  mirror_core: "heavy", mirror_drone: "arc_drone"
+};
+
+function pixelArtHtml(card, side = "") {
+  const art = CARD_ART[card.cardId] || CARD_ART[PIXEL_ALIASES[card.cardId]] || CARD_ART.bean;
+  return `<img class="pixel-art pixel-art-image sprite-${art}${side === "enemy" ? " enemy-pixel-art" : ""}" src="/assets/cards/${art}.png" alt="" aria-hidden="true" draggable="false">`;
+}
+
+function cardFaceHtml(card) {
+  const isUnit = card.type === "unit";
+  const description = isUnit
+    ? unitTrait(card) || "机偶单位 · 自动攻击对位目标"
+    : card.effectText || (card.heal != null ? `恢复 ${card.heal} 点领袖生命` : card.damage != null ? `造成 ${card.damage} 点伤害` : "战术指令");
+  const level = card.level ?? card.targetLevel ?? 1;
+  const stats = isUnit
+    ? `<span class="card-stat attack"><small>攻</small><b>${card.atk ?? "—"}</b></span>
+        <span class="card-level">LV<br>${level}</span>
+        <span class="card-stat health"><small>耐</small><b>${card.hp ?? card.maxHp ?? "—"}</b></span>`
+    : `<span class="card-command-effect">${esc(card.heal != null ? `修复 +${card.heal}` : card.damage != null ? `脉冲 ${card.damage}` : description)}</span>
+        <span class="card-level">LV ${level}</span>`;
+  return `<div class="card-face ${isUnit ? "unit-card" : "command-card"}">
+      <div class="card-topline"><span class="card-type">${isUnit ? "机体 / UNIT" : "指令 / PROTOCOL"}</span><span class="card-cost">${card.cost ?? "—"}</span></div>
+      <div class="card-name offer-name">${esc(card.name || "未识别机偶")}</div>
+      <div class="card-art">${pixelArtHtml(card)}</div>
+      <div class="card-stats">${esc(description)}</div>
+      <div class="card-metrics">${stats}</div>
+    </div>`;
+}
+
+function offerCardView(offer, type = "unit") {
+  const owned = state.deck.find((card) => card.cardId === offer.cardId);
+  return { ...owned, ...offer, type: offer.type || owned?.type || type,
+    level: offer.targetLevel || offer.level || owned?.level || 1 };
+}
+
 function cardHtml(card, selected, draggable = false) {
-  const stats = card.type === "unit"
-    ? `⚔ ${card.atk}　❤ ${card.hp}`
-    : esc(card.effectText || (card.heal != null ? `恢复 ${card.heal}` : card.damage != null ? `造成 ${card.damage} 伤害` : ""));
   const trait = card.type === "unit" ? unitTrait(card) : "";
+  const detail = card.type === "unit"
+    ? `，攻击 ${card.atk}，生命 ${card.hp}${trait ? `，${trait}` : ""}`
+    : `，${card.effectText || (card.heal != null ? `恢复 ${card.heal}` : card.damage != null ? `造成 ${card.damage} 伤害` : "指令牌")}`;
   return `<div class="card${selected ? " selected" : ""}" data-uid="${card.uid}" data-type="${card.type}"
       data-width="${card.width || 1}" tabindex="0" role="button" draggable="${draggable ? "true" : "false"}"
-      aria-label="${esc(card.name)}，费用 ${card.cost}，等级 ${card.level}${card.type === "unit" ? `，攻击 ${card.atk}，生命 ${card.hp}${trait ? `，${trait}` : ""}` : ""}">
-      <div class="card-art ${card.type}" aria-hidden="true"><span>${esc(card.name.slice(0, 1))}</span></div>
-      <div class="card-cost">${card.cost}</div>
-      <div class="card-name">${esc(card.name)}</div>
-      <div class="card-stats">${stats}</div>
-      <div class="card-level">Lv.${card.level}${trait ? ` · ${esc(trait)}` : ""}</div>
+      aria-label="${esc(card.name)}，费用 ${card.cost}，等级 ${card.level}${detail}">
+      ${cardFaceHtml(card)}
     </div>`;
 }
 
@@ -791,6 +833,26 @@ function selectCard(uid) {
   renderBattle();
 }
 
+/* ---------- 精英战奖励 ---------- */
+
+function renderEliteReward() {
+  const reward = state.eliteReward;
+  if (!reward) {
+    render();
+    return;
+  }
+  $("elite-reward-view").hidden = false;
+  $("elite-offers").innerHTML = reward.candidates.map((card) => `
+    <div class="offer card-offer">
+      ${cardFaceHtml(card)}
+      <div class="offer-meta">${card.duplicate ? "同名卡 · 独立实体" : "新加入牌组"}</div>
+      <button class="buy-btn" data-id="${esc(card.cardId)}" ${reward.deckFull ? "disabled" : ""}>${reward.deckFull ? "牌组已满" : "领取"}</button>
+    </div>`).join("");
+  $("elite-note").textContent = reward.deckFull
+    ? "牌组已满（最多 20 张），无法加入新卡，可以离开。"
+    : "选择一张加入牌组，或放弃奖励直接离开。";
+}
+
 /* ---------- 招募 ---------- */
 
 function renderRecruit() {
@@ -808,8 +870,9 @@ function renderRecruit() {
         const meta = owned
           ? `已有 Lv.${offer.level}${offer.level < offer.maxLevel ? ` → Lv.${nextLevel}` : "（满级）"}`
           : "新卡";
-        return `<div class="offer">
-            <div class="offer-name">${esc(offer.name)}</div>
+        const card = offerCardView(offer);
+        return `<div class="offer card-offer">
+            ${cardFaceHtml(card)}
             <div class="offer-meta">${meta}</div>
             <div class="offer-price">${offer.price} 金币</div>
             <button class="buy-btn" data-id="${esc(offer.cardId)}" ${recruit.purchased || !affordable ? "disabled" : ""}>
@@ -850,10 +913,9 @@ function renderSignal() {
     ? "<p class='hint'>先选择一项效果。</p>"
     : targets.length
       ? targets.map((card) => `
-        <div class="target${signalTarget && signalTarget.cardId === card.cardId ? " selected" : ""}" data-card="${esc(card.cardId)}">
-          <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
-          <div class="target-meta">攻击 ${card.atk}　生命 ${card.hp}</div>
-          <div class="target-meta">${card.atkBonus || card.hpBonus ? `改造：攻击 +${card.atkBonus || 0} / 生命 +${card.hpBonus || 0}` : "暂无改造"}</div>
+        <div class="target card-target${signalTarget && signalTarget.uid === card.uid ? " selected" : ""}" data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}" role="button" tabindex="0">
+          ${cardFaceHtml(card)}
+          <div class="card-target-note">${card.atkBonus || card.hpBonus ? `改造：攻 +${card.atkBonus || 0} / 耐 +${card.hpBonus || 0}` : "暂无改造"}</div>
         </div>`).join("")
       : "<p class='hint'>没有符合这项效果的单位。</p>";
 
@@ -892,19 +954,18 @@ function renderAdventure(kind) {
       ? "选择一台无人机：攻击 +1、最大生命 +1，或下一场战斗起手抽牌 +1；先预览再确认，也可以离开。"
       : "选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。";
   const cards = data.targets.map((card) => `
-        <div class="target${adventureTarget && adventureTarget.cardId === card.cardId ? " selected" : ""}" data-card="${esc(card.cardId)}">
-          <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
-          <div class="target-meta">攻击 ${card.atk}　生命 ${card.hp}</div>
-          <div class="target-meta">${card.atkBonus || card.hpBonus ? `改造：攻击 +${card.atkBonus || 0} / 生命 +${card.hpBonus || 0}` : "暂无改造"}</div>
+        <div class="target card-target${adventureTarget && adventureTarget.uid === card.uid ? " selected" : ""}" data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}">
+          ${cardFaceHtml(card)}
+          <div class="card-target-note">${card.atkBonus || card.hpBonus ? `改造：攻 +${card.atkBonus || 0} / 耐 +${card.hpBonus || 0}` : "选择强化方式"}</div>
           <div class="target-actions">
-            <button class="target-action" data-card="${esc(card.cardId)}" data-effect="atk">
+            <button class="target-action" data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}" data-effect="atk">
               攻击 +${data.atkBonus}<small>${card.atk} → ${card.atkPreview.atk}</small>
             </button>
-            <button class="target-action" data-card="${esc(card.cardId)}" data-effect="hp">
+            <button class="target-action" data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}" data-effect="hp">
               最大生命 +${data.hpBonus}<small>${card.maxHp} → ${card.hpPreview.maxHp}</small>
             </button>
             ${kind === "calibration" ? `
-            <button class="target-action" data-card="${esc(card.cardId)}" data-effect="level" ${card.canLevel ? "" : "disabled"}>
+            <button class="target-action" data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}" data-effect="level" ${card.canLevel ? "" : "disabled"}>
               等级 +${data.levelBonus}<small>${card.canLevel ? `Lv.${card.level} → Lv.${card.level + data.levelBonus}` : "已满级"}</small>
             </button>` : ""}
           </div>
@@ -949,12 +1010,11 @@ function renderDrift() {
   $("drift-view").hidden = false;
   $("drift-offers").innerHTML = drift.candidates.length
     ? drift.candidates.map((card) => `
-        <div class="offer">
-          <div class="offer-name">${esc(card.name)}</div>
+        <div class="offer card-offer">
+          ${cardFaceHtml(card)}
           <div class="offer-meta">${card.isUpgrade
             ? `已有 Lv.${card.currentLevel} → Lv.${card.targetLevel}`
             : `新卡 Lv.${card.targetLevel}`}</div>
-          <div class="offer-meta">费用 ${card.cost}　${card.type === "unit" ? `攻击 ${card.atk}　生命 ${card.hp}` : esc(card.effectText)}</div>
           <button class="buy-btn" data-id="${esc(card.cardId)}">${card.isUpgrade ? "升级" : "带走"}</button>
         </div>`).join("")
     : "<p class='hint'>卡匣里没有可用的记录。</p>";
@@ -975,11 +1035,10 @@ function renderRecycle() {
   $("recycle-view").hidden = false;
   $("recycle-targets").innerHTML = data.targets.length
     ? data.targets.map((card) => `
-        <div class="target${recycleTarget && recycleTarget.cardId === card.cardId ? " selected" : ""}${card.removable ? "" : " disabled"}"
-            data-card="${esc(card.cardId)}" ${card.removable ? 'role="button" tabindex="0"' : ""}>
-          <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
-          <div class="target-meta">攻击 ${card.atk}　生命 ${card.hp}</div>
-          <div class="target-meta">${card.removable ? `可拆解：+${card.price} 金币` : "不可拆解（最后一张单位牌）"}</div>
+        <div class="target card-target${recycleTarget && recycleTarget.uid === card.uid ? " selected" : ""}${card.removable ? "" : " disabled"}"
+            data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}" ${card.removable ? 'role="button" tabindex="0"' : ""}>
+          ${cardFaceHtml(card)}
+          <div class="card-target-note">${card.removable ? `可拆解 · ${card.price} 金币` : "不可拆解 · 最后一张单位"}</div>
         </div>`).join("")
     : "<p class='hint'>牌组里没有卡牌。</p>";
 
@@ -1006,8 +1065,9 @@ function renderShop() {
     const meta = offer.kind === "new"
       ? "新单位"
       : offer.kind === "upgrade" ? "升级已有单位" : esc(offer.effectText);
-    return `<div class="offer">
-        <div class="offer-name">${esc(offer.name)}</div>
+    const card = offerCardView(offer);
+    return `<div class="offer card-offer">
+        ${cardFaceHtml(card)}
         <div class="offer-meta">${meta}</div>
         <div class="offer-price">${offer.price} 金币</div>
         <button class="buy-btn" data-id="${esc(offer.id)}" ${offer.buyable ? "" : "disabled"}>
@@ -1043,12 +1103,11 @@ function renderTrial() {
   rewards.hidden = !success;
   rewards.innerHTML = success
     ? trial.candidates.map((card) => `
-        <div class="offer">
-          <div class="offer-name">${esc(card.name)}</div>
+        <div class="offer card-offer">
+          ${cardFaceHtml(card)}
           <div class="offer-meta">${card.isUpgrade
             ? `已有 Lv.${card.currentLevel} → Lv.${card.targetLevel}`
             : `新卡 Lv.${card.targetLevel}`}</div>
-          <div class="offer-meta">费用 ${card.cost}　${card.type === "unit" ? `攻击 ${card.atk}　生命 ${card.hp}` : esc(card.effectText)}</div>
           <button class="buy-btn" data-id="${esc(card.cardId)}">${card.isUpgrade ? "升级" : "带走"}</button>
         </div>`).join("")
     : "";
@@ -1085,10 +1144,10 @@ function renderRelay() {
   $("relay-targets").innerHTML = showTargets
     ? data.targets.length
       ? data.targets.map((card) => `
-        <div class="target${relayTarget && relayTarget.cardId === card.cardId ? " selected" : ""}"
-            data-card="${esc(card.cardId)}" role="button" tabindex="0">
-          <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
-          <div class="target-meta">攻击 ${card.atk} → ${card.atkPreview.atk}　生命 ${card.maxHp}</div>
+        <div class="target card-target${relayTarget && relayTarget.uid === card.uid ? " selected" : ""}"
+            data-card="${esc(card.cardId)}" data-uid="${esc(card.uid)}" role="button" tabindex="0">
+          ${cardFaceHtml(card)}
+          <div class="card-target-note">攻击 ${card.atk} → ${card.atkPreview.atk}</div>
         </div>`).join("")
       : "<p class='hint'>没有可强化的单位。</p>"
     : "";
@@ -1261,6 +1320,13 @@ function bindEvents() {
     else if (action === "retry") act("/api/battle/retry", {});
   });
 
+  $("elite-offers").addEventListener("click", (event) => {
+    const button = event.target.closest(".buy-btn");
+    if (!button || button.disabled) return;
+    act("/api/elite/reward/choose", { cardId: button.dataset.id });
+  });
+  $("elite-leave").addEventListener("click", () => act("/api/elite/reward/leave", {}));
+
   $("offers").addEventListener("click", (event) => {
     const button = event.target.closest(".buy-btn");
     if (!button || button.disabled) return;
@@ -1278,16 +1344,17 @@ function bindEvents() {
   $("signal-targets").addEventListener("click", (event) => {
     const element = event.target.closest(".target");
     if (!element) return;
-    signalTarget = signalTargets().find((card) => card.cardId === element.dataset.card) || null;
+    signalTarget = signalTargets().find((card) => card.uid === element.dataset.uid) || null;
     renderSignal();
   });
   $("signal-confirm").addEventListener("click", () => {
     if (!signalTarget || !signalAction) return;
     const cardId = signalTarget.cardId;
+    const cardUid = signalTarget.uid;
     const action = signalAction;
     signalTarget = null;
     signalAction = null;
-    act("/api/signal/apply", { action, cardId });
+    act("/api/signal/apply", { action, cardId, cardUid });
   });
   $("signal-cancel").addEventListener("click", () => {
     signalTarget = null;
@@ -1301,16 +1368,17 @@ function bindEvents() {
     adventureEffect = button.dataset.effect;
     adventureTarget = adventureEffect === "draw"
       ? null
-      : state[enhanceKind].targets.find((card) => card.cardId === button.dataset.card) || null;
+      : state[enhanceKind].targets.find((card) => card.uid === button.dataset.uid) || null;
     renderAdventure(enhanceKind);
   });
   $("adventure-confirm").addEventListener("click", () => {
     if (!adventureEffect || (adventureEffect !== "draw" && !adventureTarget)) return;
     const cardId = adventureTarget ? adventureTarget.cardId : "";
+    const cardUid = adventureTarget ? adventureTarget.uid : undefined;
     const effect = adventureEffect;
     adventureTarget = null;
     adventureEffect = null;
-    act(`/api/${enhanceKind}/apply`, { cardId, effect });
+    act(`/api/${enhanceKind}/apply`, { cardId, cardUid, effect });
   });
   $("adventure-cancel").addEventListener("click", () => {
     adventureTarget = null;
@@ -1330,7 +1398,7 @@ function bindEvents() {
   $("recycle-targets").addEventListener("click", (event) => {
     const element = event.target.closest(".target");
     if (!element || element.classList.contains("disabled") || !state.recycle) return;
-    recycleTarget = state.recycle.targets.find((card) => card.cardId === element.dataset.card) || null;
+    recycleTarget = state.recycle.targets.find((card) => card.uid === element.dataset.uid) || null;
     renderRecycle();
   });
   $("recycle-targets").addEventListener("keydown", (event) => {
@@ -1338,14 +1406,15 @@ function bindEvents() {
     const element = event.target.closest(".target");
     if (!element || element.classList.contains("disabled") || !state.recycle) return;
     event.preventDefault();
-    recycleTarget = state.recycle.targets.find((card) => card.cardId === element.dataset.card) || null;
+    recycleTarget = state.recycle.targets.find((card) => card.uid === element.dataset.uid) || null;
     renderRecycle();
   });
   $("recycle-confirm").addEventListener("click", () => {
     if (!recycleTarget) return;
     const cardId = recycleTarget.cardId;
+    const cardUid = recycleTarget.uid;
     recycleTarget = null;
-    act("/api/recycle/apply", { cardId });
+    act("/api/recycle/apply", { cardId, cardUid });
   });
   $("recycle-cancel").addEventListener("click", () => {
     recycleTarget = null;
@@ -1395,7 +1464,7 @@ function bindEvents() {
   $("relay-targets").addEventListener("click", (event) => {
     const element = event.target.closest(".target");
     if (!element || !state.relay) return;
-    relayTarget = state.relay.targets.find((card) => card.cardId === element.dataset.card) || null;
+    relayTarget = state.relay.targets.find((card) => card.uid === element.dataset.uid) || null;
     renderRelay();
   });
   $("relay-targets").addEventListener("keydown", (event) => {
@@ -1403,14 +1472,14 @@ function bindEvents() {
     const element = event.target.closest(".target");
     if (!element || !state.relay) return;
     event.preventDefault();
-    relayTarget = state.relay.targets.find((card) => card.cardId === element.dataset.card) || null;
+    relayTarget = state.relay.targets.find((card) => card.uid === element.dataset.uid) || null;
     renderRelay();
   });
   $("relay-confirm").addEventListener("click", () => {
     if (relayAction === "keep") {
       act("/api/relay/choose", { choice: "keep" });
     } else if (relayAction === "cut" && relayTarget) {
-      act("/api/relay/cut", { cardId: relayTarget.cardId });
+      act("/api/relay/cut", { cardId: relayTarget.cardId, cardUid: relayTarget.uid });
     }
   });
   $("relay-cancel").addEventListener("click", () => {

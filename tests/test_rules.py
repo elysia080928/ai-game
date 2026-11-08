@@ -52,6 +52,7 @@ def put_enemy(b, name, column, atk, hp, side="enemy", **extra):
 
 def state_at(node_id, phase, completed=None, route=None, flags=None):
     state = G.new_state()
+    state.pop("mapData", None)  # 旧路线固定地图，用于既有规则测试
     state["nodeId"] = node_id
     state["phase"] = phase
     state["storyLine"] = 0
@@ -280,13 +281,15 @@ def test_forced_discard():
 
 
 def test_story_flow_and_new_game():
-    state = G.new_state()
-    assert state["phase"] == "before_story" and state["nodeId"] == "battle1"
+    state = G.new_state(42)
+    assert state["phase"] == "before_story"
+    assert state["nodeId"] == state["mapData"]["start"]
     G.advance_story(state)
     assert state["phase"] == "node"
-    assert G.current_node(state)["id"] == "battle1"
-    state2 = G.new_state()
-    assert state2["nodeId"] == "battle1" and state2["gold"] == 0
+    assert G.current_node(state)["role"] == "start"
+    state2 = G.new_state(42)
+    assert state2["nodeId"] == state["nodeId"] and state2["gold"] == 0
+    assert state2["mapData"]["nodes"] == state["mapData"]["nodes"]
     assert len(state2["cards"]) == 8
 
 
@@ -455,6 +458,203 @@ def test_migration_old_saves():
             raise AssertionError(f"无法读取的存档应报错：{bad}")
 
 
+def clear_story(state):
+    for _ in range(20):
+        if state["phase"] not in ("before_story", "after_story"):
+            return
+        story = G.public_state(state)["story"] or {}
+        if story.get("options"):
+            G.choose_story_option(state, story["options"][0]["id"])
+        else:
+            G.advance_story(state, skip_whole_slot=True)
+    raise AssertionError("剧情未结束")
+
+
+def elite_state(seed=0):
+    state = G.new_state(seed)
+    state["nodeId"] = state["mapData"]["elite"]
+    state["phase"] = "node"
+    state["storyLine"] = 0
+    state["completed"] = []
+    state["nodeData"] = {}
+    G.confirm_battle_result(state)
+    assert state["phase"] == "elite_reward"
+    return state
+
+
+def test_generated_map_structure():
+    seen_maps = set()
+    for seed in range(60):
+        data = G.generate_map(seed)
+        nodes = {node["id"]: node for node in data["nodes"]}
+        assert data["runLength"] in (6, 7, 8)
+        assert data["start"] in nodes and data["boss"] in nodes and data["elite"] in nodes
+        columns = {}
+        for node in data["nodes"]:
+            columns.setdefault(node["column"], []).append(node)
+        assert sorted(columns) == list(range(data["runLength"]))
+        widths = [len(columns[index]) for index in range(data["runLength"])]
+        assert 1 in widths and max(widths) >= 2 and max(widths) <= G.MAP_MAX_BRANCHES
+        for parent, children in ((node["id"], node["next"]) for node in data["nodes"]):
+            assert all(nodes[child]["column"] == nodes[parent]["column"] + 1 for child in children)
+        for node in data["nodes"]:
+            assert node["next"] or node["role"] == "boss"
+            assert node["before"] is not None and node["after"] is not None
+        assert {node["role"] for node in data["nodes"]} >= {"start", "late", "boss", "event", "elite"}
+        events = [node for node in data["nodes"] if node["role"] == "event"]
+        assert events and len({node["type"] for node in events}) == len(events)
+        early = next(node for node in data["nodes"] if node["role"] == "start")
+        late = next(node for node in data["nodes"] if node["role"] == "late")
+        assert early["encounter"] in G.BATTLE_POOLS["early"]
+        assert late["encounter"] in G.BATTLE_POOLS["late"]
+        assert early["encounter"] != late["encounter"]
+        signature = (
+            data["seed"],
+            tuple(sorted(node["id"] for node in data["nodes"])),
+            tuple(map(tuple, data["edges"])),
+        )
+        seen_maps.add(signature)
+    assert len(seen_maps) > 1, "不同种子应生成不同地图"
+    for pool in G.BATTLE_POOLS.values():
+        assert len(pool) >= 3
+
+
+def test_generated_map_route_persistence_and_closed_branches():
+    for seed in range(12):
+        state = G.new_state(seed)
+        clear_story(state)
+        assert G.current_node(state)["role"] == "start"
+        G.confirm_battle_result(state)
+        clear_story(state)
+        assert state["phase"] == "map"
+        view = G.public_state(state)["map"]
+        assert len(view["nodes"]) == len(state["mapData"]["nodes"])
+        assert all(node["status"] in ("completed", "available", "locked", "closed") for node in view["nodes"])
+        available = G.available_nodes(state)
+        assert available and set(available) == set(view["available"])
+        for node in view["nodes"]:
+            if node["status"] != "available":
+                try:
+                    G.select_node(state, node["id"])
+                except B.GameError:
+                    pass
+                else:
+                    raise AssertionError("不可达节点不能直接进入")
+        chosen = available[0]
+        G.select_node(state, chosen)
+        assert state["nodeId"] == chosen
+        clear_story(state)
+        chosen_node = G.current_node(state)
+        if chosen_node["type"] == "battle":
+            G.confirm_battle_result(state)
+            if state["phase"] == "elite_reward":
+                G.elite_reward_leave(state)
+        else:
+            G.finish_node(state, chosen)
+        clear_story(state)
+        if state["phase"] == "map":
+            after = {node["id"]: node for node in G.public_state(state)["map"]["nodes"]}
+            for sibling in available[1:]:
+                assert after[sibling]["status"] == "closed", sibling
+        for _ in range(40):
+            if state["phase"] == "complete":
+                break
+            if state["phase"] == "map":
+                nodes = G.available_nodes(state)
+                assert nodes
+                G.select_node(state, nodes[0])
+            elif state["phase"] == "node":
+                node = G.current_node(state)
+                if node["type"] == "battle":
+                    G.confirm_battle_result(state)
+                else:
+                    G.finish_node(state, node["id"])
+            elif state["phase"] == "elite_reward":
+                G.elite_reward_leave(state)
+            elif state["phase"] in ("before_story", "after_story"):
+                clear_story(state)
+        assert state["phase"] == "complete"
+        assert state["mapData"]["boss"] in state["completed"]
+        assert len(state["completed"]) == state["mapData"]["runLength"]
+        reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
+        assert not changed
+        assert reloaded["mapData"] == state["mapData"]
+        assert reloaded["nodeId"] == state["nodeId"]
+
+
+def test_generated_map_migration_and_duplicate_card_uids():
+    state = G.new_state(7)
+    reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
+    assert not changed
+    assert reloaded["mapData"] == state["mapData"]
+    assert all(card["uid"] for card in reloaded["cards"])
+    assert len({card["uid"] for card in reloaded["cards"]}) == len(reloaded["cards"])
+
+    old_cards = [{key: value for key, value in card.items() if key != "uid"} for card in state["cards"]]
+    state["cards"] = old_cards
+    reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
+    assert changed
+    assert all(card["uid"] for card in reloaded["cards"])
+    assert len({card["uid"] for card in reloaded["cards"]}) == len(reloaded["cards"])
+
+    tampered = json.loads(json.dumps(state))
+    tampered["mapData"]["edges"][0][1] = "missing"
+    try:
+        G.migrate_state(tampered)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("损坏地图应拒绝读取")
+
+
+def test_elite_reward_and_deck_limit():
+    state = elite_state(1)
+    view = G.public_state(state)["eliteReward"]
+    assert view and view["claimed"] is False
+    assert len(view["candidates"]) == 3
+    assert not view["deckFull"]
+    pick = view["candidates"][0]["cardId"]
+    before = len(state["cards"])
+    G.elite_reward_choose(state, pick)
+    assert len(state["cards"]) == before + 1
+    assert state["cards"][-1]["cardId"] == pick
+    assert state["cards"][-1]["uid"] not in {card["uid"] for card in state["cards"][:-1]}
+    assert state["mapData"]["elite"] in state["completed"]
+    assert state["phase"] == "after_story"
+    G.elite_reward_choose(state, pick)
+    assert len(state["cards"]) == before + 1
+
+    full = elite_state(2)
+    card = full["cards"][0]
+    while len(full["cards"]) < G.MAX_DECK:
+        copy_card = dict(card)
+        copy_card["uid"] = f"fill_{len(full['cards'])}"
+        full["cards"].append(copy_card)
+    assert G.public_state(full)["eliteReward"]["deckFull"] is True
+    try:
+        G.elite_reward_choose(full, G.public_state(full)["eliteReward"]["candidates"][0]["cardId"])
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("满牌组不能加入奖励卡")
+    G.elite_reward_leave(full)
+    assert full["phase"] == "after_story" and len(full["cards"]) == G.MAX_DECK
+
+
+def test_duplicate_cards_target_by_uid():
+    state = state_at("adventure", "node", completed=["battle1", "recruit"])
+    unit = next(
+        card for card in state["cards"] if G.CARDS[card["cardId"]]["type"] == "unit"
+    )
+    duplicate = dict(unit, uid="duplicate_uid")
+    state["cards"].append(duplicate)
+    original_bonus = unit["atkBonus"]
+    G.adventure_apply(state, unit["cardId"], "atk", "duplicate_uid")
+    assert unit["atkBonus"] == original_bonus
+    assert duplicate["atkBonus"] == G.ADVENTURE["atkBonus"]
+    assert state["phase"] == "after_story"
+
+
 def test_battle_hp_bonus_and_forecast():
     deck = [{"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 2} for _ in range(8)]
     b = B.make_battle(
@@ -602,12 +802,13 @@ def test_drift_capsule():
         assert len(state["cards"]) == 8
     else:
         assert len(state["cards"]) == 9
-        assert state["cards"][-1] == {
+        assert {key: state["cards"][-1][key] for key in ("cardId", "level", "atkBonus", "hpBonus")} == {
             "cardId": pick,
             "level": 1,
             "atkBonus": 0,
             "hpBonus": 0,
         }
+        assert state["cards"][-1]["uid"]
     assert state["phase"] == "after_story"
 
     broke = state_at(

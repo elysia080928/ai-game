@@ -217,6 +217,57 @@
         {"turn": 5, "column": 1, "enemy": "double_striker"}
       ],
       "reward": {"gold": 0}
+    },
+    "early_patrol": {
+      "name": "巡逻编队",
+      "playerHp": 15,
+      "enemyHp": 15,
+      "plan": [
+        {"turn": 1, "column": 1, "enemy": "small_sentry"},
+        {"turn": 1, "column": 4, "enemy": "small_sentry"},
+        {"turn": 2, "column": 3, "enemy": "assault_sentry"},
+        {"turn": 3, "column": 2, "enemy": "defender"}
+      ],
+      "reward": {"gold": 20}
+    },
+    "early_pincer": {
+      "name": "钳形巡逻",
+      "playerHp": 15,
+      "enemyHp": 15,
+      "plan": [
+        {"turn": 1, "column": 1, "enemy": "small_sentry"},
+        {"turn": 1, "column": 3, "enemy": "small_sentry"},
+        {"turn": 2, "column": 2, "enemy": "defender"},
+        {"turn": 3, "column": 4, "enemy": "fork_sentry"}
+      ],
+      "reward": {"gold": 20}
+    },
+    "late_bulwark": {
+      "name": "壁垒防线",
+      "playerHp": 15,
+      "enemyHp": 15,
+      "plan": [
+        {"turn": 1, "column": 1, "enemy": "assault_sentry"},
+        {"turn": 1, "column": 4, "enemy": "small_sentry"},
+        {"turn": 2, "column": 2, "enemy": "wide_bulwark"},
+        {"turn": 3, "column": 3, "enemy": "fork_sentry"},
+        {"turn": 4, "column": 1, "enemy": "double_striker"}
+      ],
+      "reward": {"gold": 0}
+    },
+    "late_pressure": {
+      "name": "高压拦截",
+      "playerHp": 15,
+      "enemyHp": 15,
+      "plan": [
+        {"turn": 1, "column": 2, "enemy": "defender"},
+        {"turn": 1, "column": 4, "enemy": "mine_beetle"},
+        {"turn": 2, "column": 1, "enemy": "double_striker"},
+        {"turn": 2, "column": 3, "enemy": "assault_sentry"},
+        {"turn": 3, "column": 3, "enemy": "wide_bulwark"},
+        {"turn": 4, "column": 1, "enemy": "drift_hunter"}
+      ],
+      "reward": {"gold": 0}
     }
   },
   "recruit": {
@@ -283,6 +334,40 @@
   "relay": {"atkBonus": 1, "flag": "relay_kept"},
   "runLength": 7,
   "firstNode": "battle1",
+  "mapGeneration": {
+    "runLengths": [6, 7, 8],
+    "maxBranches": 3,
+    "eventTypes": [
+      "recruit", "signal", "relay", "adventure", "calibration", "drones",
+      "drift", "recycle", "shop", "trial", "training"
+    ],
+    "battlePools": {
+      "early": ["battle1", "early_patrol", "early_pincer"],
+      "late": ["battle2", "late_bulwark", "late_pressure"]
+    },
+    "templates": {
+      "battle_early": {
+        "type": "battle",
+        "name": "遭遇战",
+        "before": [
+          {"speaker": "爱", "text": "前路的巡逻编队挡在航道中央。部署机偶，准备接敌。", "background": "battle"}
+        ],
+        "after": [
+          {"speaker": "爱", "text": "巡逻编队清空。航道的下一段在雾里亮起。"}
+        ]
+      },
+      "battle_late": {
+        "type": "battle",
+        "name": "拦截战",
+        "before": [
+          {"speaker": "爱", "text": "越靠近核心，拦路的机偶越密。这一场不会轻松。", "background": "battle"}
+        ],
+        "after": [
+          {"speaker": "爱", "text": "防线被撕开了。核心的信号就在前面。"}
+        ]
+      }
+    }
+  },
   "nodes": [
     {
       "id": "battle1",

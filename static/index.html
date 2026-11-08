@@ -56,14 +56,15 @@
       <section id="map-view" class="view" hidden>
         <div class="map-head">
           <div>
-            <h2>路线选择</h2>
+            <p class="map-eyebrow">第一章 · 回路边境</p>
+            <h2>向未知处前行</h2>
             <p class="map-hint" id="map-hint">选择下一个可进入的节点。</p>
           </div>
           <div class="map-route" id="map-route"></div>
         </div>
-        <div class="book-spread">
-          <div class="book-page" id="map-page-left"></div>
-          <div class="book-page" id="map-page-right"></div>
+        <div class="map-table">
+          <div class="map-sheet" id="map-page-left"></div>
+          <div class="map-footer" id="map-page-right"></div>
         </div>
       </section>
 
@@ -113,6 +114,18 @@
             <p id="result-text"></p>
             <button id="result-action" class="primary"></button>
           </div>
+        </div>
+      </section>
+
+      <section id="elite-reward-view" class="view" hidden>
+        <div class="node-panel">
+          <h2>精英战利品</h2>
+          <p class="node-hint">从三张候选卡中选择一张加入牌组；同名卡作为独立实体加入。也可以放弃奖励。</p>
+          <div class="offers" id="elite-offers"></div>
+          <div class="node-actions">
+            <button id="elite-leave" class="ghost">放弃奖励</button>
+          </div>
+          <div class="node-note" id="elite-note"></div>
         </div>
       </section>
 

@@ -1,0 +1,28 @@
+<svg preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" width="640" height="1200" viewBox="0 0 640 1200">
+  <defs>
+    <radialGradient id="paper"><stop stop-color="#e4d6ae"/><stop offset=".7" stop-color="#c8bc91"/><stop offset="1" stop-color="#8d9578"/></radialGradient>
+    <linearGradient id="forest" x2="1" y2="1"><stop stop-color="#476f60"/><stop offset="1" stop-color="#7d9672"/></linearGradient>
+    <g id="pine" stroke="#345647" stroke-width="1.3" stroke-linejoin="round"><path d="M0 3v12"/><path d="m0-36-10 19h5l-12 19h9L-22 15Q0 23 22 15L8 2h9L5-17h5L0-36Z" fill="url(#forest)"/><path d="M0-29v43m0-14 11 10M0-10l-8 8" fill="none" opacity=".4"/></g>
+    <g id="grove"><use href="#pine" x="-34" y="-10" transform="scale(.8)"/><use href="#pine" x="19" y="-11" transform="scale(.75)"/><use href="#pine" x="-9" y="16"/><use href="#pine" x="37" y="25" transform="scale(.7)"/></g>
+  </defs>
+  <rect width="640" height="1200" fill="url(#paper)"/>
+  <g fill="#739582" opacity=".18"><path d="M0 0h640v180c-80-40-83 100-190 10S126 208 0 147Z"/><path d="M0 590c151 83 256-115 363-35s183 51 277-5v206c-190-110-370 80-640-29Z"/><path d="M0 1200v-170c124 78 202-33 310 15s198-49 330 21v134Z"/></g>
+  <g fill="none" stroke="#657d69" stroke-width="1.2" opacity=".26">
+    <path d="M-20 190C129 129 248 232 360 164S499 73 660 131M-20 204C129 143 248 246 360 178S499 87 660 145M-20 218C129 157 248 260 360 192S499 101 660 159"/>
+    <path d="M-20 574c110 61 208-44 339 13s226-36 341-5M-20 590c110 61 208-44 339 13s226-36 341-5M-20 606c110 61 208-44 339 13s226-36 341-5"/>
+    <path d="M-20 1020c181-64 263 76 371 9s187-66 309 4M-20 1036c181-64 263 76 371 9s187-66 309 4M-20 1052c181-64 263 76 371 9s187-66 309 4"/>
+    <path d="M96 410c-53-30-81-2-76 37s71 36 94 13-18-50-18-50Zm-6 13c-31-19-50 0-46 23s44 20 57 7-11-30-11-30ZM516 868c-38-66-94-31-100 2s22 78 69 72 69-8 31-74Zm-8 10c-24-42-60-20-64 2s14 49 44 46 44-6 20-48Z"/>
+  </g>
+  <path d="M360-20c-100 120-200 193-119 304s182 107 121 244-150 180-98 292 148 224 30 400" fill="none" stroke="#627f76" stroke-width="27" opacity=".3"/>
+  <path d="M360-20c-100 120-200 193-119 304s182 107 121 244-150 180-98 292 148 224 30 400" fill="none" stroke="#88ada1" stroke-width="17" opacity=".65"/>
+  <path d="M355-20c-100 120-200 193-119 304s182 107 121 244-150 180-98 292 148 224 30 400" fill="none" stroke="#d9dfbf" stroke-width="2" opacity=".65"/>
+  <g opacity=".8">
+    <use href="#grove" x="52" y="155"/><use href="#grove" x="117" y="177"/><use href="#grove" x="506" y="85"/><use href="#grove" x="586" y="122"/>
+    <use href="#grove" x="61" y="350"/><use href="#grove" x="551" y="364"/><use href="#grove" x="605" y="393"/>
+    <use href="#grove" x="33" y="599"/><use href="#grove" x="98" y="629"/><use href="#grove" x="555" y="584"/>
+    <use href="#grove" x="36" y="864"/><use href="#grove" x="80" y="910"/><use href="#grove" x="573" y="895"/>
+    <use href="#grove" x="63" y="1110"/><use href="#grove" x="127" y="1160"/><use href="#grove" x="463" y="1170"/><use href="#grove" x="559" y="1124"/>
+  </g>
+  <g fill="none" stroke="#405d51" opacity=".4" stroke-width="2"><circle cx="540" cy="1052" r="32"/><circle cx="540" cy="1052" r="24"/><path d="m540 1007 8 45-8 45-8-45 8-45Zm-44 45h88M20 20h600v1160H20z"/></g>
+  <path d="M0 400h640M0 800h640M320 0v1200" fill="none" stroke="#fff1c9" stroke-width="2" opacity=".25"/>
+</svg>

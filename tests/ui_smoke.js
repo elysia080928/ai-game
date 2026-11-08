@@ -1,7 +1,7 @@
 /**
  * 浏览器冒烟测试：node tests/ui_smoke.js（需要先启动服务，以及本机 Edge）。
- * 通过 CDP 驱动无头 Edge：注册 → 普通/宽体拖放 → 战斗 1 → 剧情选项 → 关卡选择 →
- * 信号/校准/漂流卡匣 → 战斗 2 → 逐列预告与键盘部署；并检查窄窗口滚动。
+ * 通过 CDP 驱动无头 Edge：注册 → 拖放/技能/宽体部署 → 随机地图与刷新持久化 →
+ * 精英路线与三选一奖励；并检查桌面、窄窗与手机布局。
  */
 
 const { spawn, execFileSync } = require("child_process");
@@ -101,16 +101,26 @@ async function main() {
     }
 
     async function storyUntil(viewId) {
-      for (let index = 0; index < 12; index += 1) {
+      for (let index = 0; index < 16; index += 1) {
         if (await visible(viewId)) return;
-        await click("#story-next");
+        const hasOptions = await evaluate(
+          "document.querySelectorAll('#story-options .story-option').length > 0"
+        );
+        if (hasOptions) await click("#story-options .story-option");
+        else await click("#story-next");
         await sleep(250);
       }
       if (!(await visible(viewId))) throw new Error(`剧情未进入 ${viewId}`);
     }
 
-    async function screenshot(name) {
-      const { data } = await command("Page.captureScreenshot", { format: "png" });
+    async function screenshot(name, selector) {
+      const clip = selector && await evaluate(`(() => {
+        const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+        return { x: rect.left + scrollX, y: rect.top + scrollY, width: rect.width, height: rect.height, scale: 1 };
+      })()`);
+      const { data } = await command("Page.captureScreenshot", {
+        format: "png", ...(clip ? { clip, captureBeyondViewport: true } : {}),
+      });
       const file = path.join(os.tmpdir(), name);
       fs.writeFileSync(file, Buffer.from(data, "base64"));
       console.log(`截图 ${file}`);
@@ -151,19 +161,21 @@ async function main() {
     await waitFor(async () => await visible("story-view"), "前置剧情显示");
     console.log("ok 注册与剧情界面");
 
-    await command("Emulation.setDeviceMetricsOverride", {
-      width: 760,
-      height: 1000,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
-    await sleep(300);
-    const storyOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
-    if (storyOverflow) throw new Error("窄窗口剧情界面出现横向溢出");
-    await screenshot("ai-game-story-narrow.png");
-    await command("Emulation.clearDeviceMetricsOverride");
-    await sleep(200);
-    console.log("ok 窄窗口下剧情与跳过按钮布局");
+    if (process.env.CARD_UI_ONLY !== "1") {
+      await command("Emulation.setDeviceMetricsOverride", {
+        width: 760,
+        height: 1000,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      await sleep(300);
+      const storyOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
+      if (storyOverflow) throw new Error("窄窗口剧情界面出现横向溢出");
+      await screenshot("ai-game-story-narrow.png");
+      await command("Emulation.clearDeviceMetricsOverride");
+      await sleep(200);
+      console.log("ok 窄窗口下剧情与跳过按钮布局");
+    }
 
     await click("#story-next");
     await waitFor(
@@ -172,6 +184,203 @@ async function main() {
       "战斗界面载入"
     );
     console.log("ok 进入战斗界面");
+
+    const desktopBattle = await evaluate(`(() => {
+      const controls = document.querySelector('.battle-bottom').getBoundingClientRect();
+      const cards = [...document.querySelectorAll('#hand .card')];
+      const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      return {
+        theme: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
+        overlap: cards.some((card) => overlaps(controls, card.getBoundingClientRect())),
+      };
+    })()`);
+    if (desktopBattle.theme !== "#050608" || desktopBattle.overlap) {
+      throw new Error(`战斗黑色主题或手牌布局异常：${JSON.stringify(desktopBattle)}`);
+    }
+    await screenshot("ai-game-battle-desktop.png", "#battle-view");
+    await command("Emulation.setDeviceMetricsOverride", {
+      width: 375,
+      height: 812,
+      deviceScaleFactor: 1,
+      mobile: true,
+    });
+    await sleep(250);
+    const phoneBattle = await evaluate(`(() => {
+      const view = document.getElementById('battle-view').getBoundingClientRect();
+      const hand = document.getElementById('hand');
+      const handRect = hand.getBoundingClientRect();
+      const controls = document.querySelector('.battle-bottom').getBoundingClientRect();
+      const cards = [...document.querySelectorAll('#hand .card')];
+      const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      return {
+        overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        handFits: handRect.left >= view.left - 2 && handRect.right <= view.right + 2,
+        handScrollable: hand.scrollWidth > hand.clientWidth + 1,
+        readableCards: cards.every((card) => card.getBoundingClientRect().width >= 96),
+        controlsOverlap: cards.some((card) => overlaps(controls, card.getBoundingClientRect())),
+      };
+    })()`);
+    if (phoneBattle.overflow || !phoneBattle.handFits || !phoneBattle.handScrollable ||
+        !phoneBattle.readableCards || phoneBattle.controlsOverlap) {
+      throw new Error(`手机战斗界面布局异常：${JSON.stringify(phoneBattle)}`);
+    }
+    await screenshot("ai-game-battle-phone.png", "#battle-view");
+    await command("Emulation.clearDeviceMetricsOverride");
+    await sleep(200);
+    const handCards = await evaluate(`(() => {
+      const cards = [...document.querySelectorAll('#hand .card')];
+      return {
+        count: cards.length,
+        complete: cards.every((card) => card.querySelector('.card-face .pixel-art-image')?.complete &&
+          card.querySelector('.card-face .pixel-art-image')?.naturalWidth > 0 &&
+          card.querySelector('.card-face .card-cost') && card.querySelector('.card-face .card-level')),
+      };
+    })()`);
+    if (!handCards.count || !handCards.complete) throw new Error(`战斗手牌缺少完整像素卡面：${JSON.stringify(handCards)}`);
+
+    await evaluate(`(() => {
+      const saved = {
+        state, signalAction, signalTarget, adventureTarget, adventureEffect,
+        enhanceKind, recycleTarget, relayAction, relayTarget, trialPick,
+      };
+      window.__cardUiSaved = saved;
+      const baseCards = state.deck;
+      const units = baseCards.filter((card) => card.type === 'unit').map((card) => ({
+        ...card, canUpgrade: true, canLevel: true,
+        atkPreview: { atk: card.atk + 1 }, hpPreview: { maxHp: card.maxHp + 1 },
+        levelPreview: { atk: card.atk + 1, maxHp: card.maxHp + 1 },
+        upgradePreview: { atk: card.atk + 1, maxHp: card.maxHp + 1 },
+        repairPreview: { maxHp: card.maxHp + 1 },
+      }));
+      const candidates = baseCards.slice(0, 3).map((card) => ({
+        ...card, currentLevel: card.level, targetLevel: card.level + 1, isUpgrade: true,
+      }));
+      state = {
+        ...state, gold: 99,
+        eliteReward: { candidates, deckFull: false },
+        recruit: { offers: units.slice(0, 3).map((card) => ({
+          cardId: card.cardId, name: card.name, level: card.level, maxLevel: 2, price: 10,
+        })), purchased: false },
+        signal: { hpBonus: 1, targets: units, hasRepairTarget: true, hasUpgradeTarget: true },
+        calibration: { atkBonus: 1, hpBonus: 2, levelBonus: 1, targets: units },
+        recycle: { targets: baseCards.map((card) => ({ ...card, price: 5, removable: true })) },
+        relay: { targets: units, atkBonus: 1, kept: false },
+        drift: { candidates, rerolls: 0, rerollLimit: 1, rerollPrice: 10, canReroll: true },
+        shop: { purchased: false, offers: [
+          { id: 'new', kind: 'new', cardId: units[0].cardId, name: units[0].name, price: 16, buyable: true },
+          { id: 'upgrade', kind: 'upgrade', cardId: units[1].cardId, name: units[1].name, price: 8, buyable: true },
+          { id: 'boost', kind: 'boost', cardId: units[2].cardId, name: units[2].name, price: 6, buyable: true, effectText: '攻击 +1' },
+        ] },
+        trial: { status: 'success', trials: [], candidates, hasCandidates: true, failureGold: 5 },
+      };
+      signalAction = 'upgrade';
+      signalTarget = null;
+      adventureTarget = null;
+      adventureEffect = null;
+      recycleTarget = null;
+      relayAction = 'cut';
+      relayTarget = null;
+      trialPick = null;
+      window.__inspectCardSurface = (surface, shouldRender = true) => {
+        if (shouldRender) hideViews();
+        const renderers = {
+          elite: renderEliteReward,
+          recruit: renderRecruit,
+          signal: renderSignal,
+          calibration: () => renderAdventure('calibration'),
+          recycle: renderRecycle,
+          relay: renderRelay,
+          drift: renderDrift,
+          shop: renderShop,
+          trial: renderTrial,
+        };
+        if (shouldRender) renderers[surface]();
+        const allFaces = [...document.querySelectorAll('.card-face')];
+        const faces = allFaces.filter((face) => face.getBoundingClientRect().width > 0);
+        const rects = faces.map((face) => face.getBoundingClientRect());
+        return {
+          surface, count: faces.length,
+          complete: faces.every((face) => face.querySelector('.pixel-art-image')?.complete &&
+            face.querySelector('.pixel-art-image')?.naturalWidth > 0 &&
+            face.querySelector('.card-name')?.textContent.trim() &&
+            face.querySelector('.card-cost') && face.querySelector('.card-metrics')),
+          portrait: rects.every((rect) => rect.height > rect.width),
+          pageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+          actionCount: document.querySelectorAll('#targets .target-action').length,
+          unitCount: state.calibration.targets.length,
+        };
+      };
+      return true;
+    })()`);
+
+    for (const [surface, selector] of [
+      ["elite", "#elite-reward-view"], ["recruit", "#recruit-view"], ["signal", "#signal-view"],
+      ["calibration", "#adventure-view"], ["recycle", "#recycle-view"], ["relay", "#relay-view"],
+      ["drift", "#drift-view"], ["shop", "#shop-view"], ["trial", "#trial-view"],
+    ]) {
+      await evaluate(`window.__inspectCardSurface(${JSON.stringify(surface)})`);
+      await waitFor(async () => await evaluate(`
+        [...document.querySelectorAll(${JSON.stringify(selector)} + ' .pixel-art-image')]
+          .every((image) => image.complete && image.naturalWidth > 0)
+      `), `${surface} 卡图加载`);
+      const check = await evaluate(`window.__inspectCardSurface(${JSON.stringify(surface)}, false)`);
+      if (!check.count || !check.complete || !check.portrait || check.pageOverflow) {
+        throw new Error(`卡牌界面渲染异常：${JSON.stringify(check)}`);
+      }
+      if (surface === "calibration" && check.actionCount !== check.unitCount * 3) {
+        throw new Error(`每张强化卡面应提供三项强化选择：${JSON.stringify(check)}`);
+      }
+      if (surface === "calibration") {
+        await sleep(250);
+        await screenshot("ai-game-card-enhancement.png", selector);
+      }
+      if (surface === "elite") {
+        await sleep(250);
+        await screenshot("ai-game-card-reward.png", selector);
+      }
+    }
+    const artAssets = await evaluate(`Promise.all([...new Set(Object.values(CARD_ART))].map((id) =>
+      new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve({ id, loaded: true });
+        image.onerror = () => resolve({ id, loaded: false });
+        image.src = '/assets/cards/' + id + '.png';
+      })
+    ))`);
+    const missingArt = artAssets.filter((asset) => !asset.loaded);
+    if (missingArt.length) throw new Error(`卡牌素材缺失：${JSON.stringify(missingArt)}`);
+    await command("Emulation.setDeviceMetricsOverride", {
+      width: 375, height: 812, deviceScaleFactor: 1, mobile: true,
+    });
+    await evaluate("window.__inspectCardSurface('calibration')");
+    await waitFor(async () => await evaluate(`
+      [...document.querySelectorAll('#adventure-view .pixel-art-image')]
+        .every((image) => image.complete && image.naturalWidth > 0)
+    `), "手机强化卡图加载");
+    const phoneEnhancement = await evaluate("window.__inspectCardSurface('calibration', false)");
+    if (!phoneEnhancement.count || !phoneEnhancement.complete || phoneEnhancement.pageOverflow) {
+      throw new Error(`手机强化卡牌布局异常：${JSON.stringify(phoneEnhancement)}`);
+    }
+    await screenshot("ai-game-card-enhancement-phone.png", "#adventure-view");
+    await command("Emulation.clearDeviceMetricsOverride");
+    await evaluate(`(() => {
+      const saved = window.__cardUiSaved;
+      state = saved.state;
+      signalAction = saved.signalAction;
+      signalTarget = saved.signalTarget;
+      adventureTarget = saved.adventureTarget;
+      adventureEffect = saved.adventureEffect;
+      enhanceKind = saved.enhanceKind;
+      recycleTarget = saved.recycleTarget;
+      relayAction = saved.relayAction;
+      relayTarget = saved.relayTarget;
+      trialPick = saved.trialPick;
+      delete window.__inspectCardSurface;
+      delete window.__cardUiSaved;
+      hideViews();
+      renderBattle();
+    })()`);
+    console.log("ok 战斗、奖励、招募与强化卡面在桌面/手机视口渲染完整");
 
     const interaction = await evaluate(`(() => {
       const cardSelect = getComputedStyle(document.querySelector('#hand .card')).userSelect;
@@ -467,6 +676,12 @@ async function main() {
     if (!sparkAfter.log.includes("闪电脉冲")) throw new Error(`闪电脉冲未写入战斗日志：${sparkAfter.log}`);
     console.log("ok 紧急维修/闪电脉冲技能牌可拖动并按目标结算");
 
+    if (process.env.CARD_UI_ONLY === "1") {
+      ws.close();
+      console.log("卡牌界面定向测试通过");
+      return;
+    }
+
     async function deployAll() {
       for (let index = 0; index < 6; index += 1) {
         const handBefore = await evaluate("document.querySelectorAll('#hand .card').length");
@@ -560,21 +775,103 @@ async function main() {
 
     await click("#result-action");
     await waitFor(async () => await visible("story-view"), "战斗后剧情");
-    await click("#story-next");
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#story-options .story-option').length")) === 2,
-      "剧情选项"
+    await storyUntil("map-view");
+    console.log("ok 战斗胜利后进入随机地图");
+
+    async function mapDomState() {
+      return evaluate(`(() => {
+        const map = state.map;
+        const nodes = [...document.querySelectorAll('.map-node')];
+        const available = [...document.querySelectorAll('.map-node:not(:disabled)')];
+        const svg = [...document.querySelectorAll('.map-paths')]
+          .find((element) => getComputedStyle(element).display !== 'none');
+        const paths = [...svg.querySelectorAll('.map-path')];
+        const openPaths = [...svg.querySelectorAll('.map-path.open')];
+        const connected = available.every((node) => {
+          const rect = node.getBoundingClientRect();
+          const target = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+          return openPaths.some((path) => {
+            const point = path.getPointAtLength(path.getTotalLength());
+            const screen = new DOMPoint(point.x, point.y).matrixTransform(path.getScreenCTM());
+            return Math.hypot(screen.x - target.x, screen.y - target.y) < 2;
+          });
+        });
+        return {
+          phase: state.phase,
+          runLength: state.runLength,
+          count: nodes.length,
+          total: map.nodes.length,
+          edges: map.edges.length,
+          paths: paths.length,
+          available: available.length,
+          availableIds: available.map((node) => node.dataset.id),
+          connected,
+          targetSize: available.every((node) => {
+            const rect = node.getBoundingClientRect();
+            return rect.width >= 44 && rect.height >= 44;
+          }),
+          lockedDisabled: map.nodes.filter((node) => node.status !== 'available')
+            .every((node) => document.querySelector('.map-node[data-id="' + node.id + '"]').disabled),
+          oldFixed: !!document.querySelector('.map-node[data-id="battle1"]'),
+          columns: [...new Set(map.nodes.map((node) => node.column))].sort((a, b) => a - b),
+          rows: [...new Set(map.nodes.map((node) => node.row))].sort((a, b) => a - b),
+          statuses: [...new Set(map.nodes.map((node) => node.status))],
+          seed: map.seed,
+        };
+      })()`);
+    }
+
+    async function checkMapLayout() {
+      const check = await mapDomState();
+      if (check.phase !== "map" || check.count !== check.total ||
+          check.total <= check.runLength || check.paths !== check.edges ||
+          check.available < 1 || !check.connected || !check.targetSize ||
+          !check.lockedDisabled || check.oldFixed ||
+          check.columns.length !== check.runLength) {
+        throw new Error(`随机地图节点、连线或点击区域异常：${JSON.stringify(check)}`);
+      }
+      return check;
+    }
+
+    let mapCheck = await checkMapLayout();
+    if (!mapCheck.statuses.includes("locked") || mapCheck.rows.length < 2) {
+      throw new Error(`随机地图缺少锁定节点或分支行：${JSON.stringify(mapCheck)}`);
+    }
+    console.log("ok 随机地图按服务端节点与真实连线渲染");
+
+    const mapSnapshot = await evaluate(
+      "JSON.stringify({phase:state.phase,nodeId:state.node.id,completed:state.completed,map:state.map,runLength:state.runLength})"
     );
-    await screenshot("ai-game-story-options.png");
-    await click('.story-option[data-option="battle1_signal"]');
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#story-options .story-option').length")) === 0,
-      "选项确认"
+    await command("Page.reload", {});
+    await waitFor(async () => {
+      try {
+        return (await evaluate(
+          "typeof state !== 'undefined' && !!state && state.phase === 'map' && !document.getElementById('map-view').hidden"
+        )) === true;
+      } catch (_) {
+        return false;
+      }
+    }, "刷新后回到选关");
+    const mapSnapshotAfter = await evaluate(
+      "JSON.stringify({phase:state.phase,nodeId:state.node.id,completed:state.completed,map:state.map,runLength:state.runLength})"
     );
-    await click("#story-next");
-    await waitFor(async () => await visible("map-view"), "关卡选择界面");
-    await screenshot("ai-game-map.png");
-    console.log("ok 剧情选项后进入关卡选择");
+    if (mapSnapshotAfter !== mapSnapshot) throw new Error("刷新后地图或遭遇被重新抽取");
+    mapCheck = await checkMapLayout();
+    console.log("ok 刷新后地图、节点与遭遇保持不变");
+
+    await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    const keyboardMap = await evaluate(`(() => {
+      const node = document.querySelector('.map-node:not(:disabled)');
+      node.focus({ preventScroll: true });
+      const visible = getComputedStyle(node.querySelector('.map-node-label')).visibility === 'visible';
+      const focus = node.matches(':focus-visible');
+      node.blur();
+      return visible && focus;
+    })()`);
+    if (!keyboardMap) throw new Error("键盘聚焦地图节点时缺少名称或焦点提示");
+    await waitFor(async () => await evaluate("document.getElementById('toast').hidden"), "战斗提示收起");
+    await screenshot("ai-game-map.png", "#map-view");
 
     await command("Emulation.setDeviceMetricsOverride", {
       width: 760,
@@ -585,389 +882,170 @@ async function main() {
     await sleep(300);
     const overflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
     if (overflow) throw new Error("窄窗口出现横向溢出");
-    await screenshot("ai-game-map-narrow.png");
+    await checkMapLayout();
+    await screenshot("ai-game-map-narrow.png", "#map-view");
     await command("Emulation.clearDeviceMetricsOverride");
     await sleep(200);
-    console.log("ok 窄窗口下关卡选择布局");
+    console.log("ok 窄窗口下随机地图布局");
 
-    await click('.map-node[data-id="signal"]');
-    await waitFor(async () => await visible("story-view"), "信号前置剧情");
-    const signalStory = await evaluate("document.getElementById('story-text').textContent");
-    if (!signalStory.includes("追着这个信号")) throw new Error(`剧情未按标记回应：${signalStory}`);
-    await click("#story-next");
-    await click("#story-next");
-    await waitFor(async () => await visible("signal-view"), "信号奇遇界面");
-    await click('.signal-action[data-action="upgrade"]');
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#signal-targets .target').length")) > 0,
-      "信号目标"
-    );
-    await click('#signal-targets .target[data-card="striker"]');
-    await waitFor(async () => await visible("signal-preview"), "信号预览");
-    await screenshot("ai-game-signal-preview.png");
-    await click("#signal-confirm");
-    await waitFor(async () => await visible("story-view"), "信号后剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("map-view"), "信号后选关");
-    await click('.map-node[data-id="calibration"]');
-    await waitFor(async () => await visible("story-view"), "校准前置剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("adventure-view"), "校准界面");
-    const calibrationTitle = await evaluate("document.getElementById('adventure-title').textContent");
-    if (calibrationTitle !== "校准平台") throw new Error(`校准界面标题错误：${calibrationTitle}`);
-    await click('.target-action[data-card="striker"][data-effect="hp"]');
-    await waitFor(async () => await visible("adventure-preview"), "校准预览");
-    const calibrationPreview = await evaluate("document.getElementById('preview-text').textContent");
-    if (!calibrationPreview.includes("最大生命")) throw new Error(`校准预览错误：${calibrationPreview}`);
-    await screenshot("ai-game-calibration-preview.png");
-    await click("#adventure-confirm");
-    await waitFor(async () => await visible("story-view"), "校准后剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("map-view"), "校准后选关");
-    await click('.map-node[data-id="drift_capsule"]');
-    await waitFor(async () => await visible("story-view"), "卡匣前置剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("drift-view"), "漂流卡匣界面");
-    const cardCount = await evaluate("document.querySelectorAll('#drift-offers .offer').length");
-    if (cardCount !== 3) throw new Error(`卡匣应有 3 张候选，实际 ${cardCount}`);
-    const goldBeforeReroll = await evaluate("Number(document.getElementById('hud-gold').textContent)");
-    await click("#drift-reroll");
-    await waitFor(async () => {
-      const gold = await evaluate("Number(document.getElementById('hud-gold').textContent)");
-      return gold < goldBeforeReroll;
-    }, "卡匣重抽扣费");
-    const rerollDisabled = await evaluate("document.getElementById('drift-reroll').disabled");
-    if (!rerollDisabled) throw new Error("重抽一次后按钮应禁用");
-    await screenshot("ai-game-drift.png");
-    await click("#drift-offers .offer .buy-btn");
-    await waitFor(async () => await visible("story-view"), "卡匣选择后剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("map-view"), "卡匣后选关");
-    const fourthLayer = await evaluate(`(() => {
-      const status = (id) => {
-        const node = document.querySelector('.map-node[data-id="' + id + '"]');
-        return node && ['available', 'locked', 'completed', 'closed']
-          .find((name) => node.classList.contains('status-' + name));
-      };
-      return {
-        shop: status('shop'),
-        trial: status('trial'),
-        elite: status('elite'),
-        battle: status('battle2'),
-      };
-    })()`);
-    if (fourthLayer.shop !== "available" || fourthLayer.trial !== "available" ||
-        fourthLayer.elite !== "available" || fourthLayer.battle !== "locked") {
-      throw new Error(`第四层分支未正确开放：${JSON.stringify(fourthLayer)}`);
-    }
-    await click('.map-node[data-id="trial"]');
-    await waitFor(async () => await visible("story-view"), "观测塔前置剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("trial-view"), "观测塔界面");
-    const trialOptions = await evaluate(
-      "document.querySelectorAll('#trial-options .target').length"
-    );
-    if (trialOptions !== 2) throw new Error(`观测塔应给出 2 个试炼，实际 ${trialOptions}`);
-    const picked = await evaluate(`(() => {
-      const target = [...document.querySelectorAll('#trial-options .target')]
-        .find((element) => element.textContent.includes("当前可达成"));
-      if (!target) return null;
-      target.click();
-      return target.dataset.trial;
-    })()`);
-    if (!picked) throw new Error("没有当前可达成的试炼");
-    await waitFor(async () => !(await evaluate("document.getElementById('trial-confirm').hidden")), "开始试炼按钮");
-    await click("#trial-confirm");
-    await waitFor(async () => await visible("trial-rewards"), "试炼奖励");
-    const rewardCount = await evaluate("document.querySelectorAll('#trial-rewards .offer').length");
-    if (rewardCount !== 3) throw new Error(`试炼奖励应为 3 张，实际 ${rewardCount}`);
-    await screenshot("ai-game-trial.png");
-    await click("#trial-rewards .offer .buy-btn");
-    await waitFor(async () => await visible("story-view"), "观测塔后剧情");
-    await click("#story-next");
-    await waitFor(async () => await visible("map-view"), "观测塔后选关");
-    const afterEconomy = await evaluate(`(() => {
-      const status = (id) => {
-        const node = document.querySelector('.map-node[data-id="' + id + '"]');
-        return node && ['available', 'locked', 'completed', 'closed']
-          .find((name) => node.classList.contains('status-' + name));
-      };
-      return {
-        shop: status('shop'),
-        elite: status('elite'),
-        battle: status('battle2'),
-      };
-    })()`);
-    if (afterEconomy.shop !== "closed" || afterEconomy.elite !== "closed" ||
-        afterEconomy.battle !== "available") {
-      throw new Error(`观测塔路线未收束：${JSON.stringify(afterEconomy)}`);
-    }
-    await click('.map-node[data-id="battle2"]');
-    await waitFor(async () => await visible("story-view"), "战斗 2 前置剧情");
-    await click("#story-next");
-    await waitFor(
-      async () => (await visible("battle-view")) &&
-        (await evaluate("document.querySelectorAll('#hand .card').length")) > 0,
-      "战斗 2 界面"
-    );
-    console.log("ok 信号、校准、漂流卡匣与关卡串联");
-
+    await command("Emulation.setEmulatedMedia", {
+      features: [{ name: "hover", value: "none" }, { name: "pointer", value: "coarse" }],
+    });
+    await command("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
     await command("Emulation.setDeviceMetricsOverride", {
-      width: 760,
-      height: 1000,
+      width: 375,
+      height: 812,
       deviceScaleFactor: 1,
-      mobile: false,
+      mobile: true,
     });
     await sleep(300);
-    const battleOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
-    if (battleOverflow) throw new Error("窄窗口战斗界面出现横向溢出");
-    await screenshot("ai-game-battle2-narrow.png");
+    const phoneMap = await evaluate(`(() => ({
+      overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+      labels: [...document.querySelectorAll('.map-node:not(:disabled) .map-node-label')]
+        .every((label) => getComputedStyle(label).visibility === 'visible'),
+      targetSize: [...document.querySelectorAll('.map-node:not(:disabled)')]
+        .every((node) => { const rect = node.getBoundingClientRect(); return rect.width >= 44 && rect.height >= 44; }),
+    }))()`);
+    if (phoneMap.overflow || !phoneMap.labels || !phoneMap.targetSize) {
+      throw new Error(`手机地图布局、节点标签或点击区域异常：${JSON.stringify(phoneMap)}`);
+    }
+    await checkMapLayout();
+    await screenshot("ai-game-map-phone.png", "#map-view");
     await command("Emulation.clearDeviceMetricsOverride");
+    await command("Emulation.setEmulatedMedia", { features: [] });
+    await command("Emulation.setTouchEmulationEnabled", { enabled: false });
     await sleep(200);
-    console.log("ok 窄窗口下战斗与预告布局");
+    console.log("ok 手机地图按纵向书页显示且节点可点击");
 
-    const forecast = await evaluate(`(() => {
-      const cells = [...document.querySelectorAll('#forecast-row .forecast-cell')];
+    const routeInfo = await evaluate(`(() => {
+      const nodes = Object.fromEntries(state.map.nodes.map((node) => [node.id, node]));
+      const adjacency = {};
+      for (const edge of state.map.edges) (adjacency[edge.from] ||= []).push(edge.to);
+      const find = (start, goal) => {
+        const queue = [[start, [start]]];
+        const seen = new Set([start]);
+        while (queue.length) {
+          const [id, path] = queue.shift();
+          if (id === goal) return path;
+          for (const child of adjacency[id] || []) {
+            if (!seen.has(child)) { seen.add(child); queue.push([child, path.concat(child)]); }
+          }
+        }
+        return null;
+      };
+      const elite = state.map.nodes.find((node) => node.role === 'elite').id;
+      const start = state.completed[state.completed.length - 1];
+      const route = find(start, elite).slice(1);
       return {
-        cells: cells.length,
-        text: document.getElementById('forecast-row').textContent,
-        current: document.querySelectorAll('.forecast-item.current').length,
-        next: document.querySelectorAll('.forecast-item.next').length,
+        elite,
+        start,
+        route,
+        types: route.map((id) => nodes[id].type),
+        available: state.map.available,
       };
     })()`);
-    if (forecast.cells !== 4) throw new Error(`预告应固定四列，实际 ${forecast.cells}`);
-    if (!forecast.text.includes("防守机偶") || !forecast.text.includes("分叉哨兵")) {
-      throw new Error(`战斗 2 预告缺少内容：${forecast.text}`);
+    if (!routeInfo.route.length || routeInfo.route[routeInfo.route.length - 1] !== routeInfo.elite) {
+      throw new Error(`无法规划精英路线：${JSON.stringify(routeInfo)}`);
     }
-    if (forecast.current < 1 || forecast.next < 1) {
-      throw new Error(`预告应区分当前与下一回合：${JSON.stringify(forecast)}`);
-    }
-    await screenshot("ai-game-battle2-forecast.png");
-    console.log("ok 敌方四列预告区分当前与下一回合");
+    const firstSiblings = routeInfo.available.filter((id) => id !== routeInfo.route[0]);
+    const visited = [routeInfo.start];
+    const eventViews = {
+      recruit: "recruit-view", signal: "signal-view", adventure: "adventure-view",
+      calibration: "adventure-view", drones: "adventure-view", drift: "drift-view",
+      recycle: "recycle-view", shop: "shop-view", trial: "trial-view",
+      relay: "relay-view", training: "training-view",
+    };
+    const leaveButtons = {
+      recruit: "#recruit-leave", signal: "#signal-leave", adventure: "#adventure-leave",
+      calibration: "#adventure-leave", drones: "#adventure-leave", drift: "#drift-leave",
+      recycle: "#recycle-leave", shop: "#shop-leave", trial: "#trial-leave",
+      relay: "#relay-leave", training: "#training-leave",
+    };
 
-    const keyboard = await evaluate(`(() => {
-      const energy = Number(document.getElementById('energy').textContent);
-      const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
-        .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
-      if (!card) return false;
-      card.focus();
-      card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      return true;
-    })()`);
-    if (!keyboard) throw new Error("没有可用键盘选择的单位");
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#hand .card.selected').length")) === 1,
-      "键盘选择单位"
-    );
-    const keyboardDeploy = await evaluate(`(() => {
-      const slot = document.querySelector('#player-row .slot.empty');
-      if (!slot) return false;
-      slot.focus();
-      slot.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      return true;
-    })()`);
-    if (!keyboardDeploy) throw new Error("没有可用键盘部署的空列");
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#player-row .slot.unit').length")) > 0,
-      "键盘部署"
-    );
-    console.log("ok 键盘选择单位并部署");
-
-    const beforeTurn = await evaluate("document.getElementById('turn').textContent");
-    await click("#end-turn");
-    await waitFor(
-      async () => (await evaluate("document.getElementById('turn').textContent")) !== beforeTurn,
-      "结束回合"
-    );
-    const nextForecast = await evaluate("document.getElementById('forecast-row').textContent");
-    if (nextForecast.includes("防守机偶") || !nextForecast.includes("分叉哨兵") ||
-        !nextForecast.includes("宽幅壁垒") || !nextForecast.includes("1-2 列")) {
-      throw new Error(`下一回合预告不正确：${nextForecast}`);
-    }
-    await screenshot("ai-game-battle2-next-turn.png");
-    console.log("ok 进入下一回合后预告更新");
-
-    // 新账号快速推进战斗 1，用浏览器检查中继站、无人机、训练场与挑战 UI。
-    const fast = await evaluate(`(async () => {
-      const call = async (path, body) => {
-        const data = await api(path, body);
-        apply(data);
-        return data;
-      };
-      await api('/api/logout', {});
-      state = null; battle = null; render();
-      await call('/api/register', {
-        username: 'ui' + Date.now().toString(36) + 'b',
-        password: 'test-pass-123',
-      });
-      try {
-        for (let i = 0; i < 15 && state.phase !== 'node'; i += 1) {
-          await call('/api/story/advance', { skip: false });
+    async function storyToNode() {
+      for (let index = 0; index < 16; index += 1) {
+        if ((await evaluate("state.phase")) === "node") return;
+        if (await visible("story-view")) {
+          const hasOptions = await evaluate(
+            "document.querySelectorAll('#story-options .story-option').length > 0"
+          );
+          if (hasOptions) await click("#story-options .story-option");
+          else await click("#story-next");
         }
-      } catch (error) {
-        throw new Error('推进战斗 1 前置剧情失败：' + String(error) +
-          ' phase=' + (state && state.phase));
+        await sleep(250);
       }
-      if (state.phase !== 'node') throw new Error('未能进入战斗 1：' + state.phase);
+      throw new Error("剧情未进入节点界面");
+    }
 
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        let b = (await call('/api/battle/reset', {})).battle;
-        for (let step = 0; step < 120 && b.phase !== 'over'; step += 1) {
-          if (b.phase === 'discard') {
-            const uids = b.hand.slice(0, b.discardRequired).map((card) => card.uid);
-            b = (await call('/api/battle/discard', { uids })).battle;
-            continue;
-          }
-          const energy = b.energy;
-          const enemyUnits = b.board.enemy
-            .map((unit, index) => unit ? { column: index + 1, unit } : null)
-            .filter(Boolean);
-          const spark = b.hand.find((card) => card.damage != null && card.cost <= energy);
-          if (spark && enemyUnits.length) {
-            b = (await call('/api/battle/command', {
-              uid: spark.uid, targetUid: enemyUnits[0].unit.uid,
-            })).battle;
-            continue;
-          }
-          const repair = b.hand.find((card) => card.heal != null && card.cost <= energy);
-          const damaged = b.board.player
-            .map((unit, index) => unit && unit.hp < unit.maxHp ? { column: index + 1, unit } : null)
-            .filter(Boolean);
-          if (repair && damaged.length) {
-            b = (await call('/api/battle/command', {
-              uid: repair.uid, targetUid: damaged[0].unit.uid,
-            })).battle;
-            continue;
-          }
-          let placed = false;
-          const units = b.hand
-            .filter((card) => card.type === 'unit' && card.cost <= energy)
-            .sort((a, c) => a.cost - c.cost);
-          for (const card of units) {
-            const width = card.width || 1;
-            for (let column = 5 - width; column >= 1; column -= 1) {
-              const free = [...Array(width)].every((_, offset) =>
-                !b.board.player[column - 1 + offset]);
-              if (free) {
-                b = (await call('/api/battle/deploy', { uid: card.uid, column })).battle;
-                placed = true;
-                break;
-              }
-            }
-            if (placed) break;
-          }
-          if (placed) continue;
-          b = (await call('/api/battle/end', {})).battle;
+    for (let step = 0; step < routeInfo.route.length; step += 1) {
+      const target = routeInfo.route[step];
+      await waitFor(async () => await visible("map-view"), "选关界面");
+      await click('.map-node[data-id="' + target + '"]');
+      await storyToNode();
+      const node = await evaluate("state.node");
+      visited.push(node.id);
+      if (node.type === "battle") {
+        if (node.role !== "elite") throw new Error(`精英路线出现了意外战斗：${JSON.stringify(node)}`);
+        const deckBeforeElite = await evaluate("state.deck.length");
+        await storyUntil("battle-view");
+        await winBattle();
+        await click("#result-action");
+        await waitFor(async () => await visible("elite-reward-view"), "精英奖励界面");
+        const reward = await evaluate(`({
+          offers: document.querySelectorAll('#elite-offers .offer').length,
+          deck: state.deck.map((card) => card.uid),
+          candidates: [...document.querySelectorAll('#elite-offers .offer-name')].map((node) => node.textContent),
+          note: document.getElementById('elite-note').textContent,
+        })`);
+        if (reward.offers !== 3 || reward.deck.length !== deckBeforeElite) {
+          throw new Error(`精英奖励界面异常：${JSON.stringify({ deckBeforeElite, reward })}`);
         }
-        if (b.result === 'win') {
-          await call('/api/battle/confirm', {});
-          break;
+        await screenshot("ai-game-elite-reward.png", "#elite-reward-view");
+        await click("#elite-offers .offer .buy-btn");
+        await waitFor(async () => await visible("story-view"), "领取精英奖励后剧情");
+        const afterReward = await evaluate("({deck:state.deck, phase:state.phase, elite:state.eliteReward})");
+        const uids = afterReward.deck.map((card) => card.uid);
+        if (afterReward.deck.length !== reward.deck.length + 1 ||
+            new Set(uids).size !== uids.length || reward.deck.includes(uids[uids.length - 1]) ||
+            afterReward.elite !== null) {
+          throw new Error(`精英奖励未作为独立实体加入牌组：${JSON.stringify({ reward, afterReward })}`);
         }
-        if (attempt === 7) throw new Error('战斗 1 多次重试仍未获胜');
+        await storyUntil("map-view");
+        const eliteStatus = await evaluate(
+          `state.map.nodes.find((node) => node.id === ${JSON.stringify(routeInfo.elite)}).status`
+        );
+        if (eliteStatus !== "completed") throw new Error(`精英节点状态错误：${eliteStatus}`);
+        console.log("ok 精英战胜利后三选一奖励进入独立卡牌实体");
+      } else {
+        const viewId = eventViews[node.type];
+        if (!viewId || !leaveButtons[node.type]) throw new Error(`未知奇遇类型：${node.type}`);
+        await storyUntil(viewId);
+        await click(leaveButtons[node.type]);
+        await waitFor(async () => await visible("story-view"), "奇遇离开后剧情");
+        await storyUntil("map-view");
       }
-
-      for (let i = 0; i < 10 && state.phase !== 'map'; i += 1) {
-        if (state.phase === 'after_story' && state.story && state.story.options) {
-          await call('/api/story/choose', { optionId: 'battle1_signal' });
-        } else {
-          await call('/api/story/advance', { skip: true });
-        }
+      if (step === 0 && firstSiblings.length) {
+        const closed = await evaluate(`(${JSON.stringify(firstSiblings)}).every((id) => {
+          const node = document.querySelector('.map-node[data-id="' + id + '"]');
+          return node && node.classList.contains('status-closed') && node.disabled;
+        })`);
+        if (!closed) throw new Error(`未选分支未关闭：${JSON.stringify(firstSiblings)}`);
       }
-      if (state.phase !== 'map') throw new Error('未能回到选关：' + state.phase);
-      return { gold: state.gold, phase: state.phase };
-    })()`);
-    if (fast.phase !== "map" || fast.gold !== 20) {
-      throw new Error(`快速推进战斗 1 失败：${JSON.stringify(fast)}`);
     }
-    await waitFor(async () => await visible("map-view"), "新账号选关");
 
-    await click('.map-node[data-id="relay"]');
-    await storyUntil("relay-view");
-    await click('#relay-actions .signal-action[data-choice="cut"]');
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#relay-targets .target').length")) > 0,
-      "中继站强化目标"
-    );
-    await click('#relay-targets .target[data-card="striker"]');
-    await waitFor(async () => await visible("relay-preview"), "中继站切断预览");
-    const relayCut = await evaluate("document.getElementById('relay-preview-text').textContent");
-    if (!relayCut.includes("攻击")) throw new Error(`中继站切断预览错误：${relayCut}`);
-    await click("#relay-cancel");
-    if (!(await evaluate("document.getElementById('relay-preview').hidden"))) {
-      throw new Error("取消后中继站预览应隐藏");
-    }
-    await click('#relay-actions .signal-action[data-choice="keep"]');
-    await waitFor(async () => await visible("relay-preview"), "中继站保留预览");
-    const relayKeep = await evaluate("document.getElementById('relay-preview-text').textContent");
-    if (!relayKeep.includes("保留信号")) throw new Error(`中继站保留预览错误：${relayKeep}`);
-    await screenshot("ai-game-relay.png");
-    await click("#relay-confirm");
-    await waitFor(async () => await visible("story-view"), "中继站后剧情");
-    await storyUntil("map-view");
-
-    await click('.map-node[data-id="drones"]');
-    await storyUntil("adventure-view");
-    const dronesTitle = await evaluate("document.getElementById('adventure-title').textContent");
-    if (dronesTitle !== "维修无人机群") throw new Error(`无人机界面标题错误：${dronesTitle}`);
-    await click('#targets .drone-draw .target-action');
-    await waitFor(async () => await visible("adventure-preview"), "无人机强化预览");
-    const dronesPreview = await evaluate("document.getElementById('preview-text').textContent");
-    if (!dronesPreview.includes("起手抽牌 +1")) throw new Error(`无人机预览错误：${dronesPreview}`);
-    await screenshot("ai-game-drones.png");
-    await click("#adventure-confirm");
-    await waitFor(async () => await visible("story-view"), "无人机后剧情");
-    await storyUntil("map-view");
-
-    await click('.map-node[data-id="drift_capsule"]');
-    await storyUntil("drift-view");
-    await click("#drift-offers .offer .buy-btn");
-    await waitFor(async () => await visible("story-view"), "卡匣后剧情");
-    await storyUntil("map-view");
-
-    await click('.map-node[data-id="training"]');
-    await waitFor(async () => await visible("story-view"), "训练场前置剧情");
-    const trainingTexts = [];
-    for (let index = 0; index < 10 && !(await visible("training-view")); index += 1) {
-      trainingTexts.push(await evaluate("document.getElementById('story-text').textContent"));
-      await click("#story-next");
-      await sleep(250);
-    }
-    if (!trainingTexts.some((text) => text.includes("认出了它"))) {
-      throw new Error(`中继站标记未改变训练场对白：${JSON.stringify(trainingTexts)}`);
-    }
-    const challengeCount = await evaluate(
-      "document.querySelectorAll('#training-options .target').length"
-    );
-    if (challengeCount !== 3) throw new Error(`训练场应有 3 个挑战，实际 ${challengeCount}`);
-    if (!(await evaluate("document.getElementById('training-confirm').hidden"))) {
-      throw new Error("未选挑战时不应显示接受按钮");
-    }
-    await click('#training-options .target[data-challenge="relay_sync"]');
-    await waitFor(
-      async () => !(await evaluate("document.getElementById('training-confirm').hidden")),
-      "接受挑战按钮"
-    );
-    await screenshot("ai-game-training.png");
-    await click("#training-confirm");
-    await waitFor(async () => await visible("story-view"), "训练场后剧情");
-    await storyUntil("map-view");
-    const pendingHint = await evaluate("document.getElementById('map-hint').textContent");
-    if (!pendingHint.includes("信号同步")) throw new Error(`选关未提示挂载挑战：${pendingHint}`);
-
-    await click('.map-node[data-id="battle2"]');
-    await storyUntil("battle-view");
-    const challenged = await evaluate(`({
-      energy: Number(document.getElementById('energy').textContent),
-      hand: document.querySelectorAll('#hand .card').length,
-      column1: document.querySelector('#forecast-row .forecast-cell[data-column="1"]').textContent,
-      current: document.querySelectorAll('#forecast-row .forecast-cell[data-column="1"] .forecast-item.current').length,
+    const finalMap = await evaluate(`({
+      completed: state.completed,
+      deck: state.deck.map((card) => card.uid),
+      phase: state.phase,
+      progress: state.progress,
+      available: state.map.available,
     })`);
-    if (challenged.energy !== 4 || challenged.hand !== 7 || !challenged.column1.includes("突击哨兵") ||
-        challenged.current < 1) {
-      throw new Error(`挑战未挂载到下一场战斗：${JSON.stringify(challenged)}`);
+    if (finalMap.phase !== "map" || finalMap.progress !== finalMap.completed.length ||
+        visited.some((id) => !finalMap.completed.includes(id)) ||
+        finalMap.completed.length !== visited.length) {
+      throw new Error(`精英路线完成状态异常：${JSON.stringify({ visited, finalMap })}`);
     }
-    await screenshot("ai-game-challenge-battle.png");
-    console.log("ok 中继站、无人机、训练场与下一场战斗挑战");
+    console.log("ok 随机分支选择、单路收束与精英路线");
 
     ws.close();
     console.log("浏览器冒烟测试全部通过");
