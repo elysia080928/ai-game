@@ -49,7 +49,7 @@ NODE_TYPES = (
     "training",
     "relay",
 )
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
 VALID_PHASES = ("before_story", "node", "after_story", "map", "complete")
 
@@ -178,7 +178,7 @@ def validate_content():
             raise RuntimeError("试炼配置非法")
     if not TRIAL["trials"] or TRIAL["failureGold"] < 0 or TRIAL["candidateCount"] < 1:
         raise RuntimeError("观测塔配置非法")
-    if DRONES["atkBonus"] < 0 or DRONES["hpBonus"] < 0:
+    if DRONES["atkBonus"] < 0 or DRONES["hpBonus"] < 0 or DRONES["drawBonus"] < 0:
         raise RuntimeError("维修无人机群强化数值非法")
     if RELAY["atkBonus"] < 0 or not isinstance(RELAY["flag"], str) or not RELAY["flag"]:
         raise RuntimeError("中继站配置非法")
@@ -201,6 +201,9 @@ def validate_content():
             column = item.get("column")
             if not isinstance(column, int) or isinstance(column, bool) or not (1 <= column <= 4):
                 raise RuntimeError("训练挑战列号非法")
+        flag = item.get("requiresFlag")
+        if flag is not None and (not isinstance(flag, str) or not flag):
+            raise RuntimeError("训练挑战标记条件非法")
 
 
 validate_content()
@@ -222,6 +225,7 @@ def new_state():
         "route": {},
         "flags": {},
         "pendingChallenges": [],
+        "pendingDrawBonus": 0,
     }
     _normalize(state)
     return state
@@ -379,6 +383,7 @@ def confirm_battle_result(state):
     reward = ENCOUNTERS[node["encounter"]]["reward"]["gold"]
     state["gold"] += reward
     settle_challenges(state)
+    state["pendingDrawBonus"] = 0
     finish_node(state, node["id"])
 
 
@@ -898,6 +903,10 @@ def drones_apply(state, card_id, effect):
         return
     if state["phase"] != "node":
         raise GameError("当前不在维修无人机群")
+    if effect == "draw":
+        state["pendingDrawBonus"] += DRONES["drawBonus"]
+        finish_node(state, node["id"])
+        return
     card = _require_unit_target(state, card_id)
     if effect == "atk":
         card["atkBonus"] = card.get("atkBonus", 0) + DRONES["atkBonus"]
@@ -922,6 +931,11 @@ def _challenge_def(challenge_id):
     raise GameError("没有这个训练挑战")
 
 
+def _challenge_available(state, item):
+    flag = item.get("requiresFlag")
+    return flag is None or bool((state.get("flags") or {}).get(flag))
+
+
 def training_choose(state, challenge_id):
     node = current_node(state)
     if node is None or node["type"] != "training":
@@ -931,6 +945,8 @@ def training_choose(state, challenge_id):
     if state["phase"] != "node":
         raise GameError("当前不在失控训练场")
     item = _challenge_def(challenge_id)
+    if not _challenge_available(state, item):
+        raise GameError("该训练挑战尚未解锁")
     state["pendingChallenges"] = [{"id": item["id"]}]
     finish_node(state, node["id"])
 
@@ -1156,6 +1172,7 @@ def _drones_view(state):
         "targets": targets,
         "atkBonus": DRONES["atkBonus"],
         "hpBonus": DRONES["hpBonus"],
+        "drawBonus": DRONES["drawBonus"],
     }
 
 
@@ -1171,6 +1188,7 @@ def _training_view(state):
             "reward": item["reward"],
         }
         for item in TRAINING["challenges"]
+        if _challenge_available(state, item)
     ]
     return {"challenges": challenges}
 
@@ -1479,6 +1497,11 @@ def migrate_state(state):
     for item in pending:
         if not isinstance(item, dict) or item.get("id") not in CHALLENGE_BY_ID:
             raise ValueError("存档挑战非法")
+        if not _challenge_available(state, CHALLENGE_BY_ID[item["id"]]):
+            raise ValueError("存档挑战未解锁")
+    draw_bonus = state.setdefault("pendingDrawBonus", 0)
+    if not isinstance(draw_bonus, int) or isinstance(draw_bonus, bool) or draw_bonus < 0:
+        raise ValueError("存档抽牌加成非法")
     story_line = state.get("storyLine", 0)
     if not isinstance(story_line, int) or isinstance(story_line, bool) or story_line < 0:
         raise ValueError("存档剧情位置非法")

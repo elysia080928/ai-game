@@ -8,6 +8,7 @@ HIGH_COST_UNLOCK_TURN = 3
 COLUMNS = 4
 LOG_LIMIT = 60
 FIRST_TURN_ENERGY = 4
+OPENING_DRAW = 6
 
 
 class GameError(Exception):
@@ -51,7 +52,14 @@ def _card_cost(b, card):
 
 
 def make_battle(
-    deck_cards, encounter, cards, enemies, rng=None, first_turn_energy=None, extra_plan=None
+    deck_cards,
+    encounter,
+    cards,
+    enemies,
+    rng=None,
+    first_turn_energy=None,
+    extra_plan=None,
+    opening_draw=None,
 ):
     rng = rng or random.Random()
     b = {
@@ -62,6 +70,7 @@ def make_battle(
         "firstTurnEnergy": (
             FIRST_TURN_ENERGY if first_turn_energy is None else max(0, first_turn_energy)
         ),
+        "openingDraw": OPENING_DRAW if opening_draw is None else max(1, opening_draw),
         "hp": {"player": encounter["playerHp"], "enemy": encounter["enemyHp"]},
         "board": {"player": [None] * COLUMNS, "enemy": [None] * COLUMNS},
         "hand": [],
@@ -94,7 +103,7 @@ def _start_turn(b, rng):
     b["turn"] += 1
     if b["turn"] == 1:
         b["energy"] = b["firstTurnEnergy"]
-        _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 6 张")
+        _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 {b['openingDraw']} 张")
         _draw_opening(b, rng)
     else:
         b["energy"] += 2
@@ -108,11 +117,12 @@ def _start_turn(b, rng):
 
 def _draw_opening(b, rng):
     eligible = [c for c in b["deck"] if _card_cost(b, c) < HIGH_COST]
-    if len(eligible) < 6:
-        raise GameError("牌组中可抽的牌不足 6 张，无法开始战斗")
+    count = b["openingDraw"]
+    if len(eligible) < count:
+        raise GameError(f"牌组中可抽的牌不足 {count} 张，无法开始战斗")
     picks = None
     for _ in range(2000):
-        candidate = rng.sample(eligible, 6)
+        candidate = rng.sample(eligible, count)
         low = [c for c in candidate if _card_cost(b, c) <= 2]
         low_units = [
             c

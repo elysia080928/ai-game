@@ -146,10 +146,11 @@ def play_loop(client, battle):
     raise AssertionError("战斗没有在合理回合内结束")
 
 
-def win_battle(client, encounter_id, extra_forecast=()):
+def win_battle(client, encounter_id, extra_forecast=(), expected_hand=6):
     for attempt in range(8):
         battle = client.ok("/api/battle/reset", {})["battle"]
-        assert battle["turn"] == 1 and battle["energy"] == 4 and len(battle["hand"]) == 6
+        assert battle["turn"] == 1 and battle["energy"] == 4, battle
+        assert len(battle["hand"]) == expected_hand, (expected_hand, len(battle["hand"]))
         if attempt == 0 and encounter_id == "battle1":
             entries = {(item["turn"], item["column"]) for item in battle["forecast"]}
             assert entries == {(1, 1), (2, 3)}, entries
@@ -335,17 +336,15 @@ def drones_phase(client):
     state = client.state()
     assert state["node"]["type"] == "drones", state
     assert state["drones"]["atkBonus"] == 1 and state["drones"]["hpBonus"] == 1
+    assert state["drones"]["drawBonus"] == 1
     client.fail("/api/drones/apply", {"cardId": "spark", "effect": "atk"})
     client.fail("/api/drones/apply", {"cardId": "striker", "effect": "level"})
-    before = next(card for card in state["deck"] if card["cardId"] == "striker")
-    client.ok("/api/drones/apply", {"cardId": "striker", "effect": "atk"})
+    client.ok("/api/drones/apply", {"cardId": "", "effect": "draw"})
     state = client.state()
     assert state["phase"] == "after_story"
-    after = next(card for card in state["deck"] if card["cardId"] == "striker")
-    assert after["atkBonus"] == before["atkBonus"] + 1 and after["hpBonus"] == before["hpBonus"]
-    client.ok("/api/drones/apply", {"cardId": "striker", "effect": "atk"})
-    again = next(card for card in client.state()["deck"] if card["cardId"] == "striker")
-    assert again["atkBonus"] == after["atkBonus"], "重复提交不能重复强化"
+    client.ok("/api/drones/apply", {"cardId": "", "effect": "draw"})
+    assert client.state()["phase"] == "after_story"
+    assert client.state()["deck"] == state["deck"], "抽牌强化不应改卡"
     return state
 
 
@@ -373,14 +372,15 @@ def training_phase(client):
     assert any("认出了它" in text for text in seen), seen
     state = client.state()
     assert state["node"]["type"] == "training", state
-    assert len(state["training"]["challenges"]) == 2, state["training"]
+    challenge_ids = [item["id"] for item in state["training"]["challenges"]]
+    assert challenge_ids == ["overload", "low_power", "relay_sync"], state["training"]
     client.fail("/api/training/choose", {"challengeId": "not-a-challenge"})
-    client.ok("/api/training/choose", {"challengeId": "overload"})
+    client.ok("/api/training/choose", {"challengeId": "relay_sync"})
     state = client.state()
     assert state["phase"] == "after_story"
-    assert state["pendingChallenge"]["id"] == "overload", state
+    assert state["pendingChallenge"]["id"] == "relay_sync", state
     client.ok("/api/training/choose", {"challengeId": "low_power"})
-    assert client.state()["pendingChallenge"]["id"] == "overload", "重复提交不能改挂挑战"
+    assert client.state()["pendingChallenge"]["id"] == "relay_sync", "重复提交不能改挂挑战"
     return state
 
 
@@ -582,10 +582,10 @@ def challenge_route():
     assert map_status(state)["battle2"] == "available", state["map"]
     client.ok("/api/map/select", {"nodeId": "battle2"})
     advance_to_node(client)
-    assert client.state()["pendingChallenge"]["id"] == "overload"
-    win_battle(client, "battle2", extra_forecast={(1, 1)})
+    assert client.state()["pendingChallenge"]["id"] == "relay_sync"
+    win_battle(client, "battle2", extra_forecast={(1, 1)}, expected_hand=7)
     state = client.state()
-    assert state["gold"] == 34, state
+    assert state["gold"] == 38, state
     assert state["pendingChallenge"] is None, "挑战应在胜利后清空"
     texts = []
     for _ in range(6):
@@ -620,7 +620,7 @@ def main():
 
     challenge = challenge_route()
     challenge_state = challenge.state()
-    assert challenge_state["complete"] and challenge_state["gold"] == 34
+    assert challenge_state["complete"] and challenge_state["gold"] == 38
     print("ok 三条路线互斥、汇合与完成画面")
 
     # 新游戏需要确认；不影响另一账号
@@ -630,7 +630,7 @@ def main():
     assert state["phase"] == "before_story" and state["gold"] == 0
     assert state["node"]["id"] == "battle1"
     assert signal.state()["gold"] == 22, "账号隔离失败"
-    assert challenge.state()["gold"] == 34, "账号隔离失败"
+    assert challenge.state()["gold"] == 38, "账号隔离失败"
     print("ok 新游戏覆盖确认与账号隔离")
 
     recruit.ok("/api/logout", {})

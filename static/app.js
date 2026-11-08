@@ -794,10 +794,9 @@ function renderAdventure(kind) {
   $("adventure-hint").textContent = kind === "calibration"
     ? "选择一张已有单位，三选一：攻击强化、生命强化或直接升一级；先预览再确认，也可以离开。"
     : kind === "drones"
-      ? "选择一台无人机（攻击 +1 或最大生命 +1），再指定一张单位；先预览再确认，也可以离开。"
+      ? "选择一台无人机：攻击 +1、最大生命 +1，或下一场战斗起手抽牌 +1；先预览再确认，也可以离开。"
       : "选择一张已有单位，二选一：攻击 +1 或最大生命 +2；先预览再确认，也可以离开。";
-  $("targets").innerHTML = data.targets.length
-    ? data.targets.map((card) => `
+  const cards = data.targets.map((card) => `
         <div class="target${adventureTarget && adventureTarget.cardId === card.cardId ? " selected" : ""}" data-card="${esc(card.cardId)}">
           <div class="target-name">${esc(card.name)} <small>Lv.${card.level}</small></div>
           <div class="target-meta">攻击 ${card.atk}　生命 ${card.hp}</div>
@@ -814,11 +813,22 @@ function renderAdventure(kind) {
               等级 +${data.levelBonus}<small>${card.canLevel ? `Lv.${card.level} → Lv.${card.level + data.levelBonus}` : "已满级"}</small>
             </button>` : ""}
           </div>
-        </div>`).join("")
-    : "<p class='hint'>没有可强化的单位。</p>";
+        </div>`).join("");
+  const droneDraw = kind === "drones" ? `
+        <div class="target drone-draw${adventureEffect === "draw" ? " selected" : ""}">
+          <div class="target-name">侦察无人机 <small>下一场战斗</small></div>
+          <div class="target-meta">起手抽牌 +${data.drawBonus}</div>
+          <div class="target-actions">
+            <button class="target-action" data-effect="draw" data-card="">选择</button>
+          </div>
+        </div>` : "";
+  $("targets").innerHTML = (droneDraw + cards) || "<p class='hint'>没有可强化的单位。</p>";
 
   const preview = $("adventure-preview");
-  if (adventureTarget && adventureEffect) {
+  if (adventureEffect === "draw") {
+    preview.hidden = false;
+    $("preview-text").textContent = `下一场战斗起手抽牌 +${data.drawBonus}（仅本趟冒险保留）`;
+  } else if (adventureTarget && adventureEffect) {
     preview.hidden = false;
     const next = adventureEffect === "atk"
       ? adventureTarget.atkPreview
@@ -1193,13 +1203,15 @@ function bindEvents() {
   $("targets").addEventListener("click", (event) => {
     const button = event.target.closest(".target-action");
     if (!button || button.disabled || !state[enhanceKind]) return;
-    adventureTarget = state[enhanceKind].targets.find((card) => card.cardId === button.dataset.card) || null;
     adventureEffect = button.dataset.effect;
+    adventureTarget = adventureEffect === "draw"
+      ? null
+      : state[enhanceKind].targets.find((card) => card.cardId === button.dataset.card) || null;
     renderAdventure(enhanceKind);
   });
   $("adventure-confirm").addEventListener("click", () => {
-    if (!adventureTarget || !adventureEffect) return;
-    const cardId = adventureTarget.cardId;
+    if (!adventureEffect || (adventureEffect !== "draw" && !adventureTarget)) return;
+    const cardId = adventureTarget ? adventureTarget.cardId : "";
     const effect = adventureEffect;
     adventureTarget = null;
     adventureEffect = null;

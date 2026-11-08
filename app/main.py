@@ -302,6 +302,7 @@ def _make_battle(user_id, state):
         rng=random.Random(),
         first_turn_energy=first_turn_energy,
         extra_plan=extra_plan,
+        opening_draw=B.OPENING_DRAW + state.get("pendingDrawBonus", 0),
     )
     BATTLES[user_id] = battle_state
     return battle_state

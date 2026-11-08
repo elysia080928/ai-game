@@ -740,8 +740,13 @@ async function main() {
         username: 'ui' + Date.now().toString(36) + 'b',
         password: 'test-pass-123',
       });
-      for (let i = 0; i < 15 && state.phase !== 'node'; i += 1) {
-        await call('/api/story/advance', { skip: false });
+      try {
+        for (let i = 0; i < 15 && state.phase !== 'node'; i += 1) {
+          await call('/api/story/advance', { skip: false });
+        }
+      } catch (error) {
+        throw new Error('推进战斗 1 前置剧情失败：' + String(error) +
+          ' phase=' + (state && state.phase));
       }
       if (state.phase !== 'node') throw new Error('未能进入战斗 1：' + state.phase);
 
@@ -841,10 +846,10 @@ async function main() {
     await storyUntil("adventure-view");
     const dronesTitle = await evaluate("document.getElementById('adventure-title').textContent");
     if (dronesTitle !== "维修无人机群") throw new Error(`无人机界面标题错误：${dronesTitle}`);
-    await click('#targets .target-action[data-card="striker"][data-effect="atk"]');
+    await click('#targets .drone-draw .target-action');
     await waitFor(async () => await visible("adventure-preview"), "无人机强化预览");
     const dronesPreview = await evaluate("document.getElementById('preview-text').textContent");
-    if (!dronesPreview.includes("攻击")) throw new Error(`无人机预览错误：${dronesPreview}`);
+    if (!dronesPreview.includes("起手抽牌 +1")) throw new Error(`无人机预览错误：${dronesPreview}`);
     await screenshot("ai-game-drones.png");
     await click("#adventure-confirm");
     await waitFor(async () => await visible("story-view"), "无人机后剧情");
@@ -870,11 +875,11 @@ async function main() {
     const challengeCount = await evaluate(
       "document.querySelectorAll('#training-options .target').length"
     );
-    if (challengeCount !== 2) throw new Error(`训练场应有 2 个挑战，实际 ${challengeCount}`);
+    if (challengeCount !== 3) throw new Error(`训练场应有 3 个挑战，实际 ${challengeCount}`);
     if (!(await evaluate("document.getElementById('training-confirm').hidden"))) {
       throw new Error("未选挑战时不应显示接受按钮");
     }
-    await click('#training-options .target[data-challenge="overload"]');
+    await click('#training-options .target[data-challenge="relay_sync"]');
     await waitFor(
       async () => !(await evaluate("document.getElementById('training-confirm').hidden")),
       "接受挑战按钮"
@@ -884,16 +889,17 @@ async function main() {
     await waitFor(async () => await visible("story-view"), "训练场后剧情");
     await storyUntil("map-view");
     const pendingHint = await evaluate("document.getElementById('map-hint').textContent");
-    if (!pendingHint.includes("过载演算")) throw new Error(`选关未提示挂载挑战：${pendingHint}`);
+    if (!pendingHint.includes("信号同步")) throw new Error(`选关未提示挂载挑战：${pendingHint}`);
 
     await click('.map-node[data-id="battle2"]');
     await storyUntil("battle-view");
     const challenged = await evaluate(`({
       energy: Number(document.getElementById('energy').textContent),
+      hand: document.querySelectorAll('#hand .card').length,
       column1: document.querySelector('#forecast-row .forecast-cell[data-column="1"]').textContent,
       current: document.querySelectorAll('#forecast-row .forecast-cell[data-column="1"] .forecast-item.current').length,
     })`);
-    if (challenged.energy !== 4 || !challenged.column1.includes("突击哨兵") ||
+    if (challenged.energy !== 4 || challenged.hand !== 7 || !challenged.column1.includes("突击哨兵") ||
         challenged.current < 1) {
       throw new Error(`挑战未挂载到下一场战斗：${JSON.stringify(challenged)}`);
     }

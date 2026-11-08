@@ -378,6 +378,7 @@ def test_migration_old_saves():
     assert changed and migrated["nodeId"] == "recruit" and migrated["route"] == {"supply": "recruit"}
     assert migrated["cards"][0]["hpBonus"] == 0
     assert migrated["pendingChallenges"] == []
+    assert migrated["pendingDrawBonus"] == 0
 
     old = dict(base, nodeIndex=0, phase="after_story")
     migrated, _ = G.migrate_state(copy.deepcopy(old))
@@ -416,6 +417,9 @@ def test_migration_old_saves():
         dict(base, nodeId="battle1", cards=[{"cardId": "bean", "level": 1, "hpBonus": -1}]),
         dict(base, nodeId="battle1", pendingChallenges="overload"),
         dict(base, nodeId="battle1", pendingChallenges=[{"id": "missing"}]),
+        dict(base, nodeId="battle1", pendingChallenges=[{"id": "relay_sync"}]),
+        dict(base, nodeId="battle1", pendingDrawBonus=-1),
+        dict(base, nodeId="battle1", pendingDrawBonus="1"),
     ]
     for bad in bad_saves:
         try:
@@ -611,7 +615,7 @@ def test_drones():
         "drones", "node", completed=["battle1", "signal"], route="signal"
     )
     view = G.public_state(state)["drones"]
-    assert view["atkBonus"] == 1 and view["hpBonus"] == 1
+    assert view["atkBonus"] == 1 and view["hpBonus"] == 1 and view["drawBonus"] == 1
     assert all(card["cardId"] != "spark" for card in view["targets"])
 
     striker = next(card for card in state["cards"] if card["cardId"] == "striker")
@@ -638,6 +642,13 @@ def test_drones():
             raise AssertionError("无人机只接受已有单位的攻击/生命强化")
         assert bad["phase"] == "node"
 
+    draw = state_at("drones", "node", completed=["battle1", "signal"], route="signal")
+    G.drones_apply(draw, "", "draw")
+    assert draw["pendingDrawBonus"] == G.DRONES["drawBonus"]
+    assert draw["phase"] == "after_story"
+    G.drones_apply(draw, "", "draw")
+    assert draw["pendingDrawBonus"] == G.DRONES["drawBonus"], "抽牌加成只保留一次"
+
     leave = state_at("drones", "node", completed=["battle1", "signal"], route="signal")
     G.drones_leave(leave)
     assert leave["phase"] == "after_story"
@@ -650,12 +661,14 @@ def test_training_and_challenge_settlement():
     )
     view = G.public_state(state)["training"]
     assert [item["id"] for item in view["challenges"]] == ["overload", "low_power"]
-    try:
-        G.training_choose(state, "missing")
-    except B.GameError:
-        pass
-    else:
-        raise AssertionError("未知训练挑战不能选择")
+    for challenge_id in ("missing", "relay_sync"):
+        try:
+            G.training_choose(state, challenge_id)
+        except B.GameError:
+            pass
+        else:
+            raise AssertionError("未知或未解锁的训练挑战不能选择")
+    assert state["phase"] == "node"
 
     G.training_choose(state, "overload")
     assert state["pendingChallenges"] == [{"id": "overload"}]
@@ -664,18 +677,31 @@ def test_training_and_challenge_settlement():
     G.training_choose(state, "low_power")
     assert state["pendingChallenges"] == [{"id": "overload"}], "重复提交不能改挂挑战"
 
+    flagged = state_at(
+        "training", "node",
+        completed=["battle1", "relay", "adventure", "drift_capsule"],
+        route="relay", flags={"relay_kept": True},
+    )
+    assert [item["id"] for item in G.public_state(flagged)["training"]["challenges"]] == [
+        "overload", "low_power", "relay_sync",
+    ]
+    G.training_choose(flagged, "relay_sync")
+    assert flagged["pendingChallenges"] == [{"id": "relay_sync"}]
+
     settle = state_at(
         "battle2", "node",
         completed=["battle1", "relay", "adventure", "drift_capsule", "training"],
-        route="relay",
+        route="relay", flags={"relay_kept": True},
     )
-    settle["pendingChallenges"] = [{"id": "overload"}]
+    settle["pendingChallenges"] = [{"id": "relay_sync"}]
+    settle["pendingDrawBonus"] = 1
     gold = settle["gold"]
+    reward = G.CHALLENGE_BY_ID["relay_sync"]["reward"]
     G.confirm_battle_result(settle)
-    assert settle["gold"] == gold + G.CHALLENGE_BY_ID["overload"]["reward"]
-    assert settle["pendingChallenges"] == []
+    assert settle["gold"] == gold + reward
+    assert settle["pendingChallenges"] == [] and settle["pendingDrawBonus"] == 0
     G.confirm_battle_result(settle)
-    assert settle["gold"] == gold + G.CHALLENGE_BY_ID["overload"]["reward"], "奖励只发一次"
+    assert settle["gold"] == gold + reward, "奖励只发一次"
     assert settle["phase"] == "after_story"
 
     leave = state_at("training", "node", completed=["battle1", "relay"], route="relay")
@@ -687,9 +713,10 @@ def test_challenge_battle_modifiers():
     extra = [{"turn": 1, "column": 1, "enemy": "assault_sentry"}]
     b = B.make_battle(
         initial_cards(), G.ENCOUNTERS["battle2"], G.CARDS, G.ENEMIES,
-        rng=random.Random(0), first_turn_energy=3, extra_plan=extra,
+        rng=random.Random(0), first_turn_energy=3, extra_plan=extra, opening_draw=7,
     )
     assert b["energy"] == 3
+    assert len(b["hand"]) == 7 and len(b["deck"]) == len(initial_cards()) - 7
     assert any(item["column"] == 1 and item["enemy"] == "assault_sentry" for item in b["plan"])
     forecast = B.view(b)["forecast"]
     assert any(item["column"] == 1 and item["turn"] == 1 for item in forecast)
@@ -698,6 +725,7 @@ def test_challenge_battle_modifiers():
         initial_cards(), G.ENCOUNTERS["battle2"], G.CARDS, G.ENEMIES, rng=random.Random(0)
     )
     assert normal["energy"] == B.FIRST_TURN_ENERGY
+    assert len(normal["hand"]) == B.OPENING_DRAW
 
 
 def test_relay():

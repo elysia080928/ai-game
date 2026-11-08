@@ -140,7 +140,7 @@
     "failureGold": 5,
     "candidateCount": 3
   },
-  "drones": {"atkBonus": 1, "hpBonus": 1},
+  "drones": {"atkBonus": 1, "hpBonus": 1, "drawBonus": 1},
   "training": {
     "challenges": [
       {
@@ -160,6 +160,16 @@
         "column": 0,
         "energyPenalty": 1,
         "reward": 8
+      },
+      {
+        "id": "relay_sync",
+        "name": "信号同步",
+        "description": "保留的中继信号接入演算：下一场战斗首回合 1 列额外出现突击哨兵；获胜后获得 18 金币。",
+        "extraEnemy": "assault_sentry",
+        "column": 1,
+        "energyPenalty": 0,
+        "reward": 18,
+        "requiresFlag": "relay_kept"
       }
     ]
   },
