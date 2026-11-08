@@ -4,7 +4,14 @@ import json
 import random
 from pathlib import Path
 
-from .battle import ATTACK_PATTERNS, KNOWN_ABILITIES, GameError, card_stats
+from .battle import (
+    ATTACK_PATTERNS,
+    KNOWN_ABILITIES,
+    ON_DEPLOY_TRIGGERS,
+    ON_DESTROY_TRIGGERS,
+    GameError,
+    card_stats,
+)
 
 _CONTENT_PATH = Path(__file__).resolve().parent.parent / "content" / "game.json"
 with _CONTENT_PATH.open(encoding="utf-8") as _f:
@@ -55,6 +62,19 @@ VALID_PHASES = ("before_story", "node", "after_story", "map", "complete")
 
 
 def validate_content():
+    def check_triggers(label, definition):
+        for field, allowed in (
+            ("onDeploy", ON_DEPLOY_TRIGGERS),
+            ("onDestroy", ON_DESTROY_TRIGGERS),
+        ):
+            trigger = definition.get(field)
+            if trigger is not None and trigger not in allowed:
+                raise RuntimeError(f"{label} {field} 非法")
+        for field in ("shield", "guard"):
+            value = definition.get(field, 0)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise RuntimeError(f"{label} {field} 非法")
+
     if len(INITIAL_DECK) != len(set(INITIAL_DECK)):
         raise RuntimeError("初始牌组存在重复卡牌")
     for card_id in INITIAL_DECK:
@@ -80,7 +100,16 @@ def validate_content():
             raise RuntimeError(f"卡牌 {card_id} 能力非法")
         if (width == 2) != ("wide_2" in abilities):
             raise RuntimeError(f"卡牌 {card_id} 宽度与 wide_2 不一致")
-        if card["type"] != "unit" and (width != 1 or pattern != "forward" or abilities):
+        check_triggers(f"卡牌 {card_id}", card)
+        if card["type"] != "unit" and (
+            width != 1
+            or pattern != "forward"
+            or abilities
+            or card.get("shield", 0)
+            or card.get("guard", 0)
+            or card.get("onDeploy")
+            or card.get("onDestroy")
+        ):
             raise RuntimeError(f"指令卡 {card_id} 不能拥有站位或攻击能力")
 
     for enemy_id, enemy in ENEMIES.items():
@@ -103,6 +132,7 @@ def validate_content():
             raise RuntimeError(f"敌人 {enemy_id} 能力非法")
         if (width == 2) != ("wide_2" in abilities):
             raise RuntimeError(f"敌人 {enemy_id} 宽度与 wide_2 不一致")
+        check_triggers(f"敌人 {enemy_id}", enemy)
 
     ids = set()
     for node in NODES:

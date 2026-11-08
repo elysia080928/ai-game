@@ -11,6 +11,8 @@ FIRST_TURN_ENERGY = 4
 OPENING_DRAW = 6
 ATTACK_PATTERNS = ("forward", "split_attack", "double_strike")
 KNOWN_ABILITIES = ("wide_2", "flying", "reach")
+ON_DEPLOY_TRIGGERS = ("energy_penalty",)
+ON_DESTROY_TRIGGERS = ("burst_adjacent", "hit_opposite")
 
 
 class GameError(Exception):
@@ -34,6 +36,10 @@ def card_stats(cards, card_id, level, atk_bonus=0, hp_bonus=0):
         result["width"] = definition.get("width", 1)
         result["attackPattern"] = definition.get("attackPattern", "forward")
         result["abilities"] = list(definition.get("abilities", []))
+        result["shield"] = definition.get("shield", 0)
+        result["guard"] = definition.get("guard", 0)
+        result["onDeploy"] = definition.get("onDeploy")
+        result["onDestroy"] = definition.get("onDestroy")
     else:
         result["heal"] = level_data.get("heal")
         result["damage"] = level_data.get("damage")
@@ -86,6 +92,8 @@ def make_battle(
         "phase": "player",
         "result": None,
         "next_uid": 1,
+        "nextTurnEnergyPenalty": 0,
+        "jammerUsed": False,
         "log": [],
     }
     for card in deck_cards:
@@ -111,8 +119,14 @@ def _start_turn(b, rng):
         _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 {b['openingDraw']} 张")
         _draw_opening(b, rng)
     else:
+        penalty = b["nextTurnEnergyPenalty"]
+        b["nextTurnEnergyPenalty"] = 0
         b["energy"] += 2
-        _log(b, f"第 {b['turn']} 回合：获得 2 点能量，抽 2 张")
+        if penalty:
+            b["energy"] = max(0, b["energy"] - penalty)
+            _log(b, f"第 {b['turn']} 回合：获得 2 点能量（信号干扰 -{penalty}），抽 2 张")
+        else:
+            _log(b, f"第 {b['turn']} 回合：获得 2 点能量，抽 2 张")
         _draw_regular(b, rng, 2)
     if b["phase"] != "over" and len(b["hand"]) > MAX_HAND:
         b["phase"] = "discard"
@@ -207,12 +221,65 @@ def _remove_unit(b, unit):
             slots[index] = None
 
 
+def _resolve_on_deploy(b, unit):
+    if unit.get("onDeploy") != "energy_penalty" or b["jammerUsed"]:
+        return
+    b["jammerUsed"] = True
+    b["nextTurnEnergyPenalty"] = 1
+    _log(b, f"{unit['name']} 干扰能量回路：下回合能量 -1")
+
+
+def _resolve_on_destroy(b, unit):
+    if unit.get("destroyResolved"):
+        return
+    unit["destroyResolved"] = True
+    trigger = unit.get("onDestroy")
+    if trigger not in ON_DESTROY_TRIGGERS:
+        return
+    side = "enemy" if unit["side"] == "player" else "player"
+    if trigger == "burst_adjacent":
+        seen = set()
+        for column in (unit["column"] - 1, unit["column"] + 1):
+            if not (1 <= column <= COLUMNS):
+                continue
+            target = b["board"][side][column - 1]
+            if target is None or target["uid"] in seen:
+                continue
+            seen.add(target["uid"])
+            _log(b, f"{unit['name']} 爆炸，对 {target['name']} 造成 1 点伤害")
+            _damage_unit(b, target, 1)
+    elif trigger == "hit_opposite":
+        target = b["board"][side][unit["column"] - 1]
+        if target is not None:
+            _log(b, f"{unit['name']} 爆炸，对 {target['name']} 造成 2 点伤害")
+            _damage_unit(b, target, 2)
+
+
+def _guard_for(b, target):
+    target_columns = set(_unit_columns(target))
+    for unit in _side_units(b, "player"):
+        if unit is target or unit.get("guard", 0) <= 0:
+            continue
+        if any(
+            abs(guard_column - column) == 1
+            for guard_column in _unit_columns(unit)
+            for column in target_columns
+        ):
+            return unit
+    return None
+
+
 def _damage_unit(b, unit, amount):
+    if amount > 0 and unit.get("shield", 0) > 0:
+        unit["shield"] -= 1
+        amount = max(0, amount - 1)
+        _log(b, f"{unit['name']} 的护盾抵消 1 点伤害")
     unit["hp"] -= amount
     if unit["hp"] <= 0:
         unit["hp"] = 0
         _remove_unit(b, unit)
         _log(b, f"{unit['name']} 被击败")
+        _resolve_on_destroy(b, unit)
         return True
     return False
 
@@ -232,6 +299,10 @@ def _make_unit(b, side, card_id, stats, paid, column, level):
         "width": stats.get("width", 1),
         "attackPattern": stats.get("attackPattern", "forward"),
         "abilities": list(stats.get("abilities", [])),
+        "shield": stats.get("shield", 0),
+        "guard": stats.get("guard", 0),
+        "onDeploy": stats.get("onDeploy"),
+        "onDestroy": stats.get("onDestroy"),
     }
     b["next_uid"] += 1
     return unit
@@ -261,6 +332,7 @@ def deploy(b, uid, column):
         b["board"]["player"][target - 1] = unit
     span = f"{column}-{column + width - 1} 列" if width > 1 else f"{column} 列"
     _log(b, f"部署 {unit['name']} 到 {span}（花费 {stats['cost']} 能量）")
+    _resolve_on_deploy(b, unit)
     _check_stalemate(b)
 
 
@@ -368,6 +440,12 @@ def _resolve_attack(b, attacker, column):
     if target is not None and _has_ability(target, "flying") and not _has_ability(attacker, "reach"):
         _log(b, f"{attacker['name']} 无法攻击飞行单位 {target['name']}")
         return
+    if target is not None and attacker["side"] == "enemy":
+        guard = _guard_for(b, target)
+        if guard is not None:
+            guard["guard"] -= 1
+            _log(b, f"{guard['name']} 替 {target['name']} 拦截攻击")
+            target = guard
     if target is not None:
         _log(b, f"{attacker['name']} 攻击 {target['name']}，造成 {attacker['atk']} 点伤害")
         _damage_unit(b, target, attacker["atk"])
@@ -409,12 +487,17 @@ def _enemy_phase(b):
             "width": width,
             "attackPattern": enemy.get("attackPattern", "forward"),
             "abilities": list(enemy.get("abilities", [])),
+            "shield": enemy.get("shield", 0),
+            "guard": enemy.get("guard", 0),
+            "onDeploy": enemy.get("onDeploy"),
+            "onDestroy": enemy.get("onDestroy"),
         }
         unit = _make_unit(b, "enemy", item["enemy"], stats, 0, start, 1)
         for column in columns:
             b["board"]["enemy"][column - 1] = unit
         span = f"{start}-{start + width - 1} 列" if width > 1 else f"{start} 列"
         _log(b, f"敌方在 {span}部署 {unit['name']}")
+        _resolve_on_deploy(b, unit)
 
     for unit in _side_units(b, "enemy"):
         for column in _target_columns(unit):
@@ -470,6 +553,10 @@ def _unit_view(unit):
         "width": unit.get("width", 1),
         "attackPattern": unit.get("attackPattern", "forward"),
         "abilities": list(unit.get("abilities", [])),
+        "shield": unit.get("shield", 0),
+        "guard": unit.get("guard", 0),
+        "onDeploy": unit.get("onDeploy"),
+        "onDestroy": unit.get("onDestroy"),
         "side": unit["side"],
         "refund": recycle_refund(unit["paid"]),
     }
@@ -489,6 +576,7 @@ def view(b):
         },
         "deckCount": len(b["deck"]),
         "discardRequired": max(0, len(b["hand"]) - MAX_HAND) if b["phase"] == "discard" else 0,
+        "nextTurnEnergyPenalty": b["nextTurnEnergyPenalty"],
         "forecast": [
             {
                 "turn": item["turn"],
@@ -496,6 +584,10 @@ def view(b):
                 "width": b["enemies"][item["enemy"]].get("width", 1),
                 "attackPattern": b["enemies"][item["enemy"]].get("attackPattern", "forward"),
                 "abilities": list(b["enemies"][item["enemy"]].get("abilities", [])),
+                "shield": b["enemies"][item["enemy"]].get("shield", 0),
+                "guard": b["enemies"][item["enemy"]].get("guard", 0),
+                "onDeploy": b["enemies"][item["enemy"]].get("onDeploy"),
+                "onDestroy": b["enemies"][item["enemy"]].get("onDestroy"),
                 "name": b["enemies"][item["enemy"]]["name"],
                 "atk": b["enemies"][item["enemy"]]["atk"],
                 "hp": b["enemies"][item["enemy"]]["hp"],

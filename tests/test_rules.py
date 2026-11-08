@@ -912,6 +912,96 @@ def test_enemy_wide_deployment_and_forecast():
     assert any("跳过" in line for line in b["log"])
 
 
+def test_shield_moth():
+    b = make(0)
+    b["plan"] = []
+    moth = put_unit(b, "player", "shield_moth", 1)
+    put_enemy(b, "重击", 1, 3, 5)
+    assert B.view(b)["board"]["player"][0]["shield"] == 1
+    B._enemy_phase(b)
+    assert moth["hp"] == 1 and moth["shield"] == 0
+    assert any("护盾抵消" in line for line in b["log"])
+    B._enemy_phase(b)
+    assert moth["hp"] == 0
+    assert b["board"]["player"][0] is None
+
+
+def test_burst_beetle_on_destroy():
+    b = make(0)
+    b["plan"] = []
+    beetle = put_unit(b, "player", "burst_beetle", 2)
+    left = put_enemy(b, "左侧", 1, 1, 5)
+    right = put_enemy(b, "右侧", 3, 1, 5)
+    B._damage_unit(b, beetle, 2)
+    assert left["hp"] == 4 and right["hp"] == 4
+    explosions = sum("爆炸" in line for line in b["log"])
+    assert explosions == 2, "左右相邻单位各结算一次"
+    B._resolve_on_destroy(b, beetle)
+    assert left["hp"] == 4 and right["hp"] == 4, "同一单位的死亡触发只能结算一次"
+    assert sum("爆炸" in line for line in b["log"]) == explosions
+
+
+def test_mine_beetle_on_destroy():
+    b = make(0)
+    b["plan"] = []
+    mine = put_enemy(b, "雷壳虫", 2, 1, 2, onDestroy="hit_opposite")
+    striker = put_unit(b, "player", "striker", 2)
+    hp = b["hp"]["player"]
+    B._damage_unit(b, mine, 2)
+    assert striker["hp"] == 2
+    assert b["hp"]["player"] == hp, "对位爆炸不应伤害领袖"
+
+    b = make(1)
+    b["plan"] = []
+    mine = put_enemy(b, "雷壳虫", 4, 1, 2, onDestroy="hit_opposite")
+    B._damage_unit(b, mine, 2)
+    assert not any("爆炸" in line for line in b["log"]), "对位列没有单位时不应触发"
+
+
+def test_rail_guard_interception():
+    b = make(0)
+    b["plan"] = []
+    guard = put_unit(b, "player", "rail_guard", 1)
+    bean = put_unit(b, "player", "bean", 2)
+    put_enemy(b, "突击", 2, 2, 5)
+    B._enemy_phase(b)
+    assert guard["hp"] == 3 and guard["guard"] == 0
+    assert bean["hp"] == 2
+    assert any("拦截" in line for line in b["log"])
+    B._enemy_phase(b)
+    assert bean["hp"] == 0, "拦截次数用完后攻击应回到原目标"
+
+    b = make(1)
+    b["plan"] = []
+    guard = put_unit(b, "player", "rail_guard", 1)
+    bean = put_unit(b, "player", "bean", 3)
+    put_enemy(b, "突击", 3, 1, 5)
+    B._enemy_phase(b)
+    assert guard["hp"] == 5 and guard["guard"] == 1
+    assert bean["hp"] == 1, "不相邻的目标不应被拦截"
+
+
+def test_signal_jammer_energy_penalty():
+    encounter = {
+        "playerHp": 15,
+        "enemyHp": 15,
+        "plan": [
+            {"turn": 1, "column": 1, "enemy": "signal_jammer"},
+            {"turn": 2, "column": 2, "enemy": "signal_jammer"},
+        ],
+    }
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
+    jammer = next(item for item in B.view(b)["forecast"] if item["name"] == "信号干扰器")
+    assert jammer["onDeploy"] == "energy_penalty"
+    B.end_turn(b, random.Random(2))
+    assert b["turn"] == 2 and b["energy"] == 5
+    assert b["jammerUsed"] is True
+    assert any("干扰能量回路" in line for line in b["log"])
+    B.end_turn(b, random.Random(3))
+    assert b["turn"] == 3 and b["energy"] == 7, "每场战斗只能触发一次能量惩罚"
+    assert sum("干扰能量回路" in line for line in b["log"]) == 1
+
+
 def test_relay():
     keep = state_at("relay", "node", completed=["battle1"], route=None)
     assert G.public_state(keep)["relay"]["kept"] is False

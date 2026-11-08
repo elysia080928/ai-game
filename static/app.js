@@ -380,8 +380,11 @@ function unitHtml(unit, side, column) {
   if (unit && unit.column !== column) return "";
   const width = unit ? (unit.width || 1) : 1;
   const span = unit && width > 1 ? `${unit.column}-${unit.column + width - 1}` : `${column}`;
+  const charges = unit
+    ? [unit.shield ? `护盾 ${unit.shield}` : "", unit.guard ? `拦截 ${unit.guard}` : ""].filter(Boolean).join("，")
+    : "";
   const label = unit
-    ? `${span} 列，${unit.name}，攻击 ${unit.atk}，生命 ${unit.hp}`
+    ? `${span} 列，${unit.name}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
     : `${column} 列，空列`;
   if (!unit) {
     return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}"><span>空列</span></div>`;
@@ -390,7 +393,7 @@ function unitHtml(unit, side, column) {
   return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${esc(unit.name.slice(0, 1))}</div>
       <div class="unit-name">${esc(unit.name)}${width > 1 ? ` <small>占 ${width} 格</small>` : ""}</div>
-      <div class="unit-stats"><span class="atk">⚔ ${unit.atk}</span><span class="hp">❤ ${unit.hp}/${unit.maxHp}</span></div>
+      <div class="unit-stats"><span class="atk">⚔ ${unit.atk}</span><span class="hp">❤ ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">🛡 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">⛨ ${unit.guard}</span>` : ""}</div>
     </div>`;
 }
 
@@ -401,6 +404,11 @@ function unitTrait(card) {
   else if (card.attackPattern === "double_strike") traits.push("对同列攻击两次");
   if ((card.abilities || []).includes("flying")) traits.push("飞行");
   if ((card.abilities || []).includes("reach")) traits.push("可攻击飞行单位");
+  if (card.shield) traits.push(`护盾 ${card.shield} 次（首次伤害 -1）`);
+  if (card.guard) traits.push(`相邻拦截 ${card.guard} 次`);
+  if (card.onDeploy === "energy_penalty") traits.push("部署时下回合能量 -1");
+  if (card.onDestroy === "burst_adjacent") traits.push("死亡时左右相邻各 1 伤害");
+  else if (card.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
   return traits.join(" · ");
 }
 
@@ -432,13 +440,16 @@ function renderForecast() {
       const current = item.turn === battle.turn;
       const width = item.width || 1;
       const range = width > 1 ? `${item.column}-${item.column + width - 1} 列` : `${item.column} 列`;
-      const trait = item.attackPattern === "split_attack"
-        ? "攻击两列"
-        : item.attackPattern === "double_strike"
-          ? "同列攻击两次"
-          : (item.abilities || []).includes("flying")
-            ? "飞行"
-            : "";
+      const traits = [];
+      if (item.attackPattern === "split_attack") traits.push("攻击两列");
+      else if (item.attackPattern === "double_strike") traits.push("同列攻击两次");
+      if ((item.abilities || []).includes("flying")) traits.push("飞行");
+      if (item.shield) traits.push(`护盾 ${item.shield}`);
+      if (item.guard) traits.push(`拦截 ${item.guard}`);
+      if (item.onDeploy === "energy_penalty") traits.push("部署时：下回合能量 -1");
+      if (item.onDestroy === "burst_adjacent") traits.push("死亡时相邻各 1 伤害");
+      else if (item.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
+      const trait = traits.join(" · ");
       return `<div class="forecast-item ${current ? "current" : "next"}${width > 1 ? " wide" : ""}">
           <span class="forecast-when">${current ? "本回合" : "下回合"} · ${range}</span>
           <span class="forecast-name">${esc(item.name)}</span>
