@@ -1,6 +1,6 @@
 /**
  * 浏览器冒烟测试：node tests/ui_smoke.js（需要先启动服务，以及本机 Edge）。
- * 通过 CDP 驱动无头 Edge：注册 → 拖放部署 → 战斗 1 → 剧情选项 → 关卡选择 →
+ * 通过 CDP 驱动无头 Edge：注册 → 普通/宽体拖放 → 战斗 1 → 剧情选项 → 关卡选择 →
  * 信号/校准/漂流卡匣 → 战斗 2 → 逐列预告与键盘部署；并检查窄窗口滚动。
  */
 
@@ -233,6 +233,43 @@ async function main() {
     await screenshot("ai-game-drag-state.png");
     console.log("ok 拖动时高亮己方空列");
 
+    const wideDrag = await evaluate(`(() => {
+      const fakeUid = 999999;
+      battle.hand.push({
+        uid: fakeUid, cardId: "twin_rail", type: "unit", name: "双轨机偶", cost: 1,
+        atk: 2, hp: 4, width: 2, attackPattern: "split_attack", abilities: ["wide_2"], level: 1,
+      });
+      renderBattle();
+      const card = document.querySelector('#hand .card[data-uid="' + fakeUid + '"]');
+      if (!card) {
+        battle.hand = battle.hand.filter((item) => item.uid !== fakeUid);
+        renderBattle();
+        return { skip: true };
+      }
+      const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
+      const slot = document.querySelector('#player-row .slot.drop-ok');
+      if (!slot) {
+        card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+        battle.hand = battle.hand.filter((item) => item.uid !== fakeUid);
+        renderBattle();
+        return { skip: true };
+      }
+      slot.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+      const columns = [...document.querySelectorAll('#player-row .slot.drop-hover')]
+        .map((element) => Number(element.dataset.column));
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
+      battle.hand = battle.hand.filter((item) => item.uid !== fakeUid);
+      renderBattle();
+      return { skip: false, columns };
+    })()`);
+    if (wideDrag.skip) throw new Error("无法构造宽体拖动预览");
+    const span = [...wideDrag.columns].sort((a, b) => a - b);
+    if (span.length !== 2 || span[1] !== span[0] + 1) {
+      throw new Error(`宽体拖动应同时高亮相邻两列：${JSON.stringify(wideDrag)}`);
+    }
+    console.log("ok 宽体单位拖动同时高亮相邻两列");
+
     const dropped = await evaluate(`(() => {
       const card = document.querySelector('#hand .card[data-uid="${drag.uid}"]');
       const slot = document.querySelector('#player-row .slot[data-column="${drag.column}"]');
@@ -435,14 +472,26 @@ async function main() {
         const handBefore = await evaluate("document.querySelectorAll('#hand .card').length");
         const deployed = await evaluate(`(() => {
           const energy = Number(document.getElementById('energy').textContent);
-          const empty = [...document.querySelectorAll('#player-row .slot.empty')].pop();
-          const card = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
-            .find((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
-          if (!card || !empty) return false;
+          const candidates = [...document.querySelectorAll('#hand .card[data-type="unit"]')]
+            .filter((element) => Number(element.querySelector('.card-cost').textContent) <= energy);
+          let card = null;
+          let start = null;
+          for (const element of candidates) {
+            const width = Number(element.dataset.width || 1);
+            for (let column = 5 - width; column >= 1; column -= 1) {
+              const free = [...Array(width)].every((_, offset) =>
+                !battle.board.player[column - 1 + offset]);
+              if (free) { card = element; start = column; break; }
+            }
+            if (card) break;
+          }
+          const slot = start && document.querySelector(
+            '#player-row .slot.empty[data-column="' + start + '"]');
+          if (!card || !slot) return false;
           const data = new DataTransfer();
           card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data }));
-          empty.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
-          empty.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+          slot.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data }));
+          slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
           card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: data }));
           return true;
         })()`);
@@ -677,7 +726,7 @@ async function main() {
       };
     })()`);
     if (forecast.cells !== 4) throw new Error(`预告应固定四列，实际 ${forecast.cells}`);
-    if (!forecast.text.includes("防守机偶") || !forecast.text.includes("突击哨兵")) {
+    if (!forecast.text.includes("防守机偶") || !forecast.text.includes("分叉哨兵")) {
       throw new Error(`战斗 2 预告缺少内容：${forecast.text}`);
     }
     if (forecast.current < 1 || forecast.next < 1) {
@@ -721,7 +770,8 @@ async function main() {
       "结束回合"
     );
     const nextForecast = await evaluate("document.getElementById('forecast-row').textContent");
-    if (nextForecast.includes("防守机偶") || !nextForecast.includes("突击哨兵")) {
+    if (nextForecast.includes("防守机偶") || !nextForecast.includes("分叉哨兵") ||
+        !nextForecast.includes("宽幅壁垒") || !nextForecast.includes("1-2 列")) {
       throw new Error(`下一回合预告不正确：${nextForecast}`);
     }
     await screenshot("ai-game-battle2-next-turn.png");
@@ -784,8 +834,11 @@ async function main() {
             .filter((card) => card.type === 'unit' && card.cost <= energy)
             .sort((a, c) => a.cost - c.cost);
           for (const card of units) {
-            for (const column of [4, 3, 2, 1]) {
-              if (!b.board.player[column - 1]) {
+            const width = card.width || 1;
+            for (let column = 5 - width; column >= 1; column -= 1) {
+              const free = [...Array(width)].every((_, offset) =>
+                !b.board.player[column - 1 + offset]);
+              if (free) {
                 b = (await call('/api/battle/deploy', { uid: card.uid, column })).battle;
                 placed = true;
                 break;

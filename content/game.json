@@ -79,13 +79,56 @@
         {"cost": 3, "atk": 3, "hp": 2},
         {"cost": 3, "atk": 3, "hp": 3}
       ]
+    },
+    "twin_rail": {
+      "name": "双轨机偶",
+      "type": "unit",
+      "levels": [
+        {"cost": 3, "atk": 2, "hp": 4},
+        {"cost": 3, "atk": 3, "hp": 4}
+      ],
+      "width": 2,
+      "attackPattern": "split_attack",
+      "abilities": ["wide_2"]
+    },
+    "arc_drone": {
+      "name": "弧光无人机",
+      "type": "unit",
+      "levels": [
+        {"cost": 2, "atk": 2, "hp": 2},
+        {"cost": 2, "atk": 3, "hp": 2}
+      ],
+      "attackPattern": "split_attack"
+    },
+    "double_claw": {
+      "name": "双爪维修兽",
+      "type": "unit",
+      "levels": [
+        {"cost": 4, "atk": 3, "hp": 3},
+        {"cost": 4, "atk": 4, "hp": 3}
+      ],
+      "attackPattern": "double_strike"
+    },
+    "phase_flyer": {
+      "name": "相位飞行器",
+      "type": "unit",
+      "levels": [
+        {"cost": 3, "atk": 2, "hp": 2},
+        {"cost": 3, "atk": 3, "hp": 2}
+      ],
+      "abilities": ["flying"]
     }
   },
-  "initialDeck": ["bean", "shell", "scout", "repair", "spark", "worker", "striker", "heavy"],
+  "initialDeck": ["bean", "shell", "twin_rail", "repair", "spark", "worker", "striker", "heavy"],
   "enemies": {
     "small_sentry": {"name": "小型哨兵", "atk": 1, "hp": 2},
     "defender": {"name": "防守机偶", "atk": 1, "hp": 4},
-    "assault_sentry": {"name": "突击哨兵", "atk": 2, "hp": 2}
+    "assault_sentry": {"name": "突击哨兵", "atk": 2, "hp": 2},
+    "fork_sentry": {"name": "分叉哨兵", "atk": 1, "hp": 3, "attackPattern": "split_attack"},
+    "wide_bulwark": {"name": "宽幅壁垒", "atk": 1, "hp": 7, "width": 2, "abilities": ["wide_2"]},
+    "double_striker": {"name": "双击突袭机", "atk": 2, "hp": 2, "attackPattern": "double_strike"},
+    "reach_turret": {"name": "牵引炮塔", "atk": 1, "hp": 4, "abilities": ["reach"]},
+    "phase_hunter": {"name": "相位猎手", "atk": 2, "hp": 2, "abilities": ["flying"]}
   },
   "encounters": {
     "battle1": {
@@ -106,8 +149,8 @@
       "plan": [
         {"turn": 1, "column": 2, "enemy": "defender"},
         {"turn": 1, "column": 4, "enemy": "small_sentry"},
-        {"turn": 2, "column": 3, "enemy": "assault_sentry"},
-        {"turn": 3, "column": 1, "enemy": "small_sentry"}
+        {"turn": 2, "column": 3, "enemy": "fork_sentry"},
+        {"turn": 3, "column": 1, "enemy": "wide_bulwark"}
       ],
       "reward": {"gold": 0}
     }

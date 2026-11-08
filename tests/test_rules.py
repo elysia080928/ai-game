@@ -25,6 +25,31 @@ def make(seed=0, encounter_id="battle1"):
     )
 
 
+def battle_with_card(card_id):
+    for seed in range(50):
+        b = make(seed)
+        card = next((c for c in b["hand"] if c["cardId"] == card_id), None)
+        if card:
+            return b, card
+    raise AssertionError(f"50 个种子内没有抽到 {card_id}")
+
+
+def put_unit(b, side, card_id, column, level=1):
+    stats = B.card_stats(G.CARDS, card_id, level)
+    unit = B._make_unit(b, side, card_id, stats, 0, column, level)
+    for target in range(column, column + stats.get("width", 1)):
+        b["board"][side][target - 1] = unit
+    return unit
+
+
+def put_enemy(b, name, column, atk, hp, side="enemy", **extra):
+    stats = {"name": name, "atk": atk, "hp": hp, "maxHp": hp, **extra}
+    unit = B._make_unit(b, side, name, stats, 0, column, 1)
+    for target in range(column, column + stats.get("width", 1)):
+        b["board"][side][target - 1] = unit
+    return unit
+
+
 def state_at(node_id, phase, completed=None, route=None, flags=None):
     state = G.new_state()
     state["nodeId"] = node_id
@@ -726,6 +751,165 @@ def test_challenge_battle_modifiers():
     )
     assert normal["energy"] == B.FIRST_TURN_ENERGY
     assert len(normal["hand"]) == B.OPENING_DRAW
+
+
+def test_wide_unit_placement():
+    b, card = battle_with_card("twin_rail")
+    energy = b["energy"]
+    for column in (0, 4):
+        try:
+            B.deploy(b, card["uid"], column)
+        except B.GameError:
+            pass
+        else:
+            raise AssertionError("宽体单位越界应被拒绝")
+    assert b["energy"] == energy and len(b["hand"]) == 6
+
+    B.deploy(b, card["uid"], 3)
+    unit = b["board"]["player"][2]
+    assert unit is b["board"]["player"][3], "宽体单位应同时占据两列"
+    assert unit["width"] == 2 and unit["column"] == 3
+    assert b["energy"] == energy - 3, "宽体单位只扣一次费用"
+    slots = B.view(b)["board"]["player"]
+    assert slots[2]["uid"] == slots[3]["uid"] and slots[2]["width"] == 2
+
+    B.recycle(b, 4)
+    assert b["board"]["player"] == [None] * 4, "回收应释放两列"
+    assert b["energy"] == energy - 3 + B.recycle_refund(3)
+
+    for blocker in (2, 3):
+        blocked, blocked_card = battle_with_card("twin_rail")
+        put_unit(blocked, "player", "bean", blocker)
+        try:
+            B.deploy(blocked, blocked_card["uid"], 2)
+        except B.GameError:
+            pass
+        else:
+            raise AssertionError("覆盖任一已有单位的列都应被拒绝")
+        assert len(blocked["hand"]) == 6 and blocked["energy"] == 4
+
+
+def test_split_attack():
+    b = make(0)
+    b["plan"] = []
+    put_unit(b, "player", "arc_drone", 1)
+    put_enemy(b, "左侧", 1, 1, 5)
+    put_enemy(b, "右侧", 2, 1, 5)
+    B._player_attack(b)
+    assert b["board"]["enemy"][0]["hp"] == 3 and b["board"]["enemy"][1]["hp"] == 3
+
+    b = make(1)
+    b["plan"] = []
+    put_unit(b, "player", "arc_drone", 1)
+    put_enemy(b, "左侧", 1, 1, 5)
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert b["board"]["enemy"][0]["hp"] == 3
+    assert b["hp"]["enemy"] == hp - 2, "右侧无目标时应攻击领袖"
+
+    b = make(2)
+    b["plan"] = []
+    put_unit(b, "player", "arc_drone", 1)
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert b["hp"]["enemy"] == hp - 4, "两列都空时应分别结算一次"
+
+    b = make(3)
+    b["plan"] = []
+    put_unit(b, "player", "arc_drone", 4)
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert b["hp"]["enemy"] == hp - 2, "边界外的一列不应结算"
+
+    b = make(4)
+    b["plan"] = []
+    put_unit(b, "player", "twin_rail", 2)
+    put_enemy(b, "左列", 2, 1, 5)
+    put_enemy(b, "右列", 3, 1, 5)
+    B._player_attack(b)
+    assert b["board"]["enemy"][1]["hp"] == 3 and b["board"]["enemy"][2]["hp"] == 3
+
+
+def test_double_strike():
+    b = make(0)
+    b["plan"] = []
+    put_unit(b, "player", "double_claw", 2)
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert b["hp"]["enemy"] == hp - 6, "双击应对同一列结算两次"
+
+    b = make(1)
+    b["plan"] = []
+    put_unit(b, "player", "double_claw", 2)
+    victim = put_enemy(b, "脆皮", 2, 1, 3)
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert victim["hp"] == 0
+    assert b["hp"]["enemy"] == hp - 3, "第一次击杀后第二次应攻击领袖"
+
+
+def test_flying_and_reach():
+    b = make(0)
+    b["plan"] = []
+    put_unit(b, "player", "phase_flyer", 1)
+    ground = put_enemy(b, "地面单位", 1, 1, 5)
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert ground["hp"] == 5 and b["hp"]["enemy"] == hp - 2, "飞行应绕过地面单位"
+
+    b = make(1)
+    b["plan"] = []
+    put_unit(b, "player", "bean", 1)
+    flyer = put_enemy(b, "飞行单位", 1, 1, 2, abilities=["flying"])
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert flyer["hp"] == 2 and b["hp"]["enemy"] == hp, "无 reach 的单位不能伤害飞行单位"
+
+    b = make(2)
+    b["plan"] = []
+    put_enemy(b, "拦截机", 1, 2, 3, side="player", abilities=["reach"])
+    flyer = put_enemy(b, "飞行单位", 1, 1, 2, abilities=["flying"])
+    B._player_attack(b)
+    assert flyer["hp"] == 0, "reach 单位应能攻击飞行单位"
+
+    b = make(3)
+    b["plan"] = []
+    ground = put_unit(b, "player", "shell", 1)
+    put_enemy(b, "飞行单位", 1, 2, 2, abilities=["flying"])
+    hp = b["hp"]["player"]
+    B._enemy_phase(b)
+    assert ground["hp"] == 4 and b["hp"]["player"] == hp - 2, "敌方飞行单位应绕过地面单位"
+
+    b = make(4)
+    b["plan"] = []
+    flyer = put_unit(b, "player", "phase_flyer", 1)
+    put_enemy(b, "牵引炮塔", 1, 1, 4, abilities=["reach"])
+    B._enemy_phase(b)
+    assert flyer["hp"] == 1, "reach 敌人应能攻击飞行单位"
+
+
+def test_enemy_wide_deployment_and_forecast():
+    encounter = {
+        "playerHp": 15,
+        "enemyHp": 15,
+        "plan": [{"turn": 1, "column": 3, "enemy": "wide_bulwark"}],
+    }
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
+    forecast = B.view(b)["forecast"]
+    assert forecast[0]["width"] == 2 and forecast[0]["column"] == 3
+    B.end_turn(b, random.Random(2))
+    unit = b["board"]["enemy"][2]
+    assert unit is b["board"]["enemy"][3] and unit["width"] == 2
+
+    encounter["plan"] = [
+        {"turn": 1, "column": 2, "enemy": "wide_bulwark"},
+        {"turn": 1, "column": 3, "enemy": "small_sentry"},
+    ]
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
+    B.end_turn(b, random.Random(2))
+    units = list(B._side_units(b, "enemy"))
+    assert len(units) == 1 and units[0]["width"] == 2, "占列时应跳过且不换列"
+    assert any("跳过" in line for line in b["log"])
 
 
 def test_relay():

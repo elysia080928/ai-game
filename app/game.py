@@ -4,7 +4,7 @@ import json
 import random
 from pathlib import Path
 
-from .battle import GameError, card_stats
+from .battle import ATTACK_PATTERNS, KNOWN_ABILITIES, GameError, card_stats
 
 _CONTENT_PATH = Path(__file__).resolve().parent.parent / "content" / "game.json"
 with _CONTENT_PATH.open(encoding="utf-8") as _f:
@@ -65,6 +65,44 @@ def validate_content():
             raise RuntimeError(f"卡牌 {card_id} 类型非法")
         if not card["levels"]:
             raise RuntimeError(f"卡牌 {card_id} 没有等级数据")
+        width = card.get("width", 1)
+        pattern = card.get("attackPattern", "forward")
+        abilities = card.get("abilities", [])
+        if not isinstance(width, int) or isinstance(width, bool) or width not in (1, 2):
+            raise RuntimeError(f"卡牌 {card_id} 宽度非法")
+        if pattern not in ATTACK_PATTERNS:
+            raise RuntimeError(f"卡牌 {card_id} 攻击模式非法")
+        if (
+            not isinstance(abilities, list)
+            or any(not isinstance(item, str) or item not in KNOWN_ABILITIES for item in abilities)
+            or len(abilities) != len(set(abilities))
+        ):
+            raise RuntimeError(f"卡牌 {card_id} 能力非法")
+        if (width == 2) != ("wide_2" in abilities):
+            raise RuntimeError(f"卡牌 {card_id} 宽度与 wide_2 不一致")
+        if card["type"] != "unit" and (width != 1 or pattern != "forward" or abilities):
+            raise RuntimeError(f"指令卡 {card_id} 不能拥有站位或攻击能力")
+
+    for enemy_id, enemy in ENEMIES.items():
+        width = enemy.get("width", 1)
+        pattern = enemy.get("attackPattern", "forward")
+        abilities = enemy.get("abilities", [])
+        if not enemy.get("name"):
+            raise RuntimeError(f"敌人 {enemy_id} 缺少名称")
+        if enemy.get("atk", -1) < 0 or enemy.get("hp", 0) < 1:
+            raise RuntimeError(f"敌人 {enemy_id} 数值非法")
+        if not isinstance(width, int) or isinstance(width, bool) or width not in (1, 2):
+            raise RuntimeError(f"敌人 {enemy_id} 宽度非法")
+        if pattern not in ATTACK_PATTERNS:
+            raise RuntimeError(f"敌人 {enemy_id} 攻击模式非法")
+        if (
+            not isinstance(abilities, list)
+            or any(not isinstance(item, str) or item not in KNOWN_ABILITIES for item in abilities)
+            or len(abilities) != len(set(abilities))
+        ):
+            raise RuntimeError(f"敌人 {enemy_id} 能力非法")
+        if (width == 2) != ("wide_2" in abilities):
+            raise RuntimeError(f"敌人 {enemy_id} 宽度与 wide_2 不一致")
 
     ids = set()
     for node in NODES:
@@ -134,10 +172,11 @@ def validate_content():
         for item in encounter["plan"]:
             if item["turn"] < 1:
                 raise RuntimeError(f"遭遇 {encounter_id} 计划回合非法")
-            if not (1 <= item["column"] <= 4):
-                raise RuntimeError(f"遭遇 {encounter_id} 计划列号非法")
             if item["enemy"] not in ENEMIES:
                 raise RuntimeError(f"遭遇 {encounter_id} 引用了未知敌人")
+            width = ENEMIES[item["enemy"]].get("width", 1)
+            if not (1 <= item["column"] <= 4 - width + 1):
+                raise RuntimeError(f"遭遇 {encounter_id} 计划列号非法")
     for offer in RECRUIT["offers"]:
         if offer["id"] not in CARDS or offer["price"] <= 0:
             raise RuntimeError("招募配置非法")
@@ -199,7 +238,12 @@ def validate_content():
             if extra not in ENEMIES:
                 raise RuntimeError("训练挑战引用了未知敌人")
             column = item.get("column")
-            if not isinstance(column, int) or isinstance(column, bool) or not (1 <= column <= 4):
+            width = ENEMIES[extra].get("width", 1)
+            if (
+                not isinstance(column, int)
+                or isinstance(column, bool)
+                or not (1 <= column <= 4 - width + 1)
+            ):
                 raise RuntimeError("训练挑战列号非法")
         flag = item.get("requiresFlag")
         if flag is not None and (not isinstance(flag, str) or not flag):

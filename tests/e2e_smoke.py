@@ -131,8 +131,12 @@ def play_loop(client, battle):
         )
         placed = False
         for card in units:
-            for column in (4, 3, 2, 1):
-                if battle["board"]["player"][column - 1] is None:
+            width = card.get("width", 1)
+            for column in range(5 - width, 0, -1):
+                if all(
+                    battle["board"]["player"][column - 1 + offset] is None
+                    for offset in range(width)
+                ):
                     battle = client.ok(
                         "/api/battle/deploy", {"uid": card["uid"], "column": column}
                     )["battle"]

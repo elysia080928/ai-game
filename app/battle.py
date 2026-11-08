@@ -9,6 +9,8 @@ COLUMNS = 4
 LOG_LIMIT = 60
 FIRST_TURN_ENERGY = 4
 OPENING_DRAW = 6
+ATTACK_PATTERNS = ("forward", "split_attack", "double_strike")
+KNOWN_ABILITIES = ("wide_2", "flying", "reach")
 
 
 class GameError(Exception):
@@ -29,6 +31,9 @@ def card_stats(cards, card_id, level, atk_bonus=0, hp_bonus=0):
         result["atk"] = level_data["atk"] + atk_bonus
         result["hp"] = level_data["hp"] + hp_bonus
         result["maxHp"] = result["hp"]
+        result["width"] = definition.get("width", 1)
+        result["attackPattern"] = definition.get("attackPattern", "forward")
+        result["abilities"] = list(definition.get("abilities", []))
     else:
         result["heal"] = level_data.get("heal")
         result["damage"] = level_data.get("damage")
@@ -179,10 +184,27 @@ def _find_unit(b, uid):
     return None
 
 
+def _unit_columns(unit):
+    return range(unit["column"], unit["column"] + unit.get("width", 1))
+
+
+def _has_ability(unit, ability):
+    return ability in unit.get("abilities", [])
+
+
+def _side_units(b, side):
+    seen = set()
+    for unit in b["board"][side]:
+        if unit is not None and unit["uid"] not in seen:
+            seen.add(unit["uid"])
+            yield unit
+
+
 def _remove_unit(b, unit):
-    column = unit["column"] - 1
-    if b["board"][unit["side"]][column] is unit:
-        b["board"][unit["side"]][column] = None
+    slots = b["board"][unit["side"]]
+    for index, slot in enumerate(slots):
+        if slot is unit:
+            slots[index] = None
 
 
 def _damage_unit(b, unit, amount):
@@ -207,6 +229,9 @@ def _make_unit(b, side, card_id, stats, paid, column, level):
         "paid": paid,
         "side": side,
         "column": column,
+        "width": stats.get("width", 1),
+        "attackPattern": stats.get("attackPattern", "forward"),
+        "abilities": list(stats.get("abilities", [])),
     }
     b["next_uid"] += 1
     return unit
@@ -221,10 +246,10 @@ def deploy(b, uid, column):
     )
     if stats["type"] != "unit":
         raise GameError("这不是单位牌")
-    if not (1 <= column <= COLUMNS):
+    width = stats.get("width", 1)
+    if not (1 <= column <= COLUMNS - width + 1):
         raise GameError("列号无效")
-    col = column - 1
-    if b["board"]["player"][col] is not None:
+    if any(b["board"]["player"][c - 1] is not None for c in range(column, column + width)):
         raise GameError("该列已有己方单位")
     if b["energy"] < stats["cost"]:
         raise GameError("能量不足")
@@ -232,8 +257,10 @@ def deploy(b, uid, column):
     b["energy"] -= stats["cost"]
     b["used"].append(card["uid"])
     unit = _make_unit(b, "player", card["cardId"], stats, stats["cost"], column, card["level"])
-    b["board"]["player"][col] = unit
-    _log(b, f"部署 {unit['name']} 到 {column} 列（花费 {stats['cost']} 能量）")
+    for target in _unit_columns(unit):
+        b["board"]["player"][target - 1] = unit
+    span = f"{column}-{column + width - 1} 列" if width > 1 else f"{column} 列"
+    _log(b, f"部署 {unit['name']} 到 {span}（花费 {stats['cost']} 能量）")
     _check_stalemate(b)
 
 
@@ -319,22 +346,46 @@ def end_turn(b, rng=None):
     _start_turn(b, rng)
 
 
+def _target_columns(unit):
+    start = unit["column"]
+    width = unit.get("width", 1)
+    pattern = unit.get("attackPattern", "forward")
+    if pattern == "split_attack":
+        columns = list(range(start, start + width)) if width > 1 else [start, start + 1]
+    elif pattern == "double_strike":
+        columns = [start, start]
+    else:
+        columns = [start]
+    return [column for column in columns if column <= COLUMNS]
+
+
+def _resolve_attack(b, attacker, column):
+    defender_side = "enemy" if attacker["side"] == "player" else "player"
+    target = b["board"][defender_side][column - 1]
+    if target is not None and _has_ability(attacker, "flying") and not _has_ability(target, "reach"):
+        _log(b, f"{attacker['name']} 飞越 {column} 列")
+        target = None
+    if target is not None and _has_ability(target, "flying") and not _has_ability(attacker, "reach"):
+        _log(b, f"{attacker['name']} 无法攻击飞行单位 {target['name']}")
+        return
+    if target is not None:
+        _log(b, f"{attacker['name']} 攻击 {target['name']}，造成 {attacker['atk']} 点伤害")
+        _damage_unit(b, target, attacker["atk"])
+        return
+    hp_key = "enemy" if attacker["side"] == "player" else "player"
+    b["hp"][hp_key] -= attacker["atk"]
+    who = "敌方领袖" if attacker["side"] == "player" else "己方领袖"
+    _log(b, f"{attacker['name']} 攻击{who}，造成 {attacker['atk']} 点伤害")
+    if b["hp"][hp_key] <= 0:
+        b["hp"][hp_key] = 0
+        (_win if attacker["side"] == "player" else _lose)(b)
+
+
 def _player_attack(b):
-    for column in range(COLUMNS):
-        unit = b["board"]["player"][column]
-        if unit is None:
-            continue
-        target = b["board"]["enemy"][column]
-        if target is not None:
-            name = target["name"]
-            _log(b, f"{unit['name']} 攻击 {name}，造成 {unit['atk']} 点伤害")
-            _damage_unit(b, target, unit["atk"])
-        else:
-            b["hp"]["enemy"] -= unit["atk"]
-            _log(b, f"{unit['name']} 攻击敌方领袖，造成 {unit['atk']} 点伤害")
-            if b["hp"]["enemy"] <= 0:
-                b["hp"]["enemy"] = 0
-                _win(b)
+    for unit in _side_units(b, "player"):
+        for column in _target_columns(unit):
+            _resolve_attack(b, unit, column)
+            if b["phase"] == "over":
                 return
 
 
@@ -342,36 +393,33 @@ def _enemy_phase(b):
     for item in b["plan"]:
         if item["turn"] != b["turn"]:
             continue
-        col = item["column"] - 1
-        if b["board"]["enemy"][col] is not None:
-            _log(b, f"敌方计划在 {item['column']} 列部署，但该列已被占用，跳过")
-            continue
         enemy = b["enemies"][item["enemy"]]
+        width = enemy.get("width", 1)
+        start = item["column"]
+        columns = range(start, start + width)
+        if any(b["board"]["enemy"][column - 1] is not None for column in columns):
+            span = f"{start}-{start + width - 1}" if width > 1 else f"{start}"
+            _log(b, f"敌方计划在 {span} 列部署，但范围已被占用，跳过")
+            continue
         stats = {
             "name": enemy["name"],
             "atk": enemy["atk"],
             "hp": enemy["hp"],
             "maxHp": enemy["hp"],
+            "width": width,
+            "attackPattern": enemy.get("attackPattern", "forward"),
+            "abilities": list(enemy.get("abilities", [])),
         }
-        unit = _make_unit(b, "enemy", item["enemy"], stats, 0, item["column"], 1)
-        b["board"]["enemy"][col] = unit
-        _log(b, f"敌方在 {item['column']} 列部署 {unit['name']}")
+        unit = _make_unit(b, "enemy", item["enemy"], stats, 0, start, 1)
+        for column in columns:
+            b["board"]["enemy"][column - 1] = unit
+        span = f"{start}-{start + width - 1} 列" if width > 1 else f"{start} 列"
+        _log(b, f"敌方在 {span}部署 {unit['name']}")
 
-    for column in range(COLUMNS):
-        unit = b["board"]["enemy"][column]
-        if unit is None:
-            continue
-        target = b["board"]["player"][column]
-        if target is not None:
-            name = target["name"]
-            _log(b, f"{unit['name']} 攻击 {name}，造成 {unit['atk']} 点伤害")
-            _damage_unit(b, target, unit["atk"])
-        else:
-            b["hp"]["player"] -= unit["atk"]
-            _log(b, f"{unit['name']} 攻击己方领袖，造成 {unit['atk']} 点伤害")
-            if b["hp"]["player"] <= 0:
-                b["hp"]["player"] = 0
-                _lose(b)
+    for unit in _side_units(b, "enemy"):
+        for column in _target_columns(unit):
+            _resolve_attack(b, unit, column)
+            if b["phase"] == "over":
                 return
 
 
@@ -419,6 +467,9 @@ def _unit_view(unit):
         "hp": unit["hp"],
         "maxHp": unit["maxHp"],
         "column": unit["column"],
+        "width": unit.get("width", 1),
+        "attackPattern": unit.get("attackPattern", "forward"),
+        "abilities": list(unit.get("abilities", [])),
         "side": unit["side"],
         "refund": recycle_refund(unit["paid"]),
     }
@@ -442,6 +493,9 @@ def view(b):
             {
                 "turn": item["turn"],
                 "column": item["column"],
+                "width": b["enemies"][item["enemy"]].get("width", 1),
+                "attackPattern": b["enemies"][item["enemy"]].get("attackPattern", "forward"),
+                "abilities": list(b["enemies"][item["enemy"]].get("abilities", [])),
                 "name": b["enemies"][item["enemy"]]["name"],
                 "atk": b["enemies"][item["enemy"]]["atk"],
                 "hp": b["enemies"][item["enemy"]]["hp"],

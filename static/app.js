@@ -377,31 +377,46 @@ async function act(path, body) {
 }
 
 function unitHtml(unit, side, column) {
+  if (unit && unit.column !== column) return "";
+  const width = unit ? (unit.width || 1) : 1;
+  const span = unit && width > 1 ? `${unit.column}-${unit.column + width - 1}` : `${column}`;
   const label = unit
-    ? `${column} 列，${unit.name}，攻击 ${unit.atk}，生命 ${unit.hp}`
+    ? `${span} 列，${unit.name}，攻击 ${unit.atk}，生命 ${unit.hp}`
     : `${column} 列，空列`;
   if (!unit) {
     return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}"><span>空列</span></div>`;
   }
-  return `<div class="slot unit ${side}" data-side="${side}" data-column="${column}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}">
+  const style = width > 1 ? ` style="grid-column: span ${width};"` : "";
+  return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${esc(unit.name.slice(0, 1))}</div>
-      <div class="unit-name">${esc(unit.name)}</div>
+      <div class="unit-name">${esc(unit.name)}${width > 1 ? ` <small>占 ${width} 格</small>` : ""}</div>
       <div class="unit-stats"><span class="atk">⚔ ${unit.atk}</span><span class="hp">❤ ${unit.hp}/${unit.maxHp}</span></div>
     </div>`;
+}
+
+function unitTrait(card) {
+  const traits = [];
+  if ((card.width || 1) > 1) traits.push(`占 ${card.width} 列`);
+  if (card.attackPattern === "split_attack") traits.push("攻击当前列与右侧列");
+  else if (card.attackPattern === "double_strike") traits.push("对同列攻击两次");
+  if ((card.abilities || []).includes("flying")) traits.push("飞行");
+  if ((card.abilities || []).includes("reach")) traits.push("可攻击飞行单位");
+  return traits.join(" · ");
 }
 
 function cardHtml(card, selected, draggable = false) {
   const stats = card.type === "unit"
     ? `⚔ ${card.atk}　❤ ${card.hp}`
     : esc(card.effectText || (card.heal != null ? `恢复 ${card.heal}` : card.damage != null ? `造成 ${card.damage} 伤害` : ""));
+  const trait = card.type === "unit" ? unitTrait(card) : "";
   return `<div class="card${selected ? " selected" : ""}" data-uid="${card.uid}" data-type="${card.type}"
-      tabindex="0" role="button" draggable="${draggable ? "true" : "false"}"
-      aria-label="${esc(card.name)}，费用 ${card.cost}，等级 ${card.level}${card.type === "unit" ? `，攻击 ${card.atk}，生命 ${card.hp}` : ""}">
+      data-width="${card.width || 1}" tabindex="0" role="button" draggable="${draggable ? "true" : "false"}"
+      aria-label="${esc(card.name)}，费用 ${card.cost}，等级 ${card.level}${card.type === "unit" ? `，攻击 ${card.atk}，生命 ${card.hp}${trait ? `，${trait}` : ""}` : ""}">
       <div class="card-art ${card.type}" aria-hidden="true"><span>${esc(card.name.slice(0, 1))}</span></div>
       <div class="card-cost">${card.cost}</div>
       <div class="card-name">${esc(card.name)}</div>
       <div class="card-stats">${stats}</div>
-      <div class="card-level">Lv.${card.level}</div>
+      <div class="card-level">Lv.${card.level}${trait ? ` · ${esc(trait)}` : ""}</div>
     </div>`;
 }
 
@@ -415,10 +430,19 @@ function renderForecast() {
     const items = forecast.filter((item) => item.column === column);
     const content = items.map((item) => {
       const current = item.turn === battle.turn;
-      return `<div class="forecast-item ${current ? "current" : "next"}">
-          <span class="forecast-when">${current ? "本回合" : "下回合"}</span>
+      const width = item.width || 1;
+      const range = width > 1 ? `${item.column}-${item.column + width - 1} 列` : `${item.column} 列`;
+      const trait = item.attackPattern === "split_attack"
+        ? "攻击两列"
+        : item.attackPattern === "double_strike"
+          ? "同列攻击两次"
+          : (item.abilities || []).includes("flying")
+            ? "飞行"
+            : "";
+      return `<div class="forecast-item ${current ? "current" : "next"}${width > 1 ? " wide" : ""}">
+          <span class="forecast-when">${current ? "本回合" : "下回合"} · ${range}</span>
           <span class="forecast-name">${esc(item.name)}</span>
-          <span class="forecast-stats">⚔ ${item.atk} · ❤ ${item.hp}</span>
+          <span class="forecast-stats">⚔ ${item.atk} · ❤ ${item.hp}${trait ? ` · ${trait}` : ""}</span>
         </div>`;
     }).join("");
     return `<div class="forecast-cell${items.length ? "" : " empty"}" data-column="${column}">
@@ -518,20 +542,37 @@ function markDropSlot(side, column) {
   if (slot) slot.classList.add("drop-ok");
 }
 
+function unitCanPlace(card, start) {
+  const width = card.width || 1;
+  if (start < 1 || start + width - 1 > 4) return false;
+  for (let column = start; column < start + width; column += 1) {
+    if (battle.board.player[column - 1]) return false;
+  }
+  return true;
+}
+
+function unitDropStart(card, column) {
+  if (unitCanPlace(card, column)) return column;
+  const width = card.width || 1;
+  return width > 1 && unitCanPlace(card, column - 1) ? column - 1 : null;
+}
+
 function markDropTargets(card) {
   if (card.cost > battle.energy) {
     showToast("能量不足");
     return;
   }
   if (card.type === "unit") {
+    const width = card.width || 1;
     let count = 0;
-    battle.board.player.forEach((unit, index) => {
-      if (!unit) {
-        markDropSlot("player", index + 1);
-        count += 1;
+    for (let start = 1; start + width - 1 <= 4; start += 1) {
+      if (!unitCanPlace(card, start)) continue;
+      for (let column = start; column < start + width; column += 1) {
+        markDropSlot("player", column);
       }
-    });
-    if (!count) showToast("己方没有空列");
+      count += 1;
+    }
+    if (!count) showToast("己方没有足够连续空列");
     return;
   }
   if (card.heal != null) {
@@ -574,7 +615,12 @@ async function dropFromDrag(uid, side, column) {
       showToast("单位只能部署到己方空列");
       return;
     }
-    await act("/api/battle/deploy", { uid, column });
+    const start = unitDropStart(card, column);
+    if (start == null) {
+      showToast("这里放不下这张卡");
+      return;
+    }
+    await act("/api/battle/deploy", { uid, column: start });
     return;
   }
   if (card.heal != null) {
@@ -608,7 +654,21 @@ function onDragOver(event) {
   event.dataTransfer.dropEffect = "move";
   document.querySelectorAll(".slot.drop-hover").forEach((slot) => slot.classList.remove("drop-hover"));
   const slot = event.target.closest(".slot");
-  if (slot?.classList.contains("drop-ok")) slot.classList.add("drop-hover");
+  if (!slot?.classList.contains("drop-ok")) return;
+  const card = battle.hand.find((item) => item.uid === draggingUid);
+  if (!card || card.type !== "unit") {
+    slot.classList.add("drop-hover");
+    return;
+  }
+  const start = unitDropStart(card, info.column);
+  if (start == null) {
+    slot.classList.add("drop-hover");
+    return;
+  }
+  for (let column = start; column < start + (card.width || 1); column += 1) {
+    document.querySelector(`#${info.side}-row .slot[data-column="${column}"]`)
+      ?.classList.add("drop-hover");
+  }
 }
 
 function onDragLeave(event) {
@@ -648,7 +708,12 @@ async function slotAction(side, column, uid) {
         showToast("能量不足");
         return;
       }
-      await act("/api/battle/deploy", { uid: card.uid, column });
+      const start = unitDropStart(card, column);
+      if (start == null) {
+        showToast("这里放不下这张卡");
+        return;
+      }
+      await act("/api/battle/deploy", { uid: card.uid, column: start });
     }
     return;
   }
