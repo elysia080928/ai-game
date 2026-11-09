@@ -223,6 +223,10 @@ def _remove_unit(b, unit):
             slots[index] = None
 
 
+def _on_board(b, unit):
+    return any(slot is unit for slot in b["board"][unit["side"]])
+
+
 def _resolve_on_deploy(b, unit):
     trigger = unit.get("onDeploy")
     if trigger == "energy_penalty":
@@ -492,12 +496,27 @@ def _resolve_attack(b, attacker, column):
         (_win if attacker["side"] == "player" else _lose)(b)
 
 
+def _attack_columns(b, unit):
+    """一次多列攻击；横扫对同一宽体单位只结算一次。"""
+    defender = "enemy" if unit["side"] == "player" else "player"
+    swept = set()
+    for column in _target_columns(unit):
+        if b["phase"] == "over":
+            return
+        if not _on_board(b, unit):
+            return
+        if unit.get("attackPattern") == "sweep":
+            target = b["board"][defender][column - 1]
+            if target is not None:
+                if target["uid"] in swept:
+                    continue
+                swept.add(target["uid"])
+        _resolve_attack(b, unit, column)
+
+
 def _player_attack(b):
     for unit in _side_units(b, "player"):
-        for column in _target_columns(unit):
-            _resolve_attack(b, unit, column)
-            if b["phase"] == "over":
-                return
+        _attack_columns(b, unit)
 
 
 def _shift_enemies(b):
@@ -554,10 +573,7 @@ def _enemy_phase(b):
         _resolve_on_deploy(b, unit)
 
     for unit in _side_units(b, "enemy"):
-        for column in _target_columns(unit):
-            _resolve_attack(b, unit, column)
-            if b["phase"] == "over":
-                return
+        _attack_columns(b, unit)
     _shift_enemies(b)
 
 
@@ -576,12 +592,21 @@ def _lose(b):
 def _check_stalemate(b):
     if b["phase"] == "over":
         return
-    if any(b["board"]["player"]) or any(b["board"]["enemy"]):
+    if any(b["board"]["player"]):
         return
-    if b["hand"] or b["deck"]:
+    if b["deck"] or any(item["turn"] > b["turn"] for item in b["plan"]):
         return
-    if any(item["turn"] > b["turn"] for item in b["plan"]):
+    enemy_units = list(_side_units(b, "enemy"))
+    if any(unit.get("atk", 0) > 0 and unit.get("attackPattern") != "sweep" for unit in enemy_units):
         return
+    for card in b["hand"]:
+        stats = card_stats(
+            b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+        )
+        if stats["type"] == "unit":
+            return
+        if stats.get("damage") is not None and enemy_units:
+            return
     _lose(b)
     _log(b, "双方都无力继续，判定失败")
 

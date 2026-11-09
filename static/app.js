@@ -39,6 +39,31 @@ const NODE_TYPES = {
   relay: "中继",
 };
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
+const TUTORIAL_KEY = "ai-game.tutorial.map1.v1";
+const TUTORIAL_STEPS = [
+  {
+    title: "先看清目标",
+    text: "双方领袖各有 15 点生命。把敌方领袖降到 0 就获胜；己方领袖归零则战斗失败。失败可以重试本场，进入战斗前的牌组和金币都会保留。",
+  },
+  {
+    title: "把单位拖上战场",
+    text: "从手牌拖动单位牌到己方空列。卡牌上的费用必须不超过当前能量；能量每回合 +2，未用完会保留。宽体单位占两列，需要连续两列都为空。",
+  },
+  {
+    title: "结束回合后才会攻击",
+    text: "点击「结束回合」后，己方单位从左到右攻击正前方。对位没有单位时会直接攻击敌方领袖。之后敌人会按预告部署并反击。",
+  },
+  {
+    title: "先读敌方预告",
+    text: "战斗上方的预告会标出敌人将在哪一列、第几回合出现，以及攻击、生命和特殊机制。分叉、双击、飞行、护盾、拦截等效果会改变站位选择。",
+  },
+  {
+    title: "第一关怎么走",
+    text: "战斗胜利后回到地图，选择下一个可进入的节点；没选的支线会关闭。奇遇能强化牌组，精英战提供三选一卡牌奖励，最后迎战镜像核心。",
+  },
+];
+let tutorialStep = 0;
+let autoMap2 = false;
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -92,6 +117,7 @@ function render() {
   const loggedIn = !!state;
   $("auth").hidden = loggedIn;
   $("game").hidden = !loggedIn;
+  updateViewportGuard(loggedIn);
   if (!loggedIn) {
     $("auth-error").textContent = "";
     return;
@@ -111,7 +137,7 @@ function render() {
 
   hideViews();
   if (state.complete) {
-    $("complete-view").hidden = false;
+    renderComplete();
     return;
   }
   if (state.phase === "map") {
@@ -173,6 +199,36 @@ function render() {
   if (state.node && state.node.type === "trial") {
     renderTrial();
   }
+}
+
+function updateViewportGuard(loggedIn = !!state) {
+  const mobile = window.matchMedia("(max-width: 760px)").matches;
+  const portrait = mobile && window.innerHeight > window.innerWidth;
+  const width = mobile ? 667 : 1024;
+  const height = mobile ? 375 : 600;
+  $("orientation-guard").hidden = !loggedIn || !portrait;
+  $("size-guard").hidden = !loggedIn || portrait || window.innerWidth >= width && window.innerHeight >= height;
+}
+
+function refreshPagedLists(root = document) {
+  root.querySelectorAll(".offers, .targets").forEach((list) => {
+    const items = [...list.children];
+    let controls = list.nextElementSibling;
+    if (!controls || !controls.classList.contains("page-controls")) {
+      controls = document.createElement("div");
+      controls.className = "page-controls";
+      list.after(controls);
+    }
+    const compact = window.matchMedia("(max-width: 760px) and (orientation: landscape)").matches;
+    const width = items[0]?.classList.contains("card-offer") || items[0]?.classList.contains("card-target") ? (compact ? 118 : 196) : (compact ? 190 : 250);
+    const pageSize = Math.max(1, Math.floor((list.clientWidth || window.innerWidth) / width));
+    const pageCount = Math.ceil(items.length / pageSize);
+    const page = Math.min(Number(list.dataset.page || 0), pageCount - 1);
+    list.dataset.page = String(page);
+    items.forEach((item, index) => { item.hidden = index < page * pageSize || index >= (page + 1) * pageSize; });
+    controls.hidden = pageCount < 2;
+    controls.innerHTML = pageCount < 2 ? "" : `<button type="button" class="ghost" data-page-step="-1" aria-label="上一页" ${page === 0 ? "disabled" : ""}>‹</button><span aria-live="polite">${page + 1} / ${pageCount}</span><button type="button" class="ghost" data-page-step="1" aria-label="下一页" ${page + 1 === pageCount ? "disabled" : ""}>›</button>`;
+  });
 }
 
 /* ---------- 剧情 ---------- */
@@ -276,6 +332,23 @@ function mapNodeButton(node) {
     </button>`;
 }
 
+function renderComplete() {
+  $("complete-view").hidden = false;
+  // 旧存档停在地图一完成页时自动进入地图二；新流程在服务端直接衔接。
+  if (state.mapType === "map1" && state.canStartMap2 && !autoMap2) {
+    autoMap2 = true;
+    act("/api/game/map2", {});
+    return;
+  }
+  const meta = state.mapMeta || {};
+  const isMap2 = state.mapType === "map2";
+  $("complete-title").textContent = isMap2 ? "深层回路完成" : "回路边境完成";
+  $("complete-text").textContent = isMap2
+    ? `你走通了${meta.title || "深层回路"}。重新开始会回到第一张地图。`
+    : `你已经走通了${meta.title || "回路边境"}的完整路线。`;
+  $("map2-btn").hidden = !state.canStartMap2;
+}
+
 function renderMap() {
   const map = state.map;
   if (!map) {
@@ -309,14 +382,18 @@ function renderMap() {
       ${isCurrent ? '<span class="map-pawn" role="img" aria-label="当前位置"><svg viewBox="0 0 30 40" aria-hidden="true"><circle cx="15" cy="8" r="5"/><path d="M11 15h8l2 16H9l2-16ZM7 31h16v5H7z"/></svg></span>' : ""}
       ${mapNodeButton(node)}</div>`;
   }).join("");
+  const mapType = map.mapType || state.mapType || "map1";
+  const meta = state.mapMeta || {};
+  const mapLabel = mapType === "map2" ? "第二章 · 深层回路" : "第一章 · 回路边境";
+  $("map-eyebrow").textContent = meta.title ? `${meta.chapter} · ${meta.title}` : mapLabel;
   $("map-page-left").innerHTML = `
-    <div class="map-board" role="group" aria-label="回路边境冒险地图，选择亮起的事件图标前进">
+    <div class="map-board map-type-${esc(mapType)}" role="group" aria-label="${esc(meta.title || "回路边境")}冒险地图，选择亮起的事件图标前进">
       <div class="map-terrain" aria-hidden="true"></div>
-      <div class="map-cartouche" aria-hidden="true"><span>THE BORDERLANDS</span><strong>回路边境</strong><i>一张尚未写完的地图</i></div>
+      <div class="map-cartouche" aria-hidden="true"><span>${esc(meta.subtitle || "THE BORDERLANDS")}</span><strong>${esc(meta.title || "回路边境")}</strong><i>${esc(meta.caption || "一张尚未写完的地图")}</i></div>
       <svg class="map-paths map-paths-desktop" viewBox="0 0 1200 640" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>
       <svg class="map-paths map-paths-mobile" viewBox="0 0 640 1200" preserveAspectRatio="none" aria-hidden="true"><g transform="matrix(0 1 1 0 0 0)">${paths}</g></svg>
       ${nodes}
-      <span class="map-destination" aria-hidden="true">镜像核心</span>
+      <span class="map-destination" aria-hidden="true">${esc(meta.destination || "镜像核心")}</span>
     </div>`;
   $("map-page-right").innerHTML = `
     <div class="map-legend">
@@ -523,6 +600,36 @@ function renderForecast() {
   }).join("");
 }
 
+function tutorialDone() {
+  try { return localStorage.getItem(TUTORIAL_KEY) === "1"; } catch (_) { return true; }
+}
+
+function closeTutorial() {
+  try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch (_) { /* 本地存储不可用时仅本次跳过 */ }
+  $("tutorial-panel").hidden = true;
+  if (battle && battle.phase === "player") $("end-turn").focus();
+}
+
+function showTutorialStep() {
+  const step = TUTORIAL_STEPS[tutorialStep];
+  $("tutorial-title").textContent = step.title;
+  $("tutorial-text").textContent = step.text;
+  $("tutorial-dots").innerHTML = TUTORIAL_STEPS
+    .map((_, index) => `<i class="${index === tutorialStep ? "active" : ""}"></i>`)
+    .join("");
+  $("tutorial-next").textContent = tutorialStep === TUTORIAL_STEPS.length - 1 ? "开始战斗" : "下一步";
+  $("tutorial-next").focus();
+}
+
+function maybeShowTutorial() {
+  if (tutorialDone() || !state || !battle || !$("tutorial-panel").hidden) return;
+  if (state.mapType !== "map1" || state.progress !== 0) return;
+  if (!state.node || state.node.type !== "battle" || battle.phase !== "player") return;
+  tutorialStep = 0;
+  $("tutorial-panel").hidden = false;
+  showTutorialStep();
+}
+
 function renderBattle() {
   $("battle-view").hidden = false;
   if (!battle) {
@@ -558,6 +665,7 @@ function renderBattle() {
 
   renderDiscard();
   renderResult();
+  maybeShowTutorial();
 }
 
 function renderDiscard() {
@@ -1215,6 +1323,22 @@ async function logout() {
 }
 
 function bindEvents() {
+  window.addEventListener("resize", () => updateViewportGuard());
+  window.addEventListener("orientationchange", () => updateViewportGuard());
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page-step]");
+    if (!button) return;
+    const list = button.parentElement.previousElementSibling;
+    if (!list || !list.matches(".offers, .targets")) return;
+    list.dataset.page = String(Number(list.dataset.page || 0) + Number(button.dataset.pageStep));
+    refreshPagedLists(list.parentElement);
+  });
+  const pagerObserver = new MutationObserver((records) => {
+    const containers = new Set(records.map((record) => record.target.closest(".offers, .targets")).filter(Boolean));
+    containers.forEach((list) => { delete list.dataset.page; refreshPagedLists(list.parentElement); });
+  });
+  document.querySelectorAll(".offers, .targets").forEach((list) => pagerObserver.observe(list, { childList: true }));
+  window.addEventListener("resize", () => requestAnimationFrame(() => refreshPagedLists()));
   $("login-btn").addEventListener("click", () => loginOrRegister("/api/login"));
   $("register-btn").addEventListener("click", () => loginOrRegister("/api/register"));
   $("password").addEventListener("keydown", (event) => {
@@ -1319,6 +1443,16 @@ function bindEvents() {
     if (action === "confirm") act("/api/battle/confirm", {});
     else if (action === "retry") act("/api/battle/retry", {});
   });
+
+  $("tutorial-next").addEventListener("click", () => {
+    if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+      tutorialStep += 1;
+      showTutorialStep();
+    } else {
+      closeTutorial();
+    }
+  });
+  $("tutorial-skip").addEventListener("click", closeTutorial);
 
   $("elite-offers").addEventListener("click", (event) => {
     const button = event.target.closest(".buy-btn");
@@ -1512,6 +1646,10 @@ function bindEvents() {
   $("restart-btn").addEventListener("click", () => {
     if (!confirm("重新开始会覆盖当前冒险进度，确定吗？")) return;
     act("/api/game/new", { confirm: true });
+  });
+  $("map2-btn").addEventListener("click", () => {
+    if (!confirm("进入第二张地图会组建新的初始牌组，确定吗？")) return;
+    act("/api/game/map2", {});
   });
 }
 

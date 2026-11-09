@@ -245,6 +245,18 @@ def new_game(body: NewGameBody, user=Depends(current_user)):
     return {"state": game.public_state(state), "battle": None}
 
 
+@app.post("/api/game/map2")
+def new_map2(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        if not game.can_start_map2(state):
+            raise game.GameError("需要先通关地图一")
+        state = game.new_state(map_type="map2")
+        _save_state(user["id"], state)
+        BATTLES.pop(user["id"], None)
+    return {"state": game.public_state(state), "battle": None}
+
+
 @app.post("/api/story/advance")
 def story_advance(body: StoryBody, user=Depends(current_user)):
     with db.LOCK:

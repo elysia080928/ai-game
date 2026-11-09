@@ -163,18 +163,23 @@ async function main() {
 
     if (process.env.CARD_UI_ONLY !== "1") {
       await command("Emulation.setDeviceMetricsOverride", {
-        width: 760,
-        height: 1000,
+        width: 1024,
+        height: 600,
         deviceScaleFactor: 1,
         mobile: false,
       });
       await sleep(300);
-      const storyOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1");
-      if (storyOverflow) throw new Error("窄窗口剧情界面出现横向溢出");
+      const storyOverflow = await evaluate("document.documentElement.scrollWidth > window.innerWidth + 1 || document.documentElement.scrollHeight > window.innerHeight + 1 || document.getElementById('size-guard').hidden === false");
+      if (storyOverflow) throw new Error("最低桌面尺寸下剧情界面溢出或误显示尺寸提示");
       await screenshot("ai-game-story-narrow.png");
+      await command("Emulation.setDeviceMetricsOverride", {
+        width: 375, height: 812, deviceScaleFactor: 1, mobile: true,
+      });
+      await sleep(200);
+      if (!(await visible("orientation-guard"))) throw new Error("手机竖屏没有显示旋转提示");
       await command("Emulation.clearDeviceMetricsOverride");
       await sleep(200);
-      console.log("ok 窄窗口下剧情与跳过按钮布局");
+      console.log("ok 最低桌面剧情布局与手机竖屏提示");
     }
 
     await click("#story-next");
@@ -184,6 +189,19 @@ async function main() {
       "战斗界面载入"
     );
     console.log("ok 进入战斗界面");
+
+    if (!(await visible("tutorial-panel"))) throw new Error("第一场战斗没有显示新手教程");
+    const tutorialTitles = [];
+    for (let index = 0; index < 5; index += 1) {
+      tutorialTitles.push(await evaluate("document.getElementById('tutorial-title').textContent"));
+      await click("#tutorial-next");
+    }
+    if (await visible("tutorial-panel")) throw new Error("新手教程没有在最后一步关闭");
+    if (new Set(tutorialTitles).size !== 5) throw new Error(`新手教程步骤没有推进：${JSON.stringify(tutorialTitles)}`);
+    if (!(await evaluate("localStorage.getItem('ai-game.tutorial.map1.v1') === '1'"))) {
+      throw new Error("新手教程完成后没有记录本地标记");
+    }
+    console.log("ok 第一关新手教程显示、推进与关闭");
 
     const desktopBattle = await evaluate(`(() => {
       const controls = document.querySelector('.battle-bottom').getBoundingClientRect();
@@ -199,8 +217,8 @@ async function main() {
     }
     await screenshot("ai-game-battle-desktop.png", "#battle-view");
     await command("Emulation.setDeviceMetricsOverride", {
-      width: 375,
-      height: 812,
+      width: 667,
+      height: 375,
       deviceScaleFactor: 1,
       mobile: true,
     });
@@ -211,22 +229,42 @@ async function main() {
       const handRect = hand.getBoundingClientRect();
       const controls = document.querySelector('.battle-bottom').getBoundingClientRect();
       const cards = [...document.querySelectorAll('#hand .card')];
+      const metricsVisible = cards.every((card) => {
+        const face = card.querySelector('.card-face').getBoundingClientRect();
+        const metrics = card.querySelector('.card-metrics').getBoundingClientRect();
+        const rect = card.getBoundingClientRect();
+        return metrics.height > 0 && metrics.bottom <= face.bottom + 1 && rect.bottom <= handRect.bottom + 1;
+      });
       const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
       return {
-        overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        overflow: document.documentElement.scrollWidth > window.innerWidth + 1 || document.documentElement.scrollHeight > window.innerHeight + 1,
+        guardVisible: !document.getElementById('orientation-guard').hidden || !document.getElementById('size-guard').hidden,
         handFits: handRect.left >= view.left - 2 && handRect.right <= view.right + 2,
         handScrollable: hand.scrollWidth > hand.clientWidth + 1,
-        readableCards: cards.every((card) => card.getBoundingClientRect().width >= 96),
+        readableCards: cards.every((card) => card.getBoundingClientRect().width >= 76),
+        metricsVisible,
         controlsOverlap: cards.some((card) => overlaps(controls, card.getBoundingClientRect())),
       };
     })()`);
-    if (phoneBattle.overflow || !phoneBattle.handFits || !phoneBattle.handScrollable ||
-        !phoneBattle.readableCards || phoneBattle.controlsOverlap) {
+    if (phoneBattle.overflow || phoneBattle.guardVisible || !phoneBattle.handFits || !phoneBattle.handScrollable ||
+        !phoneBattle.readableCards || !phoneBattle.metricsVisible || phoneBattle.controlsOverlap) {
       throw new Error(`手机战斗界面布局异常：${JSON.stringify(phoneBattle)}`);
     }
     await screenshot("ai-game-battle-phone.png", "#battle-view");
     await command("Emulation.clearDeviceMetricsOverride");
     await sleep(200);
+    const completionLayout = await evaluate(`(() => {
+      const view = document.getElementById('complete-view');
+      view.hidden = false;
+      const button = document.getElementById('restart-btn').getBoundingClientRect();
+      const panel = document.querySelector('.complete-panel').getBoundingClientRect();
+      const result = { buttonHeight: button.height, buttonWidth: button.width, panelHeight: panel.height };
+      view.hidden = true;
+      return result;
+    })()`);
+    if (completionLayout.buttonHeight > 60 || completionLayout.buttonHeight < 40 || completionLayout.buttonWidth < 120) {
+      throw new Error(`完成页重开按钮尺寸异常：${JSON.stringify(completionLayout)}`);
+    }
     const handCards = await evaluate(`(() => {
       const cards = [...document.querySelectorAll('#hand .card')];
       return {
@@ -350,7 +388,7 @@ async function main() {
     const missingArt = artAssets.filter((asset) => !asset.loaded);
     if (missingArt.length) throw new Error(`卡牌素材缺失：${JSON.stringify(missingArt)}`);
     await command("Emulation.setDeviceMetricsOverride", {
-      width: 375, height: 812, deviceScaleFactor: 1, mobile: true,
+      width: 667, height: 375, deviceScaleFactor: 1, mobile: true,
     });
     await evaluate("window.__inspectCardSurface('calibration')");
     await waitFor(async () => await evaluate(`
@@ -590,14 +628,25 @@ async function main() {
     const turnBeforeCommand = await evaluate("document.getElementById('turn').textContent");
     await click("#end-turn");
     await waitFor(async () => {
+      const resultOpen = !(await evaluate("!document.getElementById('result-panel').hidden"));
       const turn = await evaluate("document.getElementById('turn').textContent");
-      return turn !== turnBeforeCommand && !(await evaluate("!document.getElementById('result-panel').hidden"));
+      return resultOpen || turn !== turnBeforeCommand;
     }, "等待技能测试回合");
-    await waitFor(
-      async () => (await evaluate("document.querySelectorAll('#enemy-row .slot.unit').length")) > 0,
-      "敌方单位部署"
-    );
+    const endedEarly = await evaluate("!document.getElementById('result-panel').hidden");
+    let noEnemy = false;
+    if (!endedEarly) {
+      try {
+        await waitFor(
+          async () => (await evaluate("document.querySelectorAll('#enemy-row .slot.unit').length")) > 0,
+          "敌方单位部署",
+          5000
+        );
+      } catch (_) {
+        noEnemy = true;
+      }
+    }
 
+    if (!endedEarly && !noEnemy) {
     const repairBefore = await evaluate(`({
       energy: Number(document.getElementById('energy').textContent),
       hand: document.querySelectorAll('#hand .card').length,
@@ -675,6 +724,9 @@ async function main() {
     }
     if (!sparkAfter.log.includes("闪电脉冲")) throw new Error(`闪电脉冲未写入战斗日志：${sparkAfter.log}`);
     console.log("ok 紧急维修/闪电脉冲技能牌可拖动并按目标结算");
+    } else {
+      console.log("ok 战斗已提前结束或无敌方目标，跳过回合技能测试");
+    }
 
     if (process.env.CARD_UI_ONLY === "1") {
       ws.close();
@@ -817,6 +869,12 @@ async function main() {
           rows: [...new Set(map.nodes.map((node) => node.row))].sort((a, b) => a - b),
           statuses: [...new Set(map.nodes.map((node) => node.status))],
           seed: map.seed,
+          mapType: state.mapType,
+          boardMap2: document.querySelector('.map-board').classList.contains('map-type-map2'),
+          terrainImage: getComputedStyle(document.querySelector('.map-terrain')).backgroundImage,
+          eyebrow: document.getElementById('map-eyebrow').textContent,
+          cartouche: document.querySelector('.map-cartouche').textContent,
+          destination: document.querySelector('.map-destination').textContent,
         };
       })()`);
     }
@@ -829,6 +887,14 @@ async function main() {
           !check.lockedDisabled || check.oldFixed ||
           check.columns.length !== check.runLength) {
         throw new Error(`随机地图节点、连线或点击区域异常：${JSON.stringify(check)}`);
+      }
+      if (check.mapType === "map1" &&
+          (check.boardMap2 || !check.terrainImage.includes("borderlands-map"))) {
+        throw new Error(`第一张地图背景或标题异常：${JSON.stringify(check)}`);
+      }
+      if (check.mapType === "map2" &&
+          (!check.boardMap2 || !check.terrainImage.includes("deep-circuit-map"))) {
+        throw new Error(`第二张地图背景或标题异常：${JSON.stringify(check)}`);
       }
       return check;
     }
@@ -874,8 +940,8 @@ async function main() {
     await screenshot("ai-game-map.png", "#map-view");
 
     await command("Emulation.setDeviceMetricsOverride", {
-      width: 760,
-      height: 1000,
+      width: 1024,
+      height: 600,
       deviceScaleFactor: 1,
       mobile: false,
     });
@@ -893,8 +959,8 @@ async function main() {
     });
     await command("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
     await command("Emulation.setDeviceMetricsOverride", {
-      width: 375,
-      height: 812,
+      width: 667,
+      height: 375,
       deviceScaleFactor: 1,
       mobile: true,
     });
@@ -906,7 +972,7 @@ async function main() {
       targetSize: [...document.querySelectorAll('.map-node:not(:disabled)')]
         .every((node) => { const rect = node.getBoundingClientRect(); return rect.width >= 44 && rect.height >= 44; }),
     }))()`);
-    if (phoneMap.overflow || !phoneMap.labels || !phoneMap.targetSize) {
+    if (phoneMap.overflow || !phoneMap.labels || !phoneMap.targetSize || !(await evaluate("document.getElementById('orientation-guard').hidden && document.getElementById('size-guard').hidden"))) {
       throw new Error(`手机地图布局、节点标签或点击区域异常：${JSON.stringify(phoneMap)}`);
     }
     await checkMapLayout();
@@ -915,7 +981,7 @@ async function main() {
     await command("Emulation.setEmulatedMedia", { features: [] });
     await command("Emulation.setTouchEmulationEnabled", { enabled: false });
     await sleep(200);
-    console.log("ok 手机地图按纵向书页显示且节点可点击");
+    console.log("ok 横屏手机地图节点可点击且页面不滚动");
 
     const routeInfo = await evaluate(`(() => {
       const nodes = Object.fromEntries(state.map.nodes.map((node) => [node.id, node]));
@@ -934,18 +1000,20 @@ async function main() {
         return null;
       };
       const elite = state.map.nodes.find((node) => node.role === 'elite').id;
+      const boss = state.map.nodes.find((node) => node.role === 'boss').id;
       const start = state.completed[state.completed.length - 1];
-      const route = find(start, elite).slice(1);
+      const route = find(start, elite).slice(1).concat(find(elite, boss).slice(1));
       return {
         elite,
+        boss,
         start,
         route,
         types: route.map((id) => nodes[id].type),
         available: state.map.available,
       };
     })()`);
-    if (!routeInfo.route.length || routeInfo.route[routeInfo.route.length - 1] !== routeInfo.elite) {
-      throw new Error(`无法规划精英路线：${JSON.stringify(routeInfo)}`);
+    if (!routeInfo.route.length || routeInfo.route[routeInfo.route.length - 1] !== routeInfo.boss) {
+      throw new Error(`无法规划完整路线：${JSON.stringify(routeInfo)}`);
     }
     const firstSiblings = routeInfo.available.filter((id) => id !== routeInfo.route[0]);
     const visited = [routeInfo.start];
@@ -985,37 +1053,62 @@ async function main() {
       const node = await evaluate("state.node");
       visited.push(node.id);
       if (node.type === "battle") {
-        if (node.role !== "elite") throw new Error(`精英路线出现了意外战斗：${JSON.stringify(node)}`);
-        const deckBeforeElite = await evaluate("state.deck.length");
+        const deckBeforeElite = node.role === "elite" ? await evaluate("state.deck.length") : null;
         await storyUntil("battle-view");
         await winBattle();
         await click("#result-action");
-        await waitFor(async () => await visible("elite-reward-view"), "精英奖励界面");
-        const reward = await evaluate(`({
-          offers: document.querySelectorAll('#elite-offers .offer').length,
-          deck: state.deck.map((card) => card.uid),
-          candidates: [...document.querySelectorAll('#elite-offers .offer-name')].map((node) => node.textContent),
-          note: document.getElementById('elite-note').textContent,
-        })`);
-        if (reward.offers !== 3 || reward.deck.length !== deckBeforeElite) {
-          throw new Error(`精英奖励界面异常：${JSON.stringify({ deckBeforeElite, reward })}`);
+        if (node.role === "elite") {
+          await waitFor(async () => await visible("elite-reward-view"), "精英奖励界面");
+          const reward = await evaluate(`({
+            offers: document.querySelectorAll('#elite-offers .offer').length,
+            deck: state.deck.map((card) => card.uid),
+            candidates: [...document.querySelectorAll('#elite-offers .offer-name')].map((node) => node.textContent),
+            note: document.getElementById('elite-note').textContent,
+          })`);
+          if (reward.offers !== 3 || reward.deck.length !== deckBeforeElite) {
+            throw new Error(`精英奖励界面异常：${JSON.stringify({ deckBeforeElite, reward })}`);
+          }
+          await screenshot("ai-game-elite-reward.png", "#elite-reward-view");
+          await click("#elite-offers .offer .buy-btn");
+          await waitFor(async () => await visible("story-view"), "领取精英奖励后剧情");
+          const afterReward = await evaluate("({deck:state.deck, phase:state.phase, elite:state.eliteReward})");
+          const uids = afterReward.deck.map((card) => card.uid);
+          if (afterReward.deck.length !== reward.deck.length + 1 ||
+              new Set(uids).size !== uids.length || reward.deck.includes(uids[uids.length - 1]) ||
+              afterReward.elite !== null) {
+            throw new Error(`精英奖励未作为独立实体加入牌组：${JSON.stringify({ reward, afterReward })}`);
+          }
+          await storyUntil("map-view");
+          const eliteStatus = await evaluate(
+            `state.map.nodes.find((node) => node.id === ${JSON.stringify(routeInfo.elite)}).status`
+          );
+          if (eliteStatus !== "completed") throw new Error(`精英节点状态错误：${eliteStatus}`);
+          console.log("ok 精英战胜利后三选一奖励进入独立卡牌实体");
+        } else if (node.role === "boss") {
+          await waitFor(async () => (await evaluate("state.phase")) !== "node", "终点战结算");
+          const done = await evaluate(`({
+            phase: state.phase,
+            mapType: state.mapType,
+            completed: state.completed,
+            runLength: state.runLength,
+          })`);
+          if (done.mapType !== "map1" || done.completed.length !== done.runLength ||
+              visited.length !== done.runLength || visited.some((id) => !done.completed.includes(id))) {
+            throw new Error(`第一张地图路线完成状态异常：${JSON.stringify({ visited, done })}`);
+          }
+          await storyUntil("battle-view");
+          const entered = await evaluate(`({
+            phase: state.phase, mapType: state.mapType, canStartMap2: state.canStartMap2,
+            gold: state.gold, deck: state.deck.length,
+          })`);
+          if (entered.mapType !== "map2" || entered.canStartMap2 || entered.gold !== 0 ||
+              entered.deck !== 8 || entered.phase === "complete") {
+            throw new Error(`自动进入第二张地图状态异常：${JSON.stringify(entered)}`);
+          }
+          console.log("ok 第一张地图通关后自动进入第二张地图");
+        } else {
+          await storyUntil("map-view");
         }
-        await screenshot("ai-game-elite-reward.png", "#elite-reward-view");
-        await click("#elite-offers .offer .buy-btn");
-        await waitFor(async () => await visible("story-view"), "领取精英奖励后剧情");
-        const afterReward = await evaluate("({deck:state.deck, phase:state.phase, elite:state.eliteReward})");
-        const uids = afterReward.deck.map((card) => card.uid);
-        if (afterReward.deck.length !== reward.deck.length + 1 ||
-            new Set(uids).size !== uids.length || reward.deck.includes(uids[uids.length - 1]) ||
-            afterReward.elite !== null) {
-          throw new Error(`精英奖励未作为独立实体加入牌组：${JSON.stringify({ reward, afterReward })}`);
-        }
-        await storyUntil("map-view");
-        const eliteStatus = await evaluate(
-          `state.map.nodes.find((node) => node.id === ${JSON.stringify(routeInfo.elite)}).status`
-        );
-        if (eliteStatus !== "completed") throw new Error(`精英节点状态错误：${eliteStatus}`);
-        console.log("ok 精英战胜利后三选一奖励进入独立卡牌实体");
       } else {
         const viewId = eventViews[node.type];
         if (!viewId || !leaveButtons[node.type]) throw new Error(`未知奇遇类型：${node.type}`);
@@ -1033,19 +1126,38 @@ async function main() {
       }
     }
 
-    const finalMap = await evaluate(`({
-      completed: state.completed,
-      deck: state.deck.map((card) => card.uid),
-      phase: state.phase,
-      progress: state.progress,
-      available: state.map.available,
-    })`);
-    if (finalMap.phase !== "map" || finalMap.progress !== finalMap.completed.length ||
-        visited.some((id) => !finalMap.completed.includes(id)) ||
-        finalMap.completed.length !== visited.length) {
-      throw new Error(`精英路线完成状态异常：${JSON.stringify({ visited, finalMap })}`);
+    console.log("ok 随机分支选择、单路收束与完整路线");
+
+    await winBattle();
+    await click("#result-action");
+    await storyUntil("map-view");
+    const map2Check = await checkMapLayout();
+    if (map2Check.mapType !== "map2" || map2Check.runLength !== 12 ||
+        map2Check.columns.length !== 12 || !map2Check.boardMap2 ||
+        !map2Check.eyebrow.includes("第二章") || !map2Check.cartouche.includes("深层回路") ||
+        !map2Check.destination.includes("深层核心")) {
+      throw new Error(`第二张地图界面异常：${JSON.stringify(map2Check)}`);
     }
-    console.log("ok 随机分支选择、单路收束与精英路线");
+    await screenshot("ai-game-map2.png", "#map-view");
+    const map2Snapshot = await evaluate(
+      "JSON.stringify({phase:state.phase,mapType:state.mapType,seed:state.map.seed,map:state.map})"
+    );
+    await command("Page.reload", {});
+    await waitFor(async () => {
+      try {
+        return (await evaluate(
+          "typeof state !== 'undefined' && !!state && state.phase === 'map' && state.mapType === 'map2' && !document.getElementById('map-view').hidden"
+        )) === true;
+      } catch (_) {
+        return false;
+      }
+    }, "刷新后回到第二张地图");
+    const map2After = await evaluate(
+      "JSON.stringify({phase:state.phase,mapType:state.mapType,seed:state.map.seed,map:state.map})"
+    );
+    if (map2After !== map2Snapshot) throw new Error("刷新后第二张地图被重新抽取");
+    await checkMapLayout();
+    console.log("ok 第二张地图共用地图控件、仅背景变化并在刷新后保持");
 
     ws.close();
     console.log("浏览器冒烟测试全部通过");

@@ -49,6 +49,53 @@ BATTLE_POOLS = MAP_CONFIG.get("battlePools") or {}
 MAP_TEMPLATES = MAP_CONFIG.get("templates") or {}
 MAP_RUN_LENGTHS = tuple(MAP_CONFIG.get("runLengths") or ())
 MAP_MAX_BRANCHES = MAP_CONFIG.get("maxBranches", 3)
+SECOND_MAP_CONFIG = CONTENT.get("secondMap") or {}
+SECOND_MAP_RUN_LENGTHS = tuple(SECOND_MAP_CONFIG.get("runLengths") or ())
+SECOND_MAP_MAX_BRANCHES = SECOND_MAP_CONFIG.get("maxBranches", MAP_MAX_BRANCHES)
+SECOND_MAP_TEMPLATES = {**MAP_TEMPLATES, **(SECOND_MAP_CONFIG.get("templates") or {})}
+MAP_META = {
+    "chapter": MAP_CONFIG.get("chapter", "第一章"),
+    "title": MAP_CONFIG.get("title", "回路边境"),
+    "subtitle": MAP_CONFIG.get("subtitle", "THE BORDERLANDS"),
+    "caption": MAP_CONFIG.get("caption", "一张尚未写完的地图"),
+    "destination": MAP_CONFIG.get("destination", "镜像核心"),
+}
+SECOND_MAP_META = {
+    "chapter": SECOND_MAP_CONFIG.get("chapter", "第二章"),
+    "title": SECOND_MAP_CONFIG.get("title", "深层回路"),
+    "subtitle": SECOND_MAP_CONFIG.get("subtitle", "THE DEEP CIRCUIT"),
+    "caption": SECOND_MAP_CONFIG.get("caption", "第二条路线"),
+    "destination": SECOND_MAP_CONFIG.get("destination", "深层核心"),
+}
+MAPS = {
+    "map1": {
+        "runLengths": MAP_RUN_LENGTHS,
+        "maxBranches": MAP_MAX_BRANCHES,
+        "middleBattles": MAP_CONFIG.get("middleBattles", 0),
+        "extraBattleNodes": MAP_CONFIG.get("extraBattleNodes", 0),
+        "extraEventNodes": MAP_CONFIG.get("extraEventNodes", 0),
+        "eventTypes": MAP_EVENT_TYPES,
+        "battlePools": BATTLE_POOLS,
+        "templates": MAP_TEMPLATES,
+        "bossEncounter": "boss",
+        "bossTemplate": "boss",
+        "meta": MAP_META,
+    },
+    "map2": {
+        "runLengths": SECOND_MAP_RUN_LENGTHS,
+        "maxBranches": SECOND_MAP_MAX_BRANCHES,
+        "middleBattles": SECOND_MAP_CONFIG.get("middleBattles", 0),
+        "extraBattleNodes": SECOND_MAP_CONFIG.get("extraBattleNodes", 0),
+        "extraEventNodes": SECOND_MAP_CONFIG.get("extraEventNodes", 0),
+        "eventTypes": MAP_EVENT_TYPES,
+        "battlePools": BATTLE_POOLS,
+        "templates": SECOND_MAP_TEMPLATES,
+        "bossEncounter": SECOND_MAP_CONFIG.get("bossEncounter", "boss2"),
+        "bossTemplate": SECOND_MAP_CONFIG.get("bossTemplate", "boss2"),
+        "meta": SECOND_MAP_META,
+    },
+}
+DEFAULT_MAP_TYPE = "map1"
 ELITE_REWARD_COUNT = 3
 
 MAX_DECK = 20
@@ -66,7 +113,7 @@ NODE_TYPES = (
     "training",
     "relay",
 )
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
 VALID_PHASES = ("before_story", "node", "after_story", "map", "elite_reward", "complete")
 
@@ -331,6 +378,29 @@ def validate_content():
             or not isinstance(template.get("after"), list)
         ):
             raise RuntimeError(f"地图战斗模板 {template_id} 非法")
+    if (
+        not SECOND_MAP_RUN_LENGTHS
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 6
+            for value in SECOND_MAP_RUN_LENGTHS
+        )
+    ):
+        raise RuntimeError("第二张地图路线长度非法")
+    if not isinstance(SECOND_MAP_MAX_BRANCHES, int) or SECOND_MAP_MAX_BRANCHES < 2:
+        raise RuntimeError("第二张地图分支数量非法")
+    boss_encounter = SECOND_MAP_CONFIG.get("bossEncounter", "boss2")
+    if boss_encounter not in ENCOUNTERS:
+        raise RuntimeError("第二张地图终点遭遇非法")
+    boss_template_id = SECOND_MAP_CONFIG.get("bossTemplate", "boss2")
+    boss_template = SECOND_MAP_TEMPLATES.get(boss_template_id) or NODE_BY_ID.get(boss_template_id)
+    if (
+        not isinstance(boss_template, dict)
+        or boss_template.get("type") != "battle"
+        or not boss_template.get("name")
+        or not isinstance(boss_template.get("before"), list)
+        or not isinstance(boss_template.get("after"), list)
+    ):
+        raise RuntimeError("第二张地图终点模板非法")
 
 
 validate_content()
@@ -346,16 +416,16 @@ def _new_card(card_id, level=1):
     }
 
 
-def _map_template(template_id):
-    if template_id in MAP_TEMPLATES:
-        return MAP_TEMPLATES[template_id]
+def _map_template(template_id, templates):
+    if template_id in templates:
+        return templates[template_id]
     if template_id in NODE_BY_ID:
         return NODE_BY_ID[template_id]
     return TEMPLATE_BY_TYPE[template_id]
 
 
-def _make_map_node(template_id, column, row, role, encounter=None, elite_reward=False):
-    template = _map_template(template_id)
+def _make_map_node(template_id, column, row, role, templates, encounter=None, elite_reward=False):
+    template = _map_template(template_id, templates)
     node = {
         "id": f"{template_id}_{column}_{row}",
         "type": template["type"],
@@ -409,12 +479,19 @@ def _reachable(start, nexts):
     return seen
 
 
-def _validate_generated_map(data):
+def _validate_generated_map(data, legacy=False):
+    map_type = data.get("mapType", DEFAULT_MAP_TYPE)
+    if map_type not in MAPS:
+        raise RuntimeError("地图类型非法")
+    definition = MAPS[map_type]
     nodes = data.get("nodes")
     if not isinstance(nodes, list):
         raise RuntimeError("地图节点非法")
     run_length = data.get("runLength")
-    if run_length not in MAP_RUN_LENGTHS:
+    allowed_lengths = set(definition["runLengths"])
+    if legacy and map_type == "map1":
+        allowed_lengths |= {6, 7}
+    if run_length not in allowed_lengths:
         raise RuntimeError("地图路线长度非法")
     seed = data.get("seed")
     if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
@@ -426,7 +503,7 @@ def _validate_generated_map(data):
             raise RuntimeError("地图节点重复或非法")
         if node.get("type") not in NODE_TYPES or not isinstance(node.get("name"), str):
             raise RuntimeError("地图节点类型非法")
-        if node.get("role") not in ("start", "late", "boss", "event", "elite"):
+        if node.get("role") not in ("start", "late", "boss", "event", "elite", "battle"):
             raise RuntimeError("地图节点角色非法")
         column, row = node.get("column"), node.get("row")
         if (
@@ -445,7 +522,7 @@ def _validate_generated_map(data):
         if node["type"] == "battle":
             if node.get("encounter") not in ENCOUNTERS:
                 raise RuntimeError("地图遭遇非法")
-        elif node.get("role") != "event" or node["type"] not in MAP_EVENT_TYPES:
+        elif node.get("role") != "event" or node["type"] not in definition["eventTypes"]:
             raise RuntimeError("地图奇遇类型非法")
         by_id[node["id"]] = node
     nexts = {node_id: node.get("next") for node_id, node in by_id.items()}
@@ -490,13 +567,15 @@ def _validate_generated_map(data):
     if sorted(columns) != list(range(run_length)):
         raise RuntimeError("地图层数非法")
     widths = [len(columns[column]) for column in sorted(columns)]
-    if 1 not in widths or max(widths) < 2 or max(widths) > MAP_MAX_BRANCHES:
+    if 1 not in widths or max(widths) < 2 or max(widths) > definition["maxBranches"]:
         raise RuntimeError("地图缺少单路或多路分支")
     roles = [node.get("role") for node in nodes]
     if roles.count("start") != 1 or roles.count("late") != 1 or roles.count("boss") != 1:
         raise RuntimeError("地图战斗节点非法")
     if roles.count("elite") != 1 or data.get("elite") not in by_id:
         raise RuntimeError("地图精英节点非法")
+    if not legacy and roles.count("battle") < definition.get("middleBattles", 0):
+        raise RuntimeError("地图中段战斗数量不足")
     events = [node for node in nodes if node.get("role") == "event"]
     if not events or len({node["type"] for node in events}) != len(events):
         raise RuntimeError("地图奇遇类型重复")
@@ -507,11 +586,16 @@ def _validate_generated_map(data):
             or not node.get("eliteReward")
         ):
             raise RuntimeError("地图精英节点非法")
-        if node["role"] == "start" and node.get("encounter") not in BATTLE_POOLS["early"]:
+        if node["role"] == "battle" and (
+            node.get("encounter")
+            not in definition["battlePools"]["early"] + definition["battlePools"]["late"]
+        ):
+            raise RuntimeError("地图中段战斗节点非法")
+        if node["role"] == "start" and node.get("encounter") not in definition["battlePools"]["early"]:
             raise RuntimeError("地图战斗节点非法")
-        if node["role"] == "late" and node.get("encounter") not in BATTLE_POOLS["late"]:
+        if node["role"] == "late" and node.get("encounter") not in definition["battlePools"]["late"]:
             raise RuntimeError("地图战斗节点非法")
-        if node["role"] == "boss" and node.get("encounter") != "boss":
+        if node["role"] == "boss" and node.get("encounter") != definition["bossEncounter"]:
             raise RuntimeError("地图战斗节点非法")
         if node["role"] in ("start", "late", "boss") and node["type"] != "battle":
             raise RuntimeError("地图战斗节点非法")
@@ -529,85 +613,117 @@ def _validate_generated_map(data):
     return True
 
 
-def generate_map(seed=None):
+def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
+    if map_type not in MAPS:
+        raise GameError("地图类型非法")
     if seed is None:
         seed = random.randrange(1, 2**31)
     if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
         raise GameError("地图种子非法")
+    definition = MAPS[map_type]
     rng = random.Random(seed)
-    run_length = rng.choice(MAP_RUN_LENGTHS)
+    run_length = rng.choice(definition["runLengths"])
+    max_branches = definition["maxBranches"]
+    event_types_all = definition["eventTypes"]
+    battle_pools = definition["battlePools"]
+    templates = definition["templates"]
     middle_count = run_length - 3
+    middle_battles = definition.get("middleBattles", 0)
+    event_layer_count = middle_count - middle_battles - 1
+    if event_layer_count < 0:
+        raise RuntimeError("地图中段无法容纳战斗与精英")
+    plan = ["elite"] + ["battle"] * middle_battles + ["event"] * event_layer_count
+    rng.shuffle(plan)
     widths = [1] * middle_count
-    max_middle_nodes = len(MAP_EVENT_TYPES) + 1
-    expansions = rng.randint(0, max(0, max_middle_nodes - middle_count))
-    for _ in range(expansions):
-        options = [i for i in range(middle_count) if widths[i] < MAP_MAX_BRANCHES]
-        if not options:
-            break
-        widths[rng.choice(options)] += 1
-    if max(widths) < 2:
-        options = [i for i in range(middle_count) if widths[i] < MAP_MAX_BRANCHES]
-        widths[rng.choice(options)] += 1
-    if 1 not in widths:
-        widths[rng.choice([i for i, width in enumerate(widths) if width > 1])] -= 1
 
-    elite_layer = rng.randrange(middle_count - 1)
-    if widths[elite_layer] < 2:
-        multi = [i for i, width in enumerate(widths) if width >= 2]
-        if multi:
-            elite_layer = rng.choice(multi)
-        else:
-            widths[elite_layer] = 2
-    if 1 not in widths:
-        options = [i for i, width in enumerate(widths) if i != elite_layer and width > 1]
-        if options:
-            widths[rng.choice(options)] -= 1
-    event_slots = sum(widths) - 1
-    while event_slots > len(MAP_EVENT_TYPES):
-        options = [i for i, width in enumerate(widths) if i != elite_layer and width > 1]
-        if not options:
-            raise RuntimeError("地图奇遇数量超过配置")
-        index = rng.choice(options)
-        widths[index] -= 1
-        event_slots -= 1
+    def add_extra_nodes(count, indices):
+        for _ in range(count):
+            options = [index for index in indices if widths[index] < max_branches]
+            if not options:
+                break
+            widths[rng.choice(options)] += 1
+
+    event_layers = [index for index, kind in enumerate(plan) if kind == "event"]
+    battle_layers = [index for index, kind in enumerate(plan) if kind == "battle"]
+    if not event_layers:
+        raise RuntimeError("地图缺少奇遇层")
+    add_extra_nodes(definition.get("extraEventNodes", 0), event_layers)
+    add_extra_nodes(definition.get("extraBattleNodes", 0), battle_layers)
+    if max(widths) < 2:
+        options = [index for index in event_layers if widths[index] < max_branches]
+        widths[rng.choice(options)] += 1
+    event_slots = sum(widths[index] for index in event_layers)
+    if event_slots > len(event_types_all):
+        raise RuntimeError("地图奇遇数量超过配置")
 
     used = set()
 
     def pick_encounter(pool_name):
-        pool = [encounter_id for encounter_id in BATTLE_POOLS[pool_name] if encounter_id not in used]
+        pool = [encounter_id for encounter_id in battle_pools[pool_name] if encounter_id not in used]
         if not pool:
-            pool = list(BATTLE_POOLS[pool_name])
+            pool = list(battle_pools[pool_name])
         encounter_id = rng.choice(pool)
         used.add(encounter_id)
         return encounter_id
 
     early_encounter = pick_encounter("early")
     late_encounter = pick_encounter("late")
-    event_types = rng.sample(MAP_EVENT_TYPES, event_slots)
-    layers = [[_make_map_node("battle_early", 0, 0, "start", encounter=early_encounter)]]
-    for index in range(middle_count):
-        elite_row = rng.randrange(widths[index]) if index == elite_layer else None
+    event_types = rng.sample(event_types_all, event_slots)
+    layer_pools = {}
+    for order, index in enumerate(battle_layers):
+        layer_pools[index] = "early" if order % 2 == 0 else "late"
+    layers = [
+        [_make_map_node("battle_early", 0, 0, "start", templates, encounter=early_encounter)]
+    ]
+    for index, kind in enumerate(plan):
         layer = []
         for row in range(widths[index]):
-            if row == elite_row:
+            if kind == "elite":
                 layer.append(
                     _make_map_node(
-                        "elite", index + 1, row, "elite", encounter="elite", elite_reward=True
+                        "elite",
+                        index + 1,
+                        row,
+                        "elite",
+                        templates,
+                        encounter="elite",
+                        elite_reward=True,
+                    )
+                )
+            elif kind == "battle":
+                pool_name = layer_pools[index]
+                template_id = "battle_early" if pool_name == "early" else "battle_late"
+                layer.append(
+                    _make_map_node(
+                        template_id,
+                        index + 1,
+                        row,
+                        "battle",
+                        templates,
+                        encounter=pick_encounter(pool_name),
                     )
                 )
             else:
                 node_type = event_types.pop()
-                layer.append(_make_map_node(node_type, index + 1, row, "event"))
+                layer.append(_make_map_node(node_type, index + 1, row, "event", templates))
         layers.append(layer)
     late = _make_map_node(
-        "battle_late", middle_count + 1, 0, "late", encounter=late_encounter
+        "battle_late", middle_count + 1, 0, "late", templates, encounter=late_encounter
     )
-    boss = _make_map_node("boss", middle_count + 2, 0, "boss", encounter="boss")
+    boss = _make_map_node(
+        definition["bossTemplate"],
+        middle_count + 2,
+        0,
+        "boss",
+        templates,
+        encounter=definition["bossEncounter"],
+    )
     layers.append([late])
     layers.append([boss])
     edges = _connect_map_layers(layers, rng)
     nodes = [node for layer in layers for node in layer]
     data = {
+        "mapType": map_type,
         "seed": seed,
         "runLength": run_length,
         "start": nodes[0]["id"],
@@ -621,8 +737,8 @@ def generate_map(seed=None):
     return data
 
 
-def new_state(seed=None):
-    map_data = generate_map(seed)
+def new_state(seed=None, map_type=DEFAULT_MAP_TYPE):
+    map_data = generate_map(seed, map_type)
     state = {
         "schemaVersion": SCHEMA_VERSION,
         "nodeId": map_data["start"],
@@ -647,6 +763,22 @@ def _map_nodes(state):
     if isinstance(data, dict):
         return {node["id"]: node for node in data.get("nodes", [])}
     return NODE_BY_ID
+
+
+def current_map_type(state):
+    data = state.get("mapData")
+    if isinstance(data, dict):
+        return data.get("mapType", DEFAULT_MAP_TYPE)
+    return DEFAULT_MAP_TYPE
+
+
+def map_meta(map_type):
+    definition = MAPS.get(map_type) or MAPS[DEFAULT_MAP_TYPE]
+    return dict(definition["meta"])
+
+
+def can_start_map2(state):
+    return state.get("phase") == "complete" and current_map_type(state) == "map1"
 
 
 def current_node(state):
@@ -703,7 +835,13 @@ def _after_story_done(state):
     node = current_node(state)
     state["storyLine"] = 0
     state["nodeData"] = {}
-    state["phase"] = "map" if node["next"] else "complete"
+    if node["next"]:
+        state["phase"] = "map"
+    elif current_map_type(state) == "map1":
+        state.clear()
+        state.update(new_state(map_type="map2"))
+    else:
+        state["phase"] = "complete"
 
 
 def _normalize(state):
@@ -964,6 +1102,7 @@ def map_view(state):
             for parent, child in map_data["edges"]
         ]
         return {
+            "mapType": current_map_type(state),
             "nodes": nodes,
             "edges": edges,
             "route": {},
@@ -1008,6 +1147,7 @@ def map_view(state):
         for child in node["next"]
     ]
     return {
+        "mapType": DEFAULT_MAP_TYPE,
         "nodes": nodes,
         "edges": edges,
         "route": dict(route),
@@ -1991,8 +2131,12 @@ def _trial_view(state):
 def public_state(state):
     node = current_node(state)
     map_data = state.get("mapData")
+    map_type = current_map_type(state)
     return {
         "phase": state["phase"],
+        "mapType": map_type,
+        "mapMeta": map_meta(map_type),
+        "canStartMap2": can_start_map2(state),
         "gold": state["gold"],
         "node": {
             "id": node["id"],
@@ -2043,7 +2187,7 @@ def migrate_state(state):
         if not isinstance(map_data, dict):
             raise ValueError("存档地图非法")
         try:
-            _validate_generated_map(map_data)
+            _validate_generated_map(map_data, legacy=True)
         except (RuntimeError, KeyError, TypeError) as exc:
             raise ValueError(f"存档地图非法：{exc}") from exc
         node_ids = {node["id"] for node in map_data["nodes"]}

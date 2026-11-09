@@ -139,6 +139,18 @@ def test_battle_terminates():
     assert b["result"] == "lose"
 
 
+def test_command_only_hand_cannot_softlock_battle():
+    b = make(0)
+    b["board"]["player"] = [None] * 4
+    b["board"]["enemy"] = [None] * 4
+    b["deck"] = []
+    b["plan"] = []
+    b["hand"] = [{"uid": 999, "cardId": "repair", "level": 1, "atkBonus": 0, "hpBonus": 0}]
+    b["phase"] = "player"
+    B._check_stalemate(b)
+    assert b["phase"] == "over" and b["result"] == "lose"
+
+
 def test_recruit_purchase_once():
     state = state_at("recruit", "node", completed=["battle1"], route="recruit")
     state["gold"] = 20
@@ -470,8 +482,8 @@ def clear_story(state):
     raise AssertionError("剧情未结束")
 
 
-def elite_state(seed=0):
-    state = G.new_state(seed)
+def elite_state(seed=0, map_type="map1"):
+    state = G.new_state(seed, map_type)
     state["nodeId"] = state["mapData"]["elite"]
     state["phase"] = "node"
     state["storyLine"] = 0
@@ -487,7 +499,7 @@ def test_generated_map_structure():
     for seed in range(60):
         data = G.generate_map(seed)
         nodes = {node["id"]: node for node in data["nodes"]}
-        assert data["runLength"] in (6, 7, 8)
+        assert data["runLength"] == 8
         assert data["start"] in nodes and data["boss"] in nodes and data["elite"] in nodes
         columns = {}
         for node in data["nodes"]:
@@ -495,6 +507,11 @@ def test_generated_map_structure():
         assert sorted(columns) == list(range(data["runLength"]))
         widths = [len(columns[index]) for index in range(data["runLength"])]
         assert 1 in widths and max(widths) >= 2 and max(widths) <= G.MAP_MAX_BRANCHES
+        battle_layers = [nodes for nodes in columns.values() if any(node["role"] == "battle" for node in nodes)]
+        event_layers = [nodes for nodes in columns.values() if any(node["role"] == "event" for node in nodes)]
+        assert len(battle_layers) == 2 and len(event_layers) == 2
+        assert sum(len(nodes) for nodes in battle_layers) >= 3
+        assert sum(len(nodes) for nodes in event_layers) >= 3
         for parent, children in ((node["id"], node["next"]) for node in data["nodes"]):
             assert all(nodes[child]["column"] == nodes[parent]["column"] + 1 for child in children)
         for node in data["nodes"]:
@@ -557,7 +574,7 @@ def test_generated_map_route_persistence_and_closed_branches():
             for sibling in available[1:]:
                 assert after[sibling]["status"] == "closed", sibling
         for _ in range(40):
-            if state["phase"] == "complete":
+            if state["mapData"]["mapType"] == "map2" or state["phase"] == "complete":
                 break
             if state["phase"] == "map":
                 nodes = G.available_nodes(state)
@@ -573,9 +590,8 @@ def test_generated_map_route_persistence_and_closed_branches():
                 G.elite_reward_leave(state)
             elif state["phase"] in ("before_story", "after_story"):
                 clear_story(state)
-        assert state["phase"] == "complete"
-        assert state["mapData"]["boss"] in state["completed"]
-        assert len(state["completed"]) == state["mapData"]["runLength"]
+        assert state["mapData"]["mapType"] == "map2"
+        assert state["phase"] != "complete" and state["completed"] == []
         reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
         assert not changed
         assert reloaded["mapData"] == state["mapData"]
@@ -605,6 +621,210 @@ def test_generated_map_migration_and_duplicate_card_uids():
         pass
     else:
         raise AssertionError("损坏地图应拒绝读取")
+
+
+def test_dead_attacker_stops_remaining_attack():
+    b = make(0)
+    b["board"]["player"] = [None] * 4
+    b["board"]["enemy"] = [None] * 4
+    put_unit(b, "player", "arc_drone", 1)
+    put_enemy(b, "雷壳虫", 1, 1, 2, onDestroy="hit_opposite")
+    put_enemy(b, "小型哨兵", 2, 1, 2)
+    B._player_attack(b)
+    assert b["board"]["player"][0] is None, "弧光无人机应被雷壳虫死亡效果击败"
+    assert b["board"]["enemy"][1] is not None, "已阵亡的分叉攻击者不应继续攻击第二列"
+
+
+def test_second_map_structure():
+    assert G.SECOND_MAP_RUN_LENGTHS == (12,)
+    templates = G.MAPS["map2"]["templates"]
+    assert templates["boss2"]["name"] == "深层核心"
+    for seed in range(30):
+        data = G.generate_map(seed, "map2")
+        nodes = {node["id"]: node for node in data["nodes"]}
+        assert data["mapType"] == "map2"
+        assert data["runLength"] == 12
+        assert data["start"] in nodes and data["boss"] in nodes and data["elite"] in nodes
+        assert nodes[data["boss"]]["encounter"] == "boss2"
+        assert nodes[data["boss"]]["role"] == "boss"
+        assert nodes[data["boss"]]["name"] == "深层核心"
+        columns = {}
+        for node in data["nodes"]:
+            columns.setdefault(node["column"], []).append(node)
+        assert sorted(columns) == list(range(12))
+        widths = [len(columns[index]) for index in range(12)]
+        assert max(widths) <= G.SECOND_MAP_MAX_BRANCHES
+        battle_layers = [nodes for nodes in columns.values() if any(node["role"] == "battle" for node in nodes)]
+        event_layers = [nodes for nodes in columns.values() if any(node["role"] == "event" for node in nodes)]
+        assert len(battle_layers) == 4 and len(event_layers) == 4
+        assert sum(len(nodes) for nodes in battle_layers) >= 5
+        assert sum(len(nodes) for nodes in event_layers) >= 7
+        assert sum(widths) - 12 >= 4, "第二张地图应增加分支节点"
+        reachable = {data["start"]}
+        for parent, child in data["edges"]:
+            assert nodes[child]["column"] == nodes[parent]["column"] + 1
+            if parent in reachable:
+                reachable.add(child)
+        assert set(nodes) == reachable
+        events = [node for node in data["nodes"] if node["role"] == "event"]
+        assert len({node["type"] for node in events}) == len(events)
+        assert {node["role"] for node in data["nodes"]} >= {"start", "late", "boss", "event", "elite"}
+
+
+def test_second_map_route_persistence_and_completion_transition():
+    for seed in range(6):
+        state = G.new_state(seed, "map2")
+        clear_story(state)
+        assert state["mapData"]["mapType"] == "map2"
+        G.confirm_battle_result(state)
+        clear_story(state)
+        assert state["phase"] == "map"
+        assert G.public_state(state)["mapType"] == "map2"
+        assert G.public_state(state)["canStartMap2"] is False
+        for _ in range(60):
+            if state["phase"] == "complete":
+                break
+            if state["phase"] == "map":
+                nodes = G.available_nodes(state)
+                assert nodes
+                G.select_node(state, nodes[0])
+            elif state["phase"] == "node":
+                node = G.current_node(state)
+                if node["type"] == "battle":
+                    G.confirm_battle_result(state)
+                else:
+                    G.finish_node(state, node["id"])
+            elif state["phase"] == "elite_reward":
+                G.elite_reward_leave(state)
+            elif state["phase"] in ("before_story", "after_story"):
+                clear_story(state)
+        assert state["phase"] == "complete"
+        assert len(state["completed"]) == 12
+        assert G.current_map_type(state) == "map2"
+        assert G.can_start_map2(state) is False
+        reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
+        assert not changed
+        assert reloaded["mapData"] == state["mapData"]
+
+    cleared = G.new_state(3, "map1")
+    cleared["phase"] = "complete"
+    assert G.can_start_map2(cleared) is True
+    assert G.can_start_map2(G.new_state(3, "map2")) is False
+
+    state = G.new_state(4, "map2")
+    tampered = json.loads(json.dumps(state))
+    tampered["mapData"]["mapType"] = "map3"
+    try:
+        G.migrate_state(tampered)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("未知地图类型应拒绝读取")
+
+
+def test_map1_completion_auto_starts_map2():
+    state = G.new_state(11, "map1")
+    boss = next(node for node in state["mapData"]["nodes"] if node["role"] == "boss")
+    state["nodeId"] = boss["id"]
+    state["phase"] = "after_story"
+    G._after_story_done(state)
+    assert state["mapData"]["mapType"] == "map2"
+    assert state["phase"] != "complete"
+    assert state["gold"] == 0
+    assert len(state["cards"]) == len(G.INITIAL_DECK)
+    assert state["completed"] == []
+
+    boss2 = next(node for node in state["mapData"]["nodes"] if node["role"] == "boss")
+    state["nodeId"] = boss2["id"]
+    state["phase"] = "after_story"
+    G._after_story_done(state)
+    assert state["phase"] == "complete"
+
+
+def test_old_generated_map_without_map_type():
+    state = G.new_state(7, "map1")
+    del state["mapData"]["mapType"]
+    state["schemaVersion"] = 6
+    reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
+    assert changed
+    assert G.current_map_type(reloaded) == "map1"
+    assert reloaded["mapData"]["seed"] == state["mapData"]["seed"]
+
+
+def test_legacy_map_run_length_migration():
+    definition = G.MAPS["map1"]
+    templates = definition["templates"]
+    event_types = definition["eventTypes"][:3]
+    layers = [
+        [G._make_map_node(
+            "battle_early", 0, 0, "start", templates,
+            encounter=definition["battlePools"]["early"][0],
+        )],
+        [
+            G._make_map_node(event_types[0], 1, 0, "event", templates),
+            G._make_map_node(event_types[1], 1, 1, "event", templates),
+        ],
+        [G._make_map_node(
+            "elite", 2, 0, "elite", templates, encounter="elite", elite_reward=True
+        )],
+        [G._make_map_node(event_types[2], 3, 0, "event", templates)],
+        [G._make_map_node(
+            "battle_late", 4, 0, "late", templates,
+            encounter=definition["battlePools"]["late"][0],
+        )],
+        [G._make_map_node(
+            definition["bossTemplate"], 5, 0, "boss", templates,
+            encounter=definition["bossEncounter"],
+        )],
+    ]
+    nodes = [node for layer in layers for node in layer]
+    data = {
+        "mapType": "map1",
+        "seed": 1,
+        "runLength": 6,
+        "start": nodes[0]["id"],
+        "boss": nodes[-1]["id"],
+        "elite": next(node["id"] for node in nodes if node["role"] == "elite"),
+        "nodes": nodes,
+        "edges": G._connect_map_layers(layers, random.Random(0)),
+        "encounterIds": [],
+    }
+    try:
+        G._validate_generated_map(data)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("新地图生成不应接受旧的 6 层路线")
+
+    state = G.new_state(7, "map1")
+    state["mapData"] = data
+    state["nodeId"] = data["start"]
+    state["completed"] = []
+    state["phase"] = "map"
+    reloaded, _ = G.migrate_state(json.loads(json.dumps(state)))
+    assert reloaded["mapData"]["runLength"] == 6
+    assert G.current_map_type(reloaded) == "map1"
+
+
+def test_second_map_elite_candidates_cover_all_cards():
+    covered = set()
+    for seed in range(200):
+        state = elite_state(seed, "map2")
+        view = G.public_state(state)["eliteReward"]
+        assert len(view["candidates"]) == G.ELITE_REWARD_COUNT
+        covered.update(card["cardId"] for card in view["candidates"])
+    assert covered == set(G.CARDS), covered ^ set(G.CARDS)
+
+
+def test_second_map_boss_reuses_existing_enemies():
+    encounter = G.ENCOUNTERS["boss2"]
+    assert encounter["plan"]
+    assert {step["enemy"] for step in encounter["plan"]} <= set(G.ENEMIES)
+    b = B.make_battle(
+        initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(2)
+    )
+    forecast = B.view(b)["forecast"]
+    assert forecast and any(item["name"] == "镜像核心" for item in forecast)
 
 
 def test_elite_reward_and_deck_limit():
@@ -1253,6 +1473,15 @@ def test_sweep_attack():
     B._enemy_phase(b)
     assert shell["hp"] == 2 and worker["hp"] == 0
     assert b["hp"]["player"] == 15, "横扫只攻击场上单位，空列不伤领袖"
+
+    b = make(1)
+    b["plan"] = []
+    wide = put_unit(b, "player", "twin_rail", 1)
+    put_enemy(b, "镜像核心", 2, 2, 16, attackPattern="sweep", shield=2)
+    B._enemy_phase(b)
+    assert wide["hp"] == 2, "宽体单位占两列，但横扫只应承受一次伤害"
+    assert sum("双轨机偶" in line for line in b["log"]) == 1
+    assert b["hp"]["player"] == 15
 
 
 def test_mirror_drone_copy():

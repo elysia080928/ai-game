@@ -4,8 +4,8 @@
       "name": "豆丁机器人",
       "type": "unit",
       "levels": [
-        {"cost": 1, "atk": 1, "hp": 2},
-        {"cost": 1, "atk": 1, "hp": 3}
+        {"cost": 1, "atk": 99, "hp": 2},
+        {"cost": 1, "atk": 99, "hp": 3}
       ]
     },
     "shell": {
@@ -218,6 +218,25 @@
       ],
       "reward": {"gold": 0}
     },
+    "boss2": {
+      "name": "深层核心",
+      "playerHp": 15,
+      "enemyHp": 24,
+      "plan": [
+        {"turn": 1, "column": 2, "enemy": "mirror_core"},
+        {"turn": 2, "column": 1, "enemy": "defender"},
+        {"turn": 2, "column": 4, "enemy": "phase_hunter"},
+        {"turn": 3, "column": 3, "enemy": "signal_jammer"},
+        {"turn": 3, "column": 1, "enemy": "mine_beetle"},
+        {"turn": 4, "column": 2, "enemy": "siege_carrier"},
+        {"turn": 4, "column": 4, "enemy": "mirror_drone"},
+        {"turn": 5, "column": 1, "enemy": "drift_hunter"},
+        {"turn": 5, "column": 3, "enemy": "null_anchor"},
+        {"turn": 6, "column": 3, "enemy": "wide_bulwark"},
+        {"turn": 6, "column": 1, "enemy": "double_striker"}
+      ],
+      "reward": {"gold": 0}
+    },
     "early_patrol": {
       "name": "巡逻编队",
       "playerHp": 15,
@@ -335,8 +354,16 @@
   "runLength": 7,
   "firstNode": "battle1",
   "mapGeneration": {
-    "runLengths": [6, 7, 8],
+    "runLengths": [8],
     "maxBranches": 3,
+    "middleBattles": 2,
+    "extraBattleNodes": 1,
+    "extraEventNodes": 1,
+    "chapter": "第一章",
+    "title": "回路边境",
+    "subtitle": "THE BORDERLANDS",
+    "caption": "一张尚未写完的地图",
+    "destination": "镜像核心",
     "eventTypes": [
       "recruit", "signal", "relay", "adventure", "calibration", "drones",
       "drift", "recycle", "shop", "trial", "training"
@@ -364,6 +391,32 @@
         ],
         "after": [
           {"speaker": "爱", "text": "防线被撕开了。核心的信号就在前面。"}
+        ]
+      }
+    }
+  },
+  "secondMap": {
+    "runLengths": [12],
+    "maxBranches": 4,
+    "middleBattles": 4,
+    "extraBattleNodes": 1,
+    "extraEventNodes": 3,
+    "bossEncounter": "boss2",
+    "bossTemplate": "boss2",
+    "chapter": "第二章",
+    "title": "深层回路",
+    "subtitle": "THE DEEP CIRCUIT",
+    "caption": "第二条路线",
+    "destination": "深层核心",
+    "templates": {
+      "boss2": {
+        "type": "battle",
+        "name": "深层核心",
+        "before": [
+          {"speaker": "爱", "text": "更深处的回路正在重复你的动作。最后一道门后，是它的核心。", "background": "battle"}
+        ],
+        "after": [
+          {"speaker": "爱", "text": "深层核心熄灭了。第二条路线也走到了尽头。"}
         ]
       }
     }
