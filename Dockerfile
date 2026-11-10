@@ -13,7 +13,11 @@ COPY app ./app
 COPY content ./content
 COPY static ./static
 
-RUN mkdir -p /app/data
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 7860
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"${PORT:-7860}\""]

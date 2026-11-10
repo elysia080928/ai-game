@@ -1,0 +1,10 @@
+.git
+.gitignore
+.agents
+.venv
+__pycache__
+*.pyc
+data
+.tmp-*
+.verify-*
+tests

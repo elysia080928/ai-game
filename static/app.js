@@ -81,28 +81,107 @@ function showToast(text) {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
 }
 
+function missingPayload() {
+  const message = "游戏状态缺少必要数据，请刷新页面后重试。";
+  showToast(message);
+  state = null;
+  battle = null;
+  render();
+  $("auth-error").textContent = message;
+}
+
+let dialogReturn = null;
+
+function showDialog(panel, focusTarget) {
+  if (panel.hidden) {
+    dialogReturn = document.activeElement;
+    panel.hidden = false;
+  }
+  if (focusTarget && !panel.contains(document.activeElement)) focusTarget.focus();
+}
+
+function hideDialog(panel) {
+  if (panel.hidden) return;
+  panel.hidden = true;
+  const target = dialogReturn && document.body.contains(dialogReturn) ? dialogReturn : $("end-turn");
+  if (target && !target.disabled) target.focus();
+  dialogReturn = null;
+}
+
+function trapDialogFocus(event) {
+  if (event.key !== "Tab") return;
+  const focusable = [...event.currentTarget.querySelectorAll(
+    "button:not([disabled]), [tabindex='0']"
+  )];
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 async function api(path, body) {
   const options = body === undefined
     ? { method: "GET" }
     : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-  const response = await fetch(path, options);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  let response;
   let data = null;
-  try { data = await response.json(); } catch (_) { /* 非 JSON 响应 */ }
+  try {
+    response = await fetch(path, { ...options, signal: controller.signal });
+    try { data = await response.json(); } catch (_) { /* 非 JSON 响应 */ }
+  } catch (error) {
+    throw new Error(error.name === "AbortError" ? "请求超时，请重试" : "网络连接失败");
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     if (response.status === 401) {
       state = null;
       battle = null;
       render();
     }
-    throw new Error(data && data.detail ? data.detail : `请求失败（${response.status}）`);
+    const detail = data && data.detail;
+    throw new Error(typeof detail === "string" ? detail : `请求失败（${response.status}）`);
   }
+  if (data === null) throw new Error("服务器响应格式异常");
   return data;
 }
 
 function apply(data) {
   if (!data) return;
-  if (data.state) state = data.state;
-  if (Object.prototype.hasOwnProperty.call(data, "battle")) battle = data.battle;
+  if (data.state) {
+    const previousNode = state && state.node ? state.node.id : null;
+    const nextNode = data.state.node ? data.state.node.id : null;
+    if (previousNode !== nextNode) {
+      selectedUid = null;
+      discardSelection.clear();
+      adventureTarget = null;
+      adventureEffect = null;
+      recycleTarget = null;
+      trialPick = null;
+      trainingPick = null;
+      relayAction = null;
+      relayTarget = null;
+      signalAction = null;
+      signalTarget = null;
+    }
+    state = data.state;
+  }
+  if (Object.prototype.hasOwnProperty.call(data, "battle")) {
+    battle = data.battle;
+    if (!battle) {
+      selectedUid = null;
+      recycleMode = false;
+      discardSelection.clear();
+    }
+  }
   if (data.username) username = data.username;
   render();
 }
@@ -223,7 +302,7 @@ function refreshPagedLists(root = document) {
     const width = items[0]?.classList.contains("card-offer") || items[0]?.classList.contains("card-target") ? (compact ? 118 : 196) : (compact ? 190 : 250);
     const pageSize = Math.max(1, Math.floor((list.clientWidth || window.innerWidth) / width));
     const pageCount = Math.ceil(items.length / pageSize);
-    const page = Math.min(Number(list.dataset.page || 0), pageCount - 1);
+    const page = Math.max(0, Math.min(Number(list.dataset.page || 0), pageCount - 1));
     list.dataset.page = String(page);
     items.forEach((item, index) => { item.hidden = index < page * pageSize || index >= (page + 1) * pageSize; });
     controls.hidden = pageCount < 2;
@@ -260,7 +339,7 @@ function renderPortrait(story) {
 function renderStory() {
   const story = state.story;
   if (!story) {
-    render();
+    missingPayload();
     return;
   }
   $("story-view").hidden = false;
@@ -284,20 +363,28 @@ function renderStory() {
 }
 
 async function advanceStory(skip) {
+  if (busy) return;
+  busy = true;
   try {
     const data = await api("/api/story/advance", { skip });
     apply(data);
   } catch (error) {
     showToast(error.message);
+  } finally {
+    busy = false;
   }
 }
 
 async function chooseStoryOption(optionId) {
+  if (busy) return;
+  busy = true;
   try {
     const data = await api("/api/story/choose", { optionId });
     apply(data);
   } catch (error) {
     showToast(error.message);
+  } finally {
+    busy = false;
   }
 }
 
@@ -352,7 +439,7 @@ function renderComplete() {
 function renderMap() {
   const map = state.map;
   if (!map) {
-    render();
+    missingPayload();
     return;
   }
   $("map-view").hidden = false;
@@ -431,10 +518,12 @@ async function ensureBattle() {
   if (loadingBattle) return;
   loadingBattle = true;
   try {
-    const data = await api("/api/battle/reset", {});
+    const data = await api("/api/battle/start", {});
     apply(data);
   } catch (error) {
     showToast(error.message);
+    $("hand").innerHTML = "<p class='hint'>战斗载入失败。</p><button type='button' class='primary' id='battle-retry'>重新载入</button>";
+    $("battle-retry").addEventListener("click", ensureBattle);
   } finally {
     loadingBattle = false;
   }
@@ -483,21 +572,21 @@ function unitHtml(unit, side, column) {
     </div>`;
 }
 
-function unitTrait(card) {
+function traitText(card, short = false) {
   const traits = [];
-  if ((card.width || 1) > 1) traits.push(`占 ${card.width} 列`);
-  if (card.attackPattern === "split_attack") traits.push("攻击当前列与右侧列");
-  else if (card.attackPattern === "double_strike") traits.push("对同列攻击两次");
+  if (!short && (card.width || 1) > 1) traits.push(`占 ${card.width} 列`);
+  if (card.attackPattern === "split_attack") traits.push(short ? "攻击两列" : "攻击当前列与右侧列");
+  else if (card.attackPattern === "double_strike") traits.push(short ? "同列攻击两次" : "对同列攻击两次");
   else if (card.attackPattern === "sweep") traits.push("横扫全部单位");
   if ((card.abilities || []).includes("flying")) traits.push("飞行");
-  if ((card.abilities || []).includes("reach")) traits.push("可攻击飞行单位");
-  if (card.shield) traits.push(`护盾 ${card.shield} 次（首次伤害 -1）`);
-  if (card.guard) traits.push(`相邻拦截 ${card.guard} 次`);
-  if (card.shift) traits.push("敌方阶段结束时右移一格");
-  if (card.anchor) traits.push("相邻玩家单位无法被拦截");
-  if (card.onDeploy === "energy_penalty") traits.push("部署时下回合能量 -1");
-  else if (card.onDeploy === "copy_opposite") traits.push("部署时复制对位单位的攻击模式");
-  if (card.onDestroy === "burst_adjacent") traits.push("死亡时左右相邻各 1 伤害");
+  if (!short && (card.abilities || []).includes("reach")) traits.push("可攻击飞行单位");
+  if (card.shield) traits.push(short ? `护盾 ${card.shield}` : `护盾 ${card.shield} 次（首次伤害 -1）`);
+  if (card.guard) traits.push(short ? `拦截 ${card.guard}` : `相邻拦截 ${card.guard} 次`);
+  if (card.shift) traits.push(short ? "回合结束右移" : "敌方阶段结束时右移一格");
+  if (card.anchor) traits.push(short ? "相邻无法拦截" : "相邻玩家单位无法被拦截");
+  if (card.onDeploy === "energy_penalty") traits.push(short ? "部署时：下回合能量 -1" : "部署时下回合能量 -1");
+  else if (card.onDeploy === "copy_opposite") traits.push(short ? "部署时复制对位攻击模式" : "部署时复制对位单位的攻击模式");
+  if (card.onDestroy === "burst_adjacent") traits.push(short ? "死亡时相邻各 1 伤害" : "死亡时左右相邻各 1 伤害");
   else if (card.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
   return traits.join(" · ");
 }
@@ -526,7 +615,7 @@ function pixelArtHtml(card, side = "") {
 function cardFaceHtml(card) {
   const isUnit = card.type === "unit";
   const description = isUnit
-    ? unitTrait(card) || "机偶单位 · 自动攻击对位目标"
+    ? traitText(card) || "机偶单位 · 自动攻击对位目标"
     : card.effectText || (card.heal != null ? `恢复 ${card.heal} 点领袖生命` : card.damage != null ? `造成 ${card.damage} 点伤害` : "战术指令");
   const level = card.level ?? card.targetLevel ?? 1;
   const stats = isUnit
@@ -551,7 +640,7 @@ function offerCardView(offer, type = "unit") {
 }
 
 function cardHtml(card, selected, draggable = false) {
-  const trait = card.type === "unit" ? unitTrait(card) : "";
+  const trait = card.type === "unit" ? traitText(card) : "";
   const detail = card.type === "unit"
     ? `，攻击 ${card.atk}，生命 ${card.hp}${trait ? `，${trait}` : ""}`
     : `，${card.effectText || (card.heal != null ? `恢复 ${card.heal}` : card.damage != null ? `造成 ${card.damage} 伤害` : "指令牌")}`;
@@ -574,20 +663,7 @@ function renderForecast() {
       const current = item.turn === battle.turn;
       const width = item.width || 1;
       const range = width > 1 ? `${item.column}-${item.column + width - 1} 列` : `${item.column} 列`;
-      const traits = [];
-      if (item.attackPattern === "split_attack") traits.push("攻击两列");
-      else if (item.attackPattern === "double_strike") traits.push("同列攻击两次");
-      else if (item.attackPattern === "sweep") traits.push("横扫全部单位");
-      if ((item.abilities || []).includes("flying")) traits.push("飞行");
-      if (item.shield) traits.push(`护盾 ${item.shield}`);
-      if (item.guard) traits.push(`拦截 ${item.guard}`);
-      if (item.shift) traits.push("回合结束右移");
-      if (item.anchor) traits.push("相邻无法拦截");
-      if (item.onDeploy === "energy_penalty") traits.push("部署时：下回合能量 -1");
-      else if (item.onDeploy === "copy_opposite") traits.push("部署时复制对位攻击模式");
-      if (item.onDestroy === "burst_adjacent") traits.push("死亡时相邻各 1 伤害");
-      else if (item.onDestroy === "hit_opposite") traits.push("死亡时对位 2 伤害");
-      const trait = traits.join(" · ");
+      const trait = traitText(item, true);
       return `<div class="forecast-item ${current ? "current" : "next"}${width > 1 ? " wide" : ""}">
           <span class="forecast-when">${current ? "本回合" : "下回合"} · ${range}</span>
           <span class="forecast-name">${esc(item.name)}</span>
@@ -631,6 +707,11 @@ function maybeShowTutorial() {
 }
 
 function renderBattle() {
+  const active = document.activeElement;
+  const focusInfo = active && $("battle-view").contains(active)
+    ? { ...active.dataset, id: active.id }
+    : null;
+  const dialogsClosed = $("discard-panel").hidden && $("result-panel").hidden;
   $("battle-view").hidden = false;
   if (!battle) {
     $("hand").innerHTML = "<p class='hint'>正在载入战斗…</p>";
@@ -663,6 +744,22 @@ function renderBattle() {
   $("recycle-btn").disabled = battle.phase !== "player";
   $("recycle-btn").classList.toggle("active", recycleMode);
 
+  if (focusInfo && dialogsClosed) {
+    let target = null;
+    if (focusInfo.uid) {
+      target = [...$("hand").querySelectorAll("[data-uid]")]
+        .find((element) => element.dataset.uid === focusInfo.uid);
+    }
+    if (!target && focusInfo.side) {
+      target = document.querySelector(
+        `#${focusInfo.side}-row .slot[data-column="${focusInfo.column}"]`
+      );
+    }
+    if (!target && focusInfo.id) target = $(focusInfo.id);
+    if (!target && !$("end-turn").disabled) target = $("end-turn");
+    if (target && !target.closest("[hidden]")) target.focus();
+  }
+
   renderDiscard();
   renderResult();
   maybeShowTutorial();
@@ -671,29 +768,33 @@ function renderBattle() {
 function renderDiscard() {
   const panel = $("discard-panel");
   if (!battle || battle.phase !== "discard") {
-    panel.hidden = true;
+    hideDialog(panel);
     discardSelection.clear();
     return;
   }
-  panel.hidden = false;
   for (const uid of [...discardSelection]) {
     if (!battle.hand.some((card) => card.uid === uid)) discardSelection.delete(uid);
   }
+  const activeUid = document.activeElement?.dataset?.uid;
   $("discard-needed").textContent = battle.discardRequired;
   $("discard-hand").innerHTML = battle.hand
     .map((card) => cardHtml(card, discardSelection.has(card.uid)))
     .join("");
   $("discard-confirm").disabled = discardSelection.size !== battle.discardRequired;
   $("discard-confirm").textContent = `确认弃牌（${discardSelection.size}/${battle.discardRequired}）`;
+  const cards = [...panel.querySelectorAll("[data-uid]")];
+  const target = cards.find((element) => element.dataset.uid === activeUid)
+    || cards[0]
+    || $("discard-confirm");
+  showDialog(panel, target);
 }
 
 function renderResult() {
   const panel = $("result-panel");
   if (!battle || battle.phase !== "over") {
-    panel.hidden = true;
+    hideDialog(panel);
     return;
   }
-  panel.hidden = false;
   const action = $("result-action");
   if (battle.result === "win") {
     $("result-title").textContent = "战斗胜利";
@@ -706,6 +807,7 @@ function renderResult() {
     action.textContent = "重试";
     action.dataset.action = "retry";
   }
+  showDialog(panel, action);
 }
 
 function clearDragState() {
@@ -920,7 +1022,11 @@ function onSlotClick(event) {
   if (!recycleMode && selectedUid != null) {
     const card = battle.hand.find((item) => item.uid === selectedUid);
     if (card?.type === "unit" && info.side === "player" && info.uid == null) {
-      showToast("请拖动单位牌到空列部署");
+      if (window.matchMedia("(hover: none), (pointer: coarse)").matches) {
+        slotAction(info.side, info.column, info.uid);
+      } else {
+        showToast("请拖动单位牌到空列部署");
+      }
       return;
     }
   }
@@ -946,7 +1052,7 @@ function selectCard(uid) {
 function renderEliteReward() {
   const reward = state.eliteReward;
   if (!reward) {
-    render();
+    missingPayload();
     return;
   }
   $("elite-reward-view").hidden = false;
@@ -966,7 +1072,7 @@ function renderEliteReward() {
 function renderRecruit() {
   const recruit = state.recruit;
   if (!recruit) {
-    render();
+    missingPayload();
     return;
   }
   $("recruit-view").hidden = false;
@@ -1004,7 +1110,7 @@ function signalTargets() {
 function renderSignal() {
   const data = state.signal;
   if (!data) {
-    render();
+    missingPayload();
     return;
   }
   $("signal-view").hidden = false;
@@ -1049,7 +1155,7 @@ function renderAdventure(kind) {
   enhanceKind = kind;
   const data = state[kind];
   if (!data) {
-    render();
+    missingPayload();
     return;
   }
   $("adventure-view").hidden = false;
@@ -1112,7 +1218,7 @@ function renderAdventure(kind) {
 function renderDrift() {
   const drift = state.drift;
   if (!drift) {
-    render();
+    missingPayload();
     return;
   }
   $("drift-view").hidden = false;
@@ -1137,7 +1243,7 @@ function renderDrift() {
 function renderRecycle() {
   const data = state.recycle;
   if (!data) {
-    render();
+    missingPayload();
     return;
   }
   $("recycle-view").hidden = false;
@@ -1165,7 +1271,7 @@ function renderRecycle() {
 function renderShop() {
   const shop = state.shop;
   if (!shop) {
-    render();
+    missingPayload();
     return;
   }
   $("shop-view").hidden = false;
@@ -1193,7 +1299,7 @@ function renderShop() {
 function renderTrial() {
   const trial = state.trial;
   if (!trial) {
-    render();
+    missingPayload();
     return;
   }
   $("trial-view").hidden = false;
@@ -1236,7 +1342,7 @@ function renderTrial() {
 function renderRelay() {
   const data = state.relay;
   if (!data) {
-    render();
+    missingPayload();
     return;
   }
   $("relay-view").hidden = false;
@@ -1282,7 +1388,7 @@ function renderRelay() {
 function renderTraining() {
   const data = state.training;
   if (!data) {
-    render();
+    missingPayload();
     return;
   }
   $("training-view").hidden = false;
@@ -1302,6 +1408,7 @@ function renderTraining() {
 
 async function loginOrRegister(path) {
   $("auth-error").textContent = "";
+  $("reset-save-btn").hidden = true;
   const payload = { username: $("username").value.trim(), password: $("password").value };
   try {
     const data = await api(path, payload);
@@ -1319,6 +1426,7 @@ async function logout() {
   state = null;
   battle = null;
   username = "";
+  $("reset-save-btn").hidden = true;
   render();
 }
 
@@ -1335,16 +1443,29 @@ function bindEvents() {
   });
   const pagerObserver = new MutationObserver((records) => {
     const containers = new Set(records.map((record) => record.target.closest(".offers, .targets")).filter(Boolean));
-    containers.forEach((list) => { delete list.dataset.page; refreshPagedLists(list.parentElement); });
+    containers.forEach((list) => refreshPagedLists(list.parentElement));
   });
   document.querySelectorAll(".offers, .targets").forEach((list) => pagerObserver.observe(list, { childList: true }));
   window.addEventListener("resize", () => requestAnimationFrame(() => refreshPagedLists()));
   $("login-btn").addEventListener("click", () => loginOrRegister("/api/login"));
   $("register-btn").addEventListener("click", () => loginOrRegister("/api/register"));
+  $("reset-save-btn").addEventListener("click", async () => {
+    if (!confirm("当前存档无法读取。重置会覆盖它并开始新冒险，确定吗？")) return;
+    try {
+      const data = await api("/api/game/new", { confirm: true });
+      $("reset-save-btn").hidden = true;
+      $("auth-error").textContent = "";
+      apply(data);
+    } catch (error) {
+      $("auth-error").textContent = error.message;
+    }
+  });
   $("password").addEventListener("keydown", (event) => {
     if (event.key === "Enter") loginOrRegister("/api/login");
   });
   $("logout-btn").addEventListener("click", logout);
+  $("discard-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
+  $("result-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
 
   $("story-next").addEventListener("click", () => advanceStory(false));
   $("story-skip").addEventListener("click", () => advanceStory(true));
@@ -1478,6 +1599,14 @@ function bindEvents() {
   $("signal-targets").addEventListener("click", (event) => {
     const element = event.target.closest(".target");
     if (!element) return;
+    signalTarget = signalTargets().find((card) => card.uid === element.dataset.uid) || null;
+    renderSignal();
+  });
+  $("signal-targets").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const element = event.target.closest(".target");
+    if (!element) return;
+    event.preventDefault();
     signalTarget = signalTargets().find((card) => card.uid === element.dataset.uid) || null;
     renderSignal();
   });
@@ -1658,9 +1787,11 @@ async function init() {
   try {
     const data = await api("/api/state");
     apply(data);
-  } catch (_) {
+  } catch (error) {
     state = null;
     render();
+    $("auth-error").textContent = error.message;
+    $("reset-save-btn").hidden = !error.message.includes("存档无法读取");
   }
 }
 

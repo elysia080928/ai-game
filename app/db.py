@@ -7,6 +7,7 @@ import threading
 
 DATA_DIR = pathlib.Path(os.environ.get("DATA_DIR", "data")).resolve()
 DB_PATH = DATA_DIR / "game.db"
+SCHEMA_VERSION = 1
 LOCK = threading.RLock()
 _conn = None
 
@@ -19,6 +20,9 @@ def init():
     _conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     _conn.row_factory = sqlite3.Row
     _conn.execute("PRAGMA journal_mode=WAL")
+    version = _conn.execute("PRAGMA user_version").fetchone()[0]
+    if version > SCHEMA_VERSION:
+        raise RuntimeError("数据库版本高于当前程序版本")
     _conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -38,8 +42,21 @@ def init():
             revision INTEGER NOT NULL DEFAULT 1,
             updated_at REAL NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS save_backups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS battles (
+            user_id INTEGER PRIMARY KEY,
+            state TEXT NOT NULL,
+            updated_at REAL NOT NULL
+        );
         """
     )
+    if version < SCHEMA_VERSION:
+        _conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     _conn.commit()
 
 

@@ -10,9 +10,12 @@ const os = require("os");
 const path = require("path");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8099";
-const EDGE = process.env.EDGE_PATH || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+const BROWSER = process.env.BROWSER_PATH
+  || process.env.EDGE_PATH
+  || process.env.CHROME_PATH
+  || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const CDP_PORT = Number(process.env.CDP_PORT || 9222);
-const PROFILE = fs.mkdtempSync(path.join(os.tmpdir(), "ai-game-edge-"));
+const PROFILE = fs.mkdtempSync(path.join(os.tmpdir(), "ai-game-browser-"));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -31,8 +34,8 @@ async function waitFor(check, label, timeout = 15000) {
 }
 
 async function main() {
-  const edge = spawn(
-    EDGE,
+  const browser = spawn(
+    BROWSER,
     [
       "--headless=new",
       "--disable-gpu",
@@ -202,6 +205,29 @@ async function main() {
       throw new Error("新手教程完成后没有记录本地标记");
     }
     console.log("ok 第一关新手教程显示、推进与关闭");
+
+    const battleBeforeReload = await evaluate(`JSON.stringify({
+      turn: battle.turn, energy: battle.energy, hp: battle.hp,
+      hand: battle.hand.map((card) => card.uid).sort((a, b) => a - b),
+      deck: battle.deckCount,
+      board: battle.board.player.map((unit) => (unit ? unit.uid : null)),
+    })`);
+    await command("Page.reload", {});
+    await waitFor(
+      async () => (await visible("battle-view")) &&
+        (await evaluate("typeof battle !== 'undefined' && !!battle && document.querySelectorAll('#hand .card').length > 0")),
+      "刷新后恢复战斗"
+    );
+    const battleAfterReload = await evaluate(`JSON.stringify({
+      turn: battle.turn, energy: battle.energy, hp: battle.hp,
+      hand: battle.hand.map((card) => card.uid).sort((a, b) => a - b),
+      deck: battle.deckCount,
+      board: battle.board.player.map((unit) => (unit ? unit.uid : null)),
+    })`);
+    if (battleAfterReload !== battleBeforeReload) {
+      throw new Error(`刷新后战斗被重抽或重置：${battleBeforeReload} -> ${battleAfterReload}`);
+    }
+    console.log("ok 刷新后战斗进度与起手牌保持不变");
 
     const desktopBattle = await evaluate(`(() => {
       const controls = document.querySelector('.battle-bottom').getBoundingClientRect();
@@ -628,7 +654,7 @@ async function main() {
     const turnBeforeCommand = await evaluate("document.getElementById('turn').textContent");
     await click("#end-turn");
     await waitFor(async () => {
-      const resultOpen = !(await evaluate("!document.getElementById('result-panel').hidden"));
+      const resultOpen = await evaluate("!document.getElementById('result-panel').hidden");
       const turn = await evaluate("document.getElementById('turn').textContent");
       return resultOpen || turn !== turnBeforeCommand;
     }, "等待技能测试回合");
@@ -1163,7 +1189,7 @@ async function main() {
     console.log("浏览器冒烟测试全部通过");
   } finally {
     try {
-      execFileSync("taskkill", ["/PID", String(edge.pid), "/T", "/F"], { stdio: "ignore" });
+      execFileSync("taskkill", ["/PID", String(browser.pid), "/T", "/F"], { stdio: "ignore" });
     } catch (_) {
       /* 浏览器可能已退出 */
     }

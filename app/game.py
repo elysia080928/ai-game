@@ -402,6 +402,17 @@ def validate_content():
     ):
         raise RuntimeError("第二张地图终点模板非法")
 
+    for map_type, definition in MAPS.items():
+        battles = definition.get("middleBattles", 0)
+        extra = definition.get("extraBattleNodes", 0)
+        for pool_name, layers in (
+            ("early", (battles + 1) // 2),
+            ("late", battles // 2),
+        ):
+            pool = definition["battlePools"].get(pool_name) or []
+            if 1 + layers + extra > len(pool):
+                raise RuntimeError(f"{map_type} {pool_name} 战斗池容量不足")
+
 
 validate_content()
 
@@ -569,6 +580,21 @@ def _validate_generated_map(data, legacy=False):
     widths = [len(columns[column]) for column in sorted(columns)]
     if 1 not in widths or max(widths) < 2 or max(widths) > definition["maxBranches"]:
         raise RuntimeError("地图缺少单路或多路分支")
+    if not legacy:
+        # 起点、后期战和终点固定为战斗，允许最多两场连续战斗，禁止三场以上扎堆。
+        battle_run = 0
+        for column in sorted(columns):
+            layer_roles = {node.get("role") for node in columns[column]}
+            battle_run = (
+                battle_run + 1
+                if layer_roles & {"start", "late", "boss", "battle", "elite"}
+                else 0
+            )
+            if battle_run >= 3:
+                raise RuntimeError("地图连续战斗过多")
+        encounters = [node.get("encounter") for node in nodes if node.get("encounter")]
+        if len(encounters) != len(set(encounters)):
+            raise RuntimeError("地图遭遇重复")
     roles = [node.get("role") for node in nodes]
     if roles.count("start") != 1 or roles.count("late") != 1 or roles.count("boss") != 1:
         raise RuntimeError("地图战斗节点非法")
@@ -633,7 +659,21 @@ def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
     if event_layer_count < 0:
         raise RuntimeError("地图中段无法容纳战斗与精英")
     plan = ["elite"] + ["battle"] * middle_battles + ["event"] * event_layer_count
-    rng.shuffle(plan)
+
+    def balanced_plan(candidate):
+        run = 0
+        for kind in ["battle", *candidate, "battle", "battle"]:
+            run = run + 1 if kind in ("battle", "elite") else 0
+            if run >= 3:
+                return False
+        return True
+
+    for _ in range(200):
+        rng.shuffle(plan)
+        if balanced_plan(plan):
+            break
+    else:
+        raise RuntimeError("地图无法安排连续战斗")
     widths = [1] * middle_count
 
     def add_extra_nodes(count, indices):
@@ -658,16 +698,17 @@ def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
 
     used = set()
 
-    def pick_encounter(pool_name):
-        pool = [encounter_id for encounter_id in battle_pools[pool_name] if encounter_id not in used]
-        if not pool:
-            pool = list(battle_pools[pool_name])
-        encounter_id = rng.choice(pool)
-        used.add(encounter_id)
-        return encounter_id
+    def pick_encounters(pool_name, count):
+        pool = list(battle_pools[pool_name])
+        unused = [encounter_id for encounter_id in pool if encounter_id not in used]
+        if count > len(unused):
+            raise RuntimeError("地图战斗分支超过遭遇池")
+        picks = rng.sample(unused, count)
+        used.update(picks)
+        return picks
 
-    early_encounter = pick_encounter("early")
-    late_encounter = pick_encounter("late")
+    early_encounter = pick_encounters("early", 1)[0]
+    late_encounter = pick_encounters("late", 1)[0]
     event_types = rng.sample(event_types_all, event_slots)
     layer_pools = {}
     for order, index in enumerate(battle_layers):
@@ -677,6 +718,9 @@ def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
     ]
     for index, kind in enumerate(plan):
         layer = []
+        encounters = (
+            pick_encounters(layer_pools[index], widths[index]) if kind == "battle" else None
+        )
         for row in range(widths[index]):
             if kind == "elite":
                 layer.append(
@@ -693,16 +737,17 @@ def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
             elif kind == "battle":
                 pool_name = layer_pools[index]
                 template_id = "battle_early" if pool_name == "early" else "battle_late"
-                layer.append(
-                    _make_map_node(
-                        template_id,
-                        index + 1,
-                        row,
-                        "battle",
-                        templates,
-                        encounter=pick_encounter(pool_name),
-                    )
+                encounter_id = encounters[row]
+                node = _make_map_node(
+                    template_id,
+                    index + 1,
+                    row,
+                    "battle",
+                    templates,
+                    encounter=encounter_id,
                 )
+                node["name"] = ENCOUNTERS[encounter_id].get("name") or node["name"]
+                layer.append(node)
             else:
                 node_type = event_types.pop()
                 layer.append(_make_map_node(node_type, index + 1, row, "event", templates))

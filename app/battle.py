@@ -64,6 +64,34 @@ def _card_cost(b, card):
     )["cost"]
 
 
+def _fit_extra_plan(encounter_plan, extra_plan, enemies):
+    """Move challenge reinforcements to a free column of the same turn."""
+    plan = list(encounter_plan)
+    for raw in extra_plan or []:
+        item = dict(raw)
+        width = enemies[item["enemy"]].get("width", 1)
+        occupied = set()
+        for planned in plan:
+            if planned["turn"] == item["turn"]:
+                planned_width = enemies[planned["enemy"]].get("width", 1)
+                occupied.update(
+                    range(planned["column"], planned["column"] + planned_width)
+                )
+
+        def fits(start):
+            return 1 <= start and start + width - 1 <= COLUMNS and not any(
+                column in occupied for column in range(start, start + width)
+            )
+
+        if not fits(item["column"]):
+            item["column"] = next(
+                (start for start in range(1, COLUMNS + 1) if fits(start)),
+                item["column"],
+            )
+        plan.append(item)
+    return plan
+
+
 def make_battle(
     deck_cards,
     encounter,
@@ -90,7 +118,7 @@ def make_battle(
         "deck": [],
         "used": [],
         "discarded": [],
-        "plan": list(encounter["plan"]) + list(extra_plan or []),
+        "plan": _fit_extra_plan(encounter["plan"], extra_plan, enemies),
         "phase": "player",
         "result": None,
         "next_uid": 1,
@@ -118,8 +146,8 @@ def _start_turn(b, rng):
     b["turn"] += 1
     if b["turn"] == 1:
         b["energy"] = b["firstTurnEnergy"]
-        _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 {b['openingDraw']} 张")
         _draw_opening(b, rng)
+        _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 {b['openingDraw']} 张")
     else:
         penalty = b["nextTurnEnergyPenalty"]
         b["nextTurnEnergyPenalty"] = 0
@@ -138,9 +166,10 @@ def _start_turn(b, rng):
 
 def _draw_opening(b, rng):
     eligible = [c for c in b["deck"] if _card_cost(b, c) < HIGH_COST]
-    count = b["openingDraw"]
-    if len(eligible) < count:
-        raise GameError(f"牌组中可抽的牌不足 {count} 张，无法开始战斗")
+    count = min(b["openingDraw"], len(eligible))
+    if count < 1:
+        raise GameError("牌组中没有可抽的牌，无法开始战斗")
+    b["openingDraw"] = count
     picks = None
     for _ in range(2000):
         candidate = rng.sample(eligible, count)
@@ -528,7 +557,9 @@ def _shift_enemies(b):
         if target + width - 1 > COLUMNS:
             continue
         columns = range(target, target + width)
-        if any(b["board"]["enemy"][column - 1] is not None for column in columns):
+        if any(
+            b["board"]["enemy"][column - 1] not in (None, unit) for column in columns
+        ):
             _log(b, f"{unit['name']} 无法移动：{target} 列已有单位")
             continue
         _remove_unit(b, unit)

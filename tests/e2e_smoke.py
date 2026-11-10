@@ -255,7 +255,60 @@ def plan_elite_route(state):
 
 
 def complete_event(client, node_type):
-    client.ok(f"/api/{node_type}/leave", {})
+    """尽量走一次结算分支，避免端到端只验证“离开”。"""
+    state = client.state()
+    data = state.get(node_type) or {}
+    if node_type == "signal" and data.get("targets"):
+        target = data["targets"][0]
+        client.ok(
+            "/api/signal/apply",
+            {"action": "repair", "cardId": target["cardId"], "cardUid": target["uid"]},
+        )
+    elif node_type in ("adventure", "calibration", "drones") and data.get("targets"):
+        target = data["targets"][0]
+        client.ok(
+            f"/api/{node_type}/apply",
+            {"cardId": target["cardId"], "effect": "atk", "cardUid": target["uid"]},
+        )
+    elif node_type == "training":
+        # 挑战会改写下一场战斗的预告，规则测试已覆盖；这里保持端到端路线确定性。
+        client.ok("/api/training/leave", {})
+    elif node_type == "relay":
+        client.ok("/api/relay/choose", {"choice": "keep"})
+    elif node_type == "drift" and data.get("candidates"):
+        client.ok("/api/drift/choose", {"cardId": data["candidates"][0]["cardId"]})
+    elif node_type == "recycle":
+        # 端到端路线依赖豆丁机器人速通，回收会把它拆掉；结算分支由规则测试覆盖。
+        client.ok("/api/recycle/leave", {})
+    elif node_type == "shop":
+        offer = next((item for item in data.get("offers", []) if item.get("buyable")), None)
+        if offer is not None:
+            client.ok("/api/shop/buy", {"offerId": offer["id"]})
+        client.ok("/api/shop/leave", {})
+    elif node_type == "recruit":
+        offer = next(
+            (
+                item
+                for item in data.get("offers", [])
+                if state["gold"] >= item["price"]
+            ),
+            None,
+        )
+        if offer is not None:
+            client.ok("/api/recruit/buy", {"offerId": offer["cardId"]})
+        client.ok("/api/recruit/leave", {})
+    elif node_type == "trial" and data.get("status") == "choose" and data.get("trials"):
+        client.ok("/api/trial/choose", {"trialId": data["trials"][0]["id"]})
+        state = client.state()
+        data = state.get(node_type) or {}
+        if data.get("status") == "success" and data.get("candidates"):
+            client.ok("/api/trial/choose-card", {"cardId": data["candidates"][0]["cardId"]})
+        elif data.get("status") == "failed":
+            client.ok("/api/trial/claim", {})
+        else:
+            client.ok("/api/trial/leave", {})
+    else:
+        client.ok(f"/api/{node_type}/leave", {})
     assert client.state()["phase"] == "after_story"
 
 
@@ -263,7 +316,7 @@ def test_route(client):
     state = advance_to_node(client)
     assert state["node"]["role"] == "start", state["node"]
     early_encounter = state["node"]["encounter"]
-    assert early_encounter in ("battle1", "early_patrol", "early_pincer")
+    assert early_encounter in CONTENT["mapGeneration"]["battlePools"]["early"]
     early_reward = CONTENT["encounters"][early_encounter]["reward"]["gold"]
     win_battle(client, early_encounter)
     state = client.state()

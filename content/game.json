@@ -399,8 +399,8 @@
     "runLengths": [12],
     "maxBranches": 4,
     "middleBattles": 4,
-    "extraBattleNodes": 1,
-    "extraEventNodes": 3,
+    "extraBattleNodes": 0,
+    "extraEventNodes": 4,
     "bossEncounter": "boss2",
     "bossTemplate": "boss2",
     "chapter": "第二章",
@@ -432,8 +432,7 @@
         {
           "speaker": "爱",
           "text": "第一次实战……我会在终端这边看着你，别紧张。",
-          "background": "battle",
-          "portrait": "/static/ai.png"
+          "background": "battle"
         }
       ],
       "after": [
@@ -698,6 +697,7 @@
       "branchGroup": "economy",
       "branch": "elite",
       "encounter": "elite",
+      "eliteReward": true,
       "next": ["battle2"],
       "before": [
         {

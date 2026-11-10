@@ -17,6 +17,7 @@
       <div class="auth-actions">
         <button id="login-btn" class="primary">登录</button>
         <button id="register-btn" class="ghost">注册</button>
+        <button id="reset-save-btn" class="ghost" hidden>重置无法读取的存档</button>
       </div>
     </div>
   </div>
@@ -100,8 +101,8 @@
         <div class="battle-log" id="log"></div>
 
         <div class="overlay" id="discard-panel" hidden>
-          <div class="modal">
-            <h2>手牌超过上限</h2>
+          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="discard-title">
+            <h2 id="discard-title">手牌超过上限</h2>
             <p>选择弃掉 <b id="discard-needed">0</b> 张牌（本场不能再使用）。</p>
             <div class="discard-hand" id="discard-hand"></div>
             <button id="discard-confirm" class="primary" disabled>确认弃牌</button>
@@ -109,7 +110,7 @@
         </div>
 
         <div class="overlay" id="result-panel" hidden>
-          <div class="modal">
+          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
             <h2 id="result-title"></h2>
             <p id="result-text"></p>
             <button id="result-action" class="primary"></button>
@@ -292,7 +293,7 @@
     <div class="viewport-guard" id="size-guard" hidden>
       <div class="guard-terminal"><span class="guard-mark" aria-hidden="true">1024 × 600</span><h2>窗口空间不足</h2><p>请放大窗口至建议尺寸后继续。</p></div>
     </div>
-    <div class="toast" id="toast" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   </div>
 
   <script src="/app.js"></script>

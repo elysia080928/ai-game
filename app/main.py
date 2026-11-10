@@ -10,24 +10,42 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import auth, db, game
 from . import battle as B
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "0") == "1"
+MAX_BODY_BYTES = 64 * 1024
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 app = FastAPI(title="AI Game MVP")
 db.init()
 
-BATTLES = {}
+
+@app.middleware("http")
+async def guard_requests(request: Request, call_next):
+    length = request.headers.get("content-length")
+    if length is not None:
+        try:
+            too_large = int(length) > MAX_BODY_BYTES
+        except ValueError:
+            too_large = True
+        if too_large:
+            return JSONResponse(status_code=413, content={"detail": "请求体过大"})
+    if request.method == "POST":
+        try:
+            auth.rate_limit(f"post:{_client_ip(request)}", 600, 60)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return await call_next(request)
 
 
 class AuthBody(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=256)
 
 
 class StoryBody(BaseModel):
@@ -129,38 +147,115 @@ def current_user(request: Request):
 
 
 def _load_state(user_id):
-    row = db.conn().execute("SELECT state FROM saves WHERE user_id = ?", (user_id,)).fetchone()
+    row = db.conn().execute(
+        "SELECT state, revision FROM saves WHERE user_id = ?", (user_id,)
+    ).fetchone()
     if row is None:
         return game.new_state()
     try:
         state, changed = game.migrate_state(json.loads(row["state"]))
     except (ValueError, B.GameError):
         raise HTTPException(status_code=500, detail="存档无法读取，已保留原数据")
+    state["_rev"] = row["revision"]
     if changed:
+        conn = db.conn()
+        conn.execute(
+            "INSERT INTO save_backups(user_id, state, created_at) VALUES (?, ?, ?)",
+            (user_id, row["state"], time.time()),
+        )
+        conn.execute(
+            """DELETE FROM save_backups WHERE user_id = ? AND id NOT IN (
+                SELECT id FROM save_backups WHERE user_id = ? ORDER BY id DESC LIMIT 5
+            )""",
+            (user_id, user_id),
+        )
+        conn.commit()
         _save_state(user_id, state)
     return state
 
 
 def _save_state(user_id, state):
-    db.conn().execute(
-        "UPDATE saves SET state = ?, revision = revision + 1, updated_at = ? WHERE user_id = ?",
-        (json.dumps(state, ensure_ascii=False), time.time(), user_id),
+    payload = dict(state)
+    expected = payload.pop("_rev", None)
+    encoded = json.dumps(payload, ensure_ascii=False)
+    conn = db.conn()
+    if expected is None:
+        cursor = conn.execute(
+            "UPDATE saves SET state = ?, revision = revision + 1, updated_at = ? WHERE user_id = ?",
+            (encoded, time.time(), user_id),
+        )
+    else:
+        cursor = conn.execute(
+            "UPDATE saves SET state = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND revision = ?",
+            (encoded, time.time(), user_id, expected),
+        )
+    if cursor.rowcount == 0:
+        if expected is not None:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="存档已被其他请求更新，请刷新后重试")
+        conn.execute(
+            "INSERT INTO saves(user_id, state, revision, updated_at) VALUES (?, ?, 1, ?)",
+            (user_id, encoded, time.time()),
+        )
+    conn.commit()
+    if expected is not None:
+        state["_rev"] = expected + 1
+
+
+def _load_battle(user_id):
+    row = db.conn().execute(
+        "SELECT state FROM battles WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["state"])
+    except ValueError:
+        _clear_battle(user_id)
+        return None
+
+
+def _store_battle(user_id, battle_state):
+    conn = db.conn()
+    conn.execute(
+        """INSERT INTO battles(user_id, state, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at""",
+        (user_id, json.dumps(battle_state, ensure_ascii=False), time.time()),
     )
-    db.conn().commit()
+    conn.commit()
+
+
+def _clear_battle(user_id):
+    conn = db.conn()
+    conn.execute("DELETE FROM battles WHERE user_id = ?", (user_id,))
+    conn.commit()
 
 
 def _client_ip(request):
+    if TRUST_PROXY:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
-def _set_cookie(response, token):
+def _is_https(request):
+    if request.url.scheme == "https":
+        return True
+    if TRUST_PROXY:
+        forwarded = request.headers.get("x-forwarded-proto", "")
+        return forwarded.split(",")[0].strip().lower() == "https"
+    return False
+
+
+def _set_cookie(response, token, request):
     response.set_cookie(
         auth.COOKIE_NAME,
         token,
         max_age=auth.SESSION_TTL,
         httponly=True,
         samesite="lax",
-        secure=COOKIE_SECURE,
+        secure=COOKIE_SECURE or _is_https(request),
         path="/",
     )
 
@@ -181,20 +276,25 @@ def register(body: AuthBody, request: Request, response: Response):
         raise HTTPException(status_code=400, detail="用户名需为 3-20 位字母、数字或下划线")
     if not (8 <= len(body.password) <= 128):
         raise HTTPException(status_code=400, detail="密码长度需为 8-128 位")
+    password_hash = auth.hash_password(body.password)
     with db.LOCK:
         conn = db.conn()
-        if conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
-            raise HTTPException(status_code=409, detail="用户名已被占用")
-        cursor = conn.execute(
-            "INSERT INTO users(username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username, auth.hash_password(body.password), time.time()),
-        )
-        user_id = cursor.lastrowid
-        _register_save(user_id)
-        conn.commit()
+        try:
+            if conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
+                raise HTTPException(status_code=409, detail="用户名已被占用")
+            cursor = conn.execute(
+                "INSERT INTO users(username, password_hash, created_at) VALUES (?, ?, ?)",
+                (username, password_hash, time.time()),
+            )
+            user_id = cursor.lastrowid
+            _register_save(user_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         state = _load_state(user_id)
     token = auth.create_session(user_id)
-    _set_cookie(response, token)
+    _set_cookie(response, token, request)
     return {"username": username, "state": game.public_state(state)}
 
 
@@ -205,16 +305,19 @@ def login(body: AuthBody, request: Request, response: Response):
     auth.rate_limit(f"login-user:{body.username.strip().lower()}:{ip}", 8, 60)
     username = body.username.strip()
     with db.LOCK:
-        conn = db.conn()
-        row = conn.execute(
+        row = db.conn().execute(
             "SELECT id, username, password_hash FROM users WHERE username = ?", (username,)
         ).fetchone()
-        if row is None or not auth.verify_password(body.password, row["password_hash"]):
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if row is None:
+        auth.hash_password(body.password)
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if not auth.verify_password(body.password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    with db.LOCK:
         user_id = row["id"]
         state = _load_state(user_id)
     token = auth.create_session(user_id)
-    _set_cookie(response, token)
+    _set_cookie(response, token, request)
     return {"username": row["username"], "state": game.public_state(state)}
 
 
@@ -241,8 +344,8 @@ def new_game(body: NewGameBody, user=Depends(current_user)):
     with db.LOCK:
         state = game.new_state()
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
-    return {"state": game.public_state(state), "battle": None}
+        _clear_battle(user["id"])
+    return {"username": user["username"], "state": game.public_state(state), "battle": None}
 
 
 @app.post("/api/game/map2")
@@ -253,8 +356,8 @@ def new_map2(user=Depends(current_user)):
             raise game.GameError("需要先通关地图一")
         state = game.new_state(map_type="map2")
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
-    return {"state": game.public_state(state), "battle": None}
+        _clear_battle(user["id"])
+    return {"username": user["username"], "state": game.public_state(state), "battle": None}
 
 
 @app.post("/api/story/advance")
@@ -264,7 +367,7 @@ def story_advance(body: StoryBody, user=Depends(current_user)):
         game.advance_story(state, skip_whole_slot=body.skip)
         _save_state(user["id"], state)
         if state["phase"] != "node":
-            BATTLES.pop(user["id"], None)
+            _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -274,7 +377,7 @@ def story_choose(body: StoryChooseBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.choose_story_option(state, body.optionId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -284,7 +387,7 @@ def map_select(body: MapSelectBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.select_node(state, body.nodeId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -292,8 +395,9 @@ def _current_battle(user_id, state):
     node = game.current_node(state)
     if state["phase"] != "node" or node is None or node["type"] != "battle":
         raise B.GameError("当前不在战斗节点")
-    battle_state = BATTLES.get(user_id)
-    if battle_state is None:
+    battle_state = _load_battle(user_id)
+    if battle_state is None or battle_state.get("nodeId") != node["id"]:
+        _clear_battle(user_id)
         raise B.GameError("战斗尚未开始，请重新进入")
     return battle_state
 
@@ -325,7 +429,8 @@ def _make_battle(user_id, state):
         extra_plan=extra_plan,
         opening_draw=B.OPENING_DRAW + state.get("pendingDrawBonus", 0),
     )
-    BATTLES[user_id] = battle_state
+    battle_state["nodeId"] = node["id"]
+    _store_battle(user_id, battle_state)
     return battle_state
 
 
@@ -337,7 +442,16 @@ def _battle_response(state, battle_state):
 def battle_start(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"])
-        battle_state = BATTLES.get(user["id"]) or _make_battle(user["id"], state)
+        node = game.current_node(state)
+        battle_state = _load_battle(user["id"])
+        if (
+            battle_state is None
+            or state["phase"] != "node"
+            or node is None
+            or node["type"] != "battle"
+            or battle_state.get("nodeId") != node["id"]
+        ):
+            battle_state = _make_battle(user["id"], state)
         return _battle_response(state, battle_state)
 
 
@@ -355,6 +469,7 @@ def battle_deploy(body: DeployBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         battle_state = _current_battle(user["id"], state)
         B.deploy(battle_state, body.uid, body.column)
+        _store_battle(user["id"], battle_state)
         return _battle_response(state, battle_state)
 
 
@@ -364,6 +479,7 @@ def battle_command(body: CommandBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         battle_state = _current_battle(user["id"], state)
         B.play_command(battle_state, body.uid, body.targetUid)
+        _store_battle(user["id"], battle_state)
         return _battle_response(state, battle_state)
 
 
@@ -373,6 +489,7 @@ def battle_recycle(body: RecycleBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         battle_state = _current_battle(user["id"], state)
         B.recycle(battle_state, body.column)
+        _store_battle(user["id"], battle_state)
         return _battle_response(state, battle_state)
 
 
@@ -382,6 +499,7 @@ def battle_discard(body: DiscardBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         battle_state = _current_battle(user["id"], state)
         B.discard(battle_state, body.uids)
+        _store_battle(user["id"], battle_state)
         return _battle_response(state, battle_state)
 
 
@@ -391,6 +509,7 @@ def battle_end(user=Depends(current_user)):
         state = _load_state(user["id"])
         battle_state = _current_battle(user["id"], state)
         B.end_turn(battle_state, rng=random.Random())
+        _store_battle(user["id"], battle_state)
         return _battle_response(state, battle_state)
 
 
@@ -416,7 +535,7 @@ def battle_confirm(user=Depends(current_user)):
             raise B.GameError("战斗失败，无法结算")
         game.confirm_battle_result(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -426,7 +545,7 @@ def elite_reward_choose(body: EliteRewardBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.elite_reward_choose(state, body.cardId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -436,7 +555,7 @@ def elite_reward_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.elite_reward_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -455,7 +574,7 @@ def recruit_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.recruit_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -465,7 +584,7 @@ def signal_apply(body: SignalBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.signal_apply(state, body.action, body.cardId, body.cardUid)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -475,7 +594,7 @@ def signal_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.signal_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -485,7 +604,7 @@ def adventure_apply(body: AdventureBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.adventure_apply(state, body.cardId, body.effect, body.cardUid)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -495,7 +614,7 @@ def adventure_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.adventure_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -505,7 +624,7 @@ def calibration_apply(body: CalibrationBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.calibration_apply(state, body.cardId, body.effect, body.cardUid)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -515,7 +634,7 @@ def calibration_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.calibration_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -525,7 +644,7 @@ def recycle_apply(body: RecycleCardBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.recycle_apply(state, body.cardId, body.cardUid)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -535,7 +654,7 @@ def recycle_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.recycle_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -545,7 +664,7 @@ def drift_choose(body: DriftChooseBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.drift_choose(state, body.cardId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -564,7 +683,7 @@ def drift_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.drift_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -574,7 +693,7 @@ def shop_buy(body: ShopBuyBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.shop_buy(state, body.offerId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -584,7 +703,7 @@ def shop_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.shop_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -603,7 +722,7 @@ def trial_choose_card(body: DriftChooseBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.trial_choose_card(state, body.cardId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -613,7 +732,7 @@ def trial_claim(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.trial_claim(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -623,7 +742,7 @@ def trial_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.trial_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -633,7 +752,7 @@ def drones_apply(body: AdventureBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.drones_apply(state, body.cardId, body.effect, body.cardUid)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -643,7 +762,7 @@ def drones_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.drones_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -653,7 +772,7 @@ def training_choose(body: TrainingChooseBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.training_choose(state, body.challengeId)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -663,7 +782,7 @@ def training_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.training_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -675,7 +794,7 @@ def relay_choose(body: RelayBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.relay_keep(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -685,7 +804,7 @@ def relay_cut(body: DriftChooseBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         game.relay_cut(state, body.cardId, body.cardUid)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -695,7 +814,7 @@ def relay_leave(user=Depends(current_user)):
         state = _load_state(user["id"])
         game.relay_leave(state)
         _save_state(user["id"], state)
-        BATTLES.pop(user["id"], None)
+        _clear_battle(user["id"])
     return {"state": game.public_state(state), "battle": None}
 
 

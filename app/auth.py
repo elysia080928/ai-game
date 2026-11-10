@@ -102,4 +102,12 @@ def rate_limit(key, limit, window):
         hits.append(now)
         _rate_hits[key] = hits
         if len(_rate_hits) > 5000:
-            _rate_hits.clear()
+            stale = [
+                stale_key
+                for stale_key, stamps in _rate_hits.items()
+                if not stamps or now - stamps[-1] >= 3600
+            ]
+            for stale_key in stale:
+                _rate_hits.pop(stale_key, None)
+            while len(_rate_hits) > 5000:
+                _rate_hits.pop(next(iter(_rate_hits)))

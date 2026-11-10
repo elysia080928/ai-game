@@ -83,6 +83,21 @@ def test_opening_hand():
         ), seed
         assert all(c["cardId"] != "heavy" for c in b["hand"]), seed
 
+    short_deck = [
+        {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
+        for card_id in G.INITIAL_DECK
+        if card_id != "repair"
+    ]
+    b = B.make_battle(
+        short_deck,
+        G.ENCOUNTERS["battle1"],
+        G.CARDS,
+        G.ENEMIES,
+        rng=random.Random(0),
+        opening_draw=B.OPENING_DRAW + 1,
+    )
+    assert len(b["hand"]) == 6, "起手抽牌应受可抽牌数限制"
+
 
 def test_energy_and_high_cost_lock():
     b = make(3)
@@ -520,13 +535,14 @@ def test_generated_map_structure():
         assert {node["role"] for node in data["nodes"]} >= {"start", "late", "boss", "event", "elite"}
         events = [node for node in data["nodes"] if node["role"] == "event"]
         assert events and len({node["type"] for node in events}) == len(events)
+        encounters = [node.get("encounter") for node in data["nodes"] if node.get("encounter")]
+        assert len(encounters) == len(set(encounters))
         early = next(node for node in data["nodes"] if node["role"] == "start")
         late = next(node for node in data["nodes"] if node["role"] == "late")
         assert early["encounter"] in G.BATTLE_POOLS["early"]
         assert late["encounter"] in G.BATTLE_POOLS["late"]
         assert early["encounter"] != late["encounter"]
         signature = (
-            data["seed"],
             tuple(sorted(node["id"] for node in data["nodes"])),
             tuple(map(tuple, data["edges"])),
         )
@@ -657,8 +673,8 @@ def test_second_map_structure():
         battle_layers = [nodes for nodes in columns.values() if any(node["role"] == "battle" for node in nodes)]
         event_layers = [nodes for nodes in columns.values() if any(node["role"] == "event" for node in nodes)]
         assert len(battle_layers) == 4 and len(event_layers) == 4
-        assert sum(len(nodes) for nodes in battle_layers) >= 5
-        assert sum(len(nodes) for nodes in event_layers) >= 7
+        assert sum(len(nodes) for nodes in battle_layers) == 4
+        assert sum(len(nodes) for nodes in event_layers) >= 8
         assert sum(widths) - 12 >= 4, "第二张地图应增加分支节点"
         reachable = {data["start"]}
         for parent, child in data["edges"]:
@@ -669,6 +685,70 @@ def test_second_map_structure():
         events = [node for node in data["nodes"] if node["role"] == "event"]
         assert len({node["type"] for node in events}) == len(events)
         assert {node["role"] for node in data["nodes"]} >= {"start", "late", "boss", "event", "elite"}
+
+
+def test_map_battle_balance_and_unique_encounters():
+    for map_type in ("map1", "map2"):
+        for seed in range(60):
+            data = G.generate_map(seed, map_type)
+            columns = {}
+            for node in data["nodes"]:
+                columns.setdefault(node["column"], []).append(node)
+            battle_run = 0
+            for column in sorted(columns):
+                roles = {node["role"] for node in columns[column]}
+                if roles & {"start", "late", "boss", "battle", "elite"}:
+                    battle_run += 1
+                else:
+                    battle_run = 0
+                assert battle_run <= 2, (map_type, seed, column)
+            encounters = [node.get("encounter") for node in data["nodes"] if node.get("encounter")]
+            assert len(encounters) == len(set(encounters)), (map_type, seed, encounters)
+            for layer in columns.values():
+                layer_encounters = [node["encounter"] for node in layer if node.get("encounter")]
+                assert len(layer_encounters) == len(set(layer_encounters)), (map_type, seed)
+                names = [node["name"] for node in layer]
+                assert len(names) == len(set(names)), (map_type, seed, names)
+
+    # 校验器本身也要拒绝坏图；否则生成器正常时，删掉校验也测不出来。
+    valid = G.generate_map(0, "map2")
+    duplicate = copy.deepcopy(valid)
+    start_encounter = next(node["encounter"] for node in duplicate["nodes"] if node["role"] == "start")
+    duplicate_battle = next(node for node in duplicate["nodes"] if node["role"] == "battle")
+    duplicate_battle["encounter"] = start_encounter
+    try:
+        G._validate_generated_map(duplicate)
+    except RuntimeError as exc:
+        assert "遭遇重复" in str(exc)
+    else:
+        raise AssertionError("重复遭遇应被拒绝")
+
+    unbalanced = copy.deepcopy(valid)
+    columns = {}
+    for node in unbalanced["nodes"]:
+        columns.setdefault(node["column"], []).append(node)
+    battle_roles = {"start", "late", "boss", "battle", "elite"}
+    is_battle = {
+        column: bool({node["role"] for node in nodes} & battle_roles)
+        for column, nodes in columns.items()
+    }
+    target = next(
+        column
+        for column, nodes in columns.items()
+        if all(node["role"] == "event" for node in nodes)
+        and is_battle.get(column - 1)
+        and is_battle.get(column - 2)
+    )
+    for node in columns[target]:
+        node["role"] = "battle"
+        node["type"] = "battle"
+        node["encounter"] = G.BATTLE_POOLS["early"][0]
+    try:
+        G._validate_generated_map(unbalanced)
+    except RuntimeError as exc:
+        assert "连续战斗" in str(exc)
+    else:
+        raise AssertionError("连续三场战斗应被拒绝")
 
 
 def test_second_map_route_persistence_and_completion_transition():
@@ -804,6 +884,14 @@ def test_legacy_map_run_length_migration():
     reloaded, _ = G.migrate_state(json.loads(json.dumps(state)))
     assert reloaded["mapData"]["runLength"] == 6
     assert G.current_map_type(reloaded) == "map1"
+
+
+def test_legacy_elite_reward():
+    state = G.new_state()
+    state.pop("mapData", None)
+    state.update(nodeId="elite", phase="node", completed=[], route={}, nodeData={})
+    G.confirm_battle_result(state)
+    assert state["phase"] == "elite_reward", "旧版精英节点也应进入三选一奖励"
 
 
 def test_second_map_elite_candidates_cover_all_cards():
@@ -1173,6 +1261,19 @@ def test_challenge_battle_modifiers():
     assert normal["energy"] == B.FIRST_TURN_ENERGY
     assert len(normal["hand"]) == B.OPENING_DRAW
 
+    crowded = B.make_battle(
+        initial_cards(), G.ENCOUNTERS["early_patrol"], G.CARDS, G.ENEMIES,
+        rng=random.Random(0), extra_plan=extra,
+    )
+    extra_item = next(
+        item for item in crowded["plan"]
+        if item["turn"] == 1 and item["enemy"] == "assault_sentry"
+    )
+    assert extra_item["column"] == 2, "挑战增援应避开遭遇已占用的首回合列"
+    B.end_turn(crowded, rng=random.Random(1))
+    deployed = crowded["board"]["enemy"][1]
+    assert deployed is not None and deployed["name"] == G.ENEMIES["assault_sentry"]["name"]
+
 
 def test_wide_unit_placement():
     b, card = battle_with_card("twin_rail")
@@ -1425,6 +1526,14 @@ def test_shift_movement():
     B._enemy_phase(b)
     assert hunter["column"] == 4
     assert not any("向右移动" in line for line in b["log"])
+
+    b = make(3)
+    b["plan"] = []
+    wide = put_enemy(b, "宽体漂移", 1, 2, 5, shift=1, width=2)
+    B._enemy_phase(b)
+    assert wide["column"] == 2, "宽体单位不应被自己占据的列挡住"
+    assert b["board"]["enemy"][0] is None
+    assert b["board"]["enemy"][1] is wide and b["board"]["enemy"][2] is wide
 
 
 def test_null_anchor_blocks_guard():
