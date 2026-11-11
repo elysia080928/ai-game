@@ -39,31 +39,8 @@ const NODE_TYPES = {
   relay: "中继",
 };
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
-const TUTORIAL_KEY = "ai-game.tutorial.map1.v1";
-const TUTORIAL_STEPS = [
-  {
-    title: "先看清目标",
-    text: "双方领袖各有 15 点生命。把敌方领袖降到 0 就获胜；己方领袖归零则战斗失败。失败可以重试本场，进入战斗前的牌组和金币都会保留。",
-  },
-  {
-    title: "把单位拖上战场",
-    text: "从手牌拖动单位牌到己方空列。卡牌上的费用必须不超过当前能量；能量每回合 +2，未用完会保留。宽体单位占两列，需要连续两列都为空。",
-  },
-  {
-    title: "结束回合后才会攻击",
-    text: "点击「结束回合」后，己方单位从左到右攻击正前方。对位没有单位时会直接攻击敌方领袖。之后敌人会按预告部署并反击。",
-  },
-  {
-    title: "先读敌方预告",
-    text: "战斗上方的预告会标出敌人将在哪一列、第几回合出现，以及攻击、生命和特殊机制。分叉、双击、飞行、护盾、拦截等效果会改变站位选择。",
-  },
-  {
-    title: "第一关怎么走",
-    text: "战斗胜利后回到地图，选择下一个可进入的节点；没选的支线会关闭。奇遇能强化牌组，精英战提供三选一卡牌奖励，最后迎战镜像核心。",
-  },
-];
-let tutorialStep = 0;
 let autoMap2 = false;
+let autoMap3 = false;
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -173,6 +150,10 @@ function apply(data) {
       signalTarget = null;
     }
     state = data.state;
+    if (state.phase !== "complete") {
+      autoMap2 = false;
+      autoMap3 = false;
+    }
   }
   if (Object.prototype.hasOwnProperty.call(data, "battle")) {
     battle = data.battle;
@@ -421,19 +402,25 @@ function mapNodeButton(node) {
 
 function renderComplete() {
   $("complete-view").hidden = false;
-  // 旧存档停在地图一完成页时自动进入地图二；新流程在服务端直接衔接。
   if (state.mapType === "map1" && state.canStartMap2 && !autoMap2) {
     autoMap2 = true;
     act("/api/game/map2", {});
     return;
   }
+  if (state.mapType === "map2" && state.canStartMap3 && !autoMap3) {
+    autoMap3 = true;
+    act("/api/game/map3", {});
+    return;
+  }
   const meta = state.mapMeta || {};
-  const isMap2 = state.mapType === "map2";
-  $("complete-title").textContent = isMap2 ? "深层回路完成" : "回路边境完成";
-  $("complete-text").textContent = isMap2
-    ? `你走通了${meta.title || "深层回路"}。重新开始会回到第一张地图。`
+  const finalMap = state.mapType === "map3";
+  $("complete-title").textContent = finalMap ? "静海档案完成" : `${meta.title || "回路边境"}完成`;
+  $("complete-text").textContent = finalMap
+    ? "你走完了海渊档案的最后一段路。"
     : `你已经走通了${meta.title || "回路边境"}的完整路线。`;
-  $("map2-btn").hidden = !state.canStartMap2;
+  const canContinue = state.canStartMap2 || state.canStartMap3;
+  $("map2-btn").hidden = !canContinue;
+  $("map2-btn").textContent = state.canStartMap3 ? "进入第三张地图" : "进入第二张地图";
 }
 
 function renderMap() {
@@ -471,7 +458,7 @@ function renderMap() {
   }).join("");
   const mapType = map.mapType || state.mapType || "map1";
   const meta = state.mapMeta || {};
-  const mapLabel = mapType === "map2" ? "第二章 · 深层回路" : "第一章 · 回路边境";
+  const mapLabel = mapType === "map3" ? "第三章 · 静海档案" : mapType === "map2" ? "第二章 · 深层回路" : "第一章 · 回路边境";
   $("map-eyebrow").textContent = meta.title ? `${meta.chapter} · ${meta.title}` : mapLabel;
   $("map-page-left").innerHTML = `
     <div class="map-board map-type-${esc(mapType)}" role="group" aria-label="${esc(meta.title || "回路边境")}冒险地图，选择亮起的事件图标前进">
@@ -535,6 +522,7 @@ async function act(path, body) {
   try {
     const data = await api(path, body);
     selectedUid = null;
+    if (path === "/api/battle/recycle") recycleMode = false;
     apply(data);
   } catch (error) {
     showToast(error.message);
@@ -676,34 +664,37 @@ function renderForecast() {
   }).join("");
 }
 
-function tutorialDone() {
-  try { return localStorage.getItem(TUTORIAL_KEY) === "1"; } catch (_) { return true; }
-}
-
-function closeTutorial() {
-  try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch (_) { /* 本地存储不可用时仅本次跳过 */ }
-  $("tutorial-panel").hidden = true;
-  if (battle && battle.phase === "player") $("end-turn").focus();
-}
-
-function showTutorialStep() {
-  const step = TUTORIAL_STEPS[tutorialStep];
+function renderTutorial() {
+  const step = battle.tutorial;
+  $("battle-view").classList.toggle("tutorial-active", Boolean(step));
+  document.querySelectorAll(".tutorial-target").forEach((element) => element.classList.remove("tutorial-target"));
+  $("tutorial-panel").hidden = !step;
+  if (!step) return;
   $("tutorial-title").textContent = step.title;
   $("tutorial-text").textContent = step.text;
-  $("tutorial-dots").innerHTML = TUTORIAL_STEPS
-    .map((_, index) => `<i class="${index === tutorialStep ? "active" : ""}"></i>`)
-    .join("");
-  $("tutorial-next").textContent = tutorialStep === TUTORIAL_STEPS.length - 1 ? "开始战斗" : "下一步";
-  $("tutorial-next").focus();
-}
-
-function maybeShowTutorial() {
-  if (tutorialDone() || !state || !battle || !$("tutorial-panel").hidden) return;
-  if (state.mapType !== "map1" || state.progress !== 0) return;
-  if (!state.node || state.node.type !== "battle" || battle.phase !== "player") return;
-  tutorialStep = 0;
-  $("tutorial-panel").hidden = false;
-  showTutorialStep();
+  $("tutorial-progress").textContent = `${step.index + 1} / ${step.total}`;
+  $("tutorial-next").hidden = step.action !== "continue";
+  $("tutorial-next").textContent = step.index === step.total - 1 ? "交给我吧" : "看清了，开始部署";
+  $("end-turn").disabled = step.action !== "end";
+  $("recycle-btn").disabled = step.action !== "recycle";
+  if (step.action !== "recycle") recycleMode = false;
+  $("recycle-btn").classList.toggle("active", recycleMode);
+  for (const card of battle.hand) {
+    const element = $("hand").querySelector(`[data-uid="${card.uid}"]`);
+    const enabled = card.cardId === step.cardId;
+    element.draggable = enabled;
+    element.setAttribute("aria-disabled", String(!enabled));
+    element.classList.toggle("tutorial-muted", !enabled);
+    element.classList.toggle("tutorial-target", enabled);
+  }
+  if (step.column) {
+    const parent = step.side === "forecast" ? $("forecast-row") : $(`${step.side}-row`);
+    for (let column = step.column; column < step.column + (step.width || 1); column += 1) {
+      parent.querySelector(`[data-column="${column}"]`)?.classList.add("tutorial-target");
+    }
+  }
+  if (step.action === "end") $("end-turn").classList.add("tutorial-target");
+  if (step.action === "recycle") $("recycle-btn").classList.add("tutorial-target");
 }
 
 function renderBattle() {
@@ -757,12 +748,12 @@ function renderBattle() {
     }
     if (!target && focusInfo.id) target = $(focusInfo.id);
     if (!target && !$("end-turn").disabled) target = $("end-turn");
-    if (target && !target.closest("[hidden]")) target.focus();
+    if (target && !target.closest("[hidden]")) target.focus({ preventScroll: true });
   }
 
   renderDiscard();
   renderResult();
-  maybeShowTutorial();
+  renderTutorial();
 }
 
 function renderDiscard() {
@@ -840,6 +831,13 @@ function unitDropStart(card, column) {
 }
 
 function markDropTargets(card) {
+  if (battle.tutorial) {
+    const step = battle.tutorial;
+    if (step.cardId === card.cardId) {
+      for (let column = step.column; column < step.column + (step.width || 1); column += 1) markDropSlot(step.side, column);
+    }
+    return;
+  }
   if (card.cost > battle.energy) {
     showToast("能量不足");
     return;
@@ -1042,6 +1040,10 @@ function onSlotKeydown(event) {
 }
 
 function selectCard(uid) {
+  if (battle.tutorial && battle.hand.find((card) => card.uid === uid)?.cardId !== battle.tutorial.cardId) {
+    showToast("先完成高亮操作，也可以跳过引导");
+    return;
+  }
   selectedUid = selectedUid === uid ? null : uid;
   if (selectedUid != null) recycleMode = false;
   renderBattle();
@@ -1507,7 +1509,7 @@ function bindEvents() {
 
   $("hand").addEventListener("dragstart", (event) => {
     const element = event.target.closest(".card");
-    if (!element || !battle || battle.phase !== "player" || busy) {
+    if (!element || element.getAttribute("aria-disabled") === "true" || !battle || battle.phase !== "player" || busy) {
       event.preventDefault();
       return;
     }
@@ -1565,15 +1567,8 @@ function bindEvents() {
     else if (action === "retry") act("/api/battle/retry", {});
   });
 
-  $("tutorial-next").addEventListener("click", () => {
-    if (tutorialStep < TUTORIAL_STEPS.length - 1) {
-      tutorialStep += 1;
-      showTutorialStep();
-    } else {
-      closeTutorial();
-    }
-  });
-  $("tutorial-skip").addEventListener("click", closeTutorial);
+  $("tutorial-next").addEventListener("click", () => act("/api/battle/tutorial", {}));
+  $("tutorial-skip").addEventListener("click", () => act("/api/battle/tutorial", { skip: true }));
 
   $("elite-offers").addEventListener("click", (event) => {
     const button = event.target.closest(".buy-btn");
@@ -1777,8 +1772,9 @@ function bindEvents() {
     act("/api/game/new", { confirm: true });
   });
   $("map2-btn").addEventListener("click", () => {
-    if (!confirm("进入第二张地图会组建新的初始牌组，确定吗？")) return;
-    act("/api/game/map2", {});
+    const third = state.canStartMap3;
+    if (!confirm(`进入${third ? "第三" : "第二"}张地图会组建新的初始牌组，确定吗？`)) return;
+    act(third ? "/api/game/map3" : "/api/game/map2", {});
   });
 }
 

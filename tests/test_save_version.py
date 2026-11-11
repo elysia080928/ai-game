@@ -142,6 +142,28 @@ def main():
         assert resumed["hand"] == started["hand"]
         assert resumed["board"] == started["board"]
         assert resumed["hp"] == started["hp"]
+        assert resumed["tutorial"]["index"] == 0
+        rejected = battle_client.post("/api/battle/end")
+        assert rejected.status_code == 400, rejected.text
+        assert battle_client.post("/api/battle/start").json()["battle"] == resumed
+        response = battle_client.post("/api/battle/tutorial", json={})
+        assert response.status_code == 200, response.text
+        resumed = response.json()["battle"]
+        unit = next(c for c in resumed["hand"] if c["cardId"] == "shell")
+        response = battle_client.post("/api/battle/deploy", json={"uid": unit["uid"], "column": 2})
+        assert response.status_code == 200, response.text
+        saved = response.json()["battle"]
+        assert saved["tutorial"]["index"] == 2
+        assert battle_client.post("/api/battle/start").json()["battle"] == saved
+        response = battle_client.post("/api/battle/deploy", json={"uid": unit["uid"], "column": 2})
+        assert response.status_code == 400
+        assert battle_client.post("/api/battle/start").json()["battle"] == saved
+        assert battle_client.post("/api/battle/retry").json()["battle"] == started
+        response = battle_client.post("/api/battle/tutorial", json={"skip": True})
+        assert response.status_code == 200, response.text
+        resumed = response.json()["battle"]
+        assert resumed["tutorial"] is None
+        assert battle_client.post("/api/battle/start").json()["battle"]["tutorial"] is None
         unit = next(
             (
                 card

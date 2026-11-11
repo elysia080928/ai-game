@@ -352,7 +352,7 @@ def test_story_options_flags_and_skip():
 
     signal_state = map_after_battle1("battle1_signal")
     G.select_node(signal_state, "signal")
-    assert "追着这个信号" in G.public_state(signal_state)["story"]["text"]
+    assert "维修日志" in G.public_state(signal_state)["story"]["text"]
 
 
 def test_map_branch_exclusivity_and_illegal_jumps():
@@ -452,7 +452,7 @@ def test_migration_old_saves():
     old = dict(base, nodeIndex=1, phase="before_story", storyLine=0)
     migrated, _ = G.migrate_state(copy.deepcopy(old))
     story = G.public_state(migrated)["story"]
-    assert story["text"] == "挑一件合适的装备吧。", "无标记旧档应显示默认对话"
+    assert story["text"] == "慢慢挑。每一份记录都曾经陪某个人走过一段路。", "无标记旧档应显示默认对话"
 
     future = dict(base, schemaVersion=999, nodeId="battle1")
     try:
@@ -539,7 +539,7 @@ def test_generated_map_structure():
         assert len(encounters) == len(set(encounters))
         early = next(node for node in data["nodes"] if node["role"] == "start")
         late = next(node for node in data["nodes"] if node["role"] == "late")
-        assert early["encounter"] in G.BATTLE_POOLS["early"]
+        assert early["encounter"] == "tutorial"
         assert late["encounter"] in G.BATTLE_POOLS["late"]
         assert early["encounter"] != late["encounter"]
         signature = (
@@ -687,8 +687,29 @@ def test_second_map_structure():
         assert {node["role"] for node in data["nodes"]} >= {"start", "late", "boss", "event", "elite"}
 
 
+def test_third_map_structure():
+    assert G.THIRD_MAP_RUN_LENGTHS == (12,)
+    assert G.MAPS["map3"]["templates"]["boss3"]["name"] == "海渊中枢"
+    for seed in range(30):
+        data = G.generate_map(seed, "map3")
+        nodes = {node["id"]: node for node in data["nodes"]}
+        assert data["mapType"] == "map3" and data["runLength"] == 12
+        assert nodes[data["boss"]]["encounter"] == "boss2"
+        assert nodes[data["boss"]]["name"] == "海渊中枢"
+        assert len(data["nodes"]) == len(G.generate_map(seed, "map2")["nodes"])
+        second = G.generate_map(seed, "map2")
+        second_nodes = {node["id"]: node for node in second["nodes"]}
+        assert {
+            (nodes[parent]["column"], nodes[parent]["row"], nodes[child]["column"], nodes[child]["row"])
+            for parent, child in data["edges"]
+        } == {
+            (second_nodes[parent]["column"], second_nodes[parent]["row"], second_nodes[child]["column"], second_nodes[child]["row"])
+            for parent, child in second["edges"]
+        }
+
+
 def test_map_battle_balance_and_unique_encounters():
-    for map_type in ("map1", "map2"):
+    for map_type in ("map1", "map2", "map3"):
         for seed in range(60):
             data = G.generate_map(seed, map_type)
             columns = {}
@@ -762,7 +783,7 @@ def test_second_map_route_persistence_and_completion_transition():
         assert G.public_state(state)["mapType"] == "map2"
         assert G.public_state(state)["canStartMap2"] is False
         for _ in range(60):
-            if state["phase"] == "complete":
+            if state["mapData"]["mapType"] == "map3":
                 break
             if state["phase"] == "map":
                 nodes = G.available_nodes(state)
@@ -778,10 +799,30 @@ def test_second_map_route_persistence_and_completion_transition():
                 G.elite_reward_leave(state)
             elif state["phase"] in ("before_story", "after_story"):
                 clear_story(state)
+        assert state["mapData"]["mapType"] == "map3"
+        assert state["phase"] == "node"
+        G.confirm_battle_result(state)
+        clear_story(state)
+        for _ in range(60):
+            if state["phase"] == "complete":
+                break
+            if state["phase"] == "map":
+                G.select_node(state, G.available_nodes(state)[0])
+            elif state["phase"] == "node":
+                node = G.current_node(state)
+                if node["type"] == "battle":
+                    G.confirm_battle_result(state)
+                else:
+                    G.finish_node(state, node["id"])
+            elif state["phase"] == "elite_reward":
+                G.elite_reward_leave(state)
+            elif state["phase"] in ("before_story", "after_story"):
+                clear_story(state)
         assert state["phase"] == "complete"
         assert len(state["completed"]) == 12
-        assert G.current_map_type(state) == "map2"
+        assert G.current_map_type(state) == "map3"
         assert G.can_start_map2(state) is False
+        assert G.can_start_map3(state) is False
         reloaded, changed = G.migrate_state(json.loads(json.dumps(state)))
         assert not changed
         assert reloaded["mapData"] == state["mapData"]
@@ -790,10 +831,13 @@ def test_second_map_route_persistence_and_completion_transition():
     cleared["phase"] = "complete"
     assert G.can_start_map2(cleared) is True
     assert G.can_start_map2(G.new_state(3, "map2")) is False
+    cleared2 = G.new_state(3, "map2")
+    cleared2["phase"] = "complete"
+    assert G.can_start_map3(cleared2) is True
 
     state = G.new_state(4, "map2")
     tampered = json.loads(json.dumps(state))
-    tampered["mapData"]["mapType"] = "map3"
+    tampered["mapData"]["mapType"] = "map4"
     try:
         G.migrate_state(tampered)
     except ValueError:
@@ -818,6 +862,14 @@ def test_map1_completion_auto_starts_map2():
     state["nodeId"] = boss2["id"]
     state["phase"] = "after_story"
     G._after_story_done(state)
+    assert state["mapData"]["mapType"] == "map3"
+    assert state["phase"] != "complete"
+
+    boss3 = next(node for node in state["mapData"]["nodes"] if node["role"] == "boss")
+    state["nodeId"] = boss3["id"]
+    state["phase"] = "after_story"
+    G._after_story_done(state)
+    assert state["mapData"]["mapType"] == "map3"
     assert state["phase"] == "complete"
 
 
@@ -1683,7 +1735,7 @@ def test_relay():
 
     flagged = state_at("battle2", "after_story", completed=["battle1", "relay"], flags={"relay_kept": True})
     G.advance_story(flagged)
-    assert "中继站" in G.public_state(flagged)["story"]["text"]
+    assert "备份" in G.public_state(flagged)["story"]["text"]
 
     plain = state_at("battle2", "after_story", completed=["battle1", "relay"])
     G.advance_story(plain)
@@ -1948,6 +2000,76 @@ def test_trial():
         raise AssertionError("没有奖励候选时不能选卡")
     G.trial_leave(state)
     assert state["phase"] == "after_story"
+
+
+def test_guided_first_battle():
+    b = make(encounter_id="tutorial")
+    assert b == make(seed=999, encounter_id="tutorial")
+    assert [c["cardId"] for c in b["hand"]] == G.ENCOUNTERS["tutorial"]["openingHand"]
+    original = copy.deepcopy(b)
+    try:
+        B.end_turn(b)
+        assert False, "未部署前不可结束回合"
+    except B.GameError:
+        assert b == original
+    B.tutorial_continue(b)
+    shell = next(c for c in b["hand"] if c["cardId"] == "shell")
+    try:
+        B.deploy(b, shell["uid"], 1)
+        assert False, "应部署在指定列"
+    except B.GameError:
+        assert b["energy"] == 4 and b["tutorialStep"] == 1
+    B.deploy(b, shell["uid"], 2)
+    assert b["energy"] == 2
+    B.end_turn(b)
+    assert b["turn"] == 2 and b["energy"] == 4
+    assert b["board"]["player"][1]["hp"] == 3
+    # 模拟数据库往返：教学进度不能靠浏览器本地标记。
+    b = json.loads(json.dumps(b))
+    assert B.view(b)["tutorial"]["action"] == "command"
+    spark = next(c for c in b["hand"] if c["cardId"] == "spark")
+    B.play_command(b, spark["uid"], b["board"]["enemy"][1]["uid"])
+    assert b["board"]["enemy"][1] is None
+    worker = next(c for c in b["hand"] if c["cardId"] == "worker")
+    B.deploy(b, worker["uid"], 3)
+    B.end_turn(b)
+    assert b["turn"] == 3 and b["energy"] == 2
+    B.recycle(b, 2)
+    assert b["energy"] == 3 and b["board"]["player"][1] is None
+    assert not any(c["uid"] == shell["uid"] for c in b["hand"] + b["deck"])
+    twin = next(c for c in b["hand"] if c["cardId"] == "twin_rail")
+    B.deploy(b, twin["uid"], 1)
+    assert b["energy"] == 0 and b["board"]["player"][1]["cardId"] == "twin_rail"
+    enemy_hp = b["hp"]["enemy"]
+    B.end_turn(b)
+    assert b["hp"]["enemy"] == enemy_hp - 4 and b["turn"] == 4
+    assert B.view(b)["tutorial"]["action"] == "continue"
+    B.tutorial_continue(b)
+    assert B.view(b)["tutorial"] is None
+    for _ in range(10):
+        if b["phase"] == "over":
+            break
+        B.end_turn(b)
+    assert b["result"] == "win", "不依赖豆丁 99 攻也能完成教学首战"
+
+
+def test_tutorial_skip_and_old_save_compatibility():
+    for index in range(len(B.TUTORIAL_STEPS)):
+        b = make(encounter_id="tutorial")
+        b["tutorialStep"] = index
+        B.tutorial_continue(b, skip=True)
+        assert B.view(b)["tutorial"] is None
+        B.end_turn(b)
+    assert B.view(make())["tutorial"] is None
+    old = G.new_state(7)
+    start = next(n for n in old["mapData"]["nodes"] if n["role"] == "start")
+    start["encounter"] = "early_patrol"
+    restored, _ = G.migrate_state(json.loads(json.dumps(old)))
+    assert G.current_node(restored)["encounter"] == "early_patrol"
+    for map_type in ("map2", "map3"):
+        data = G.generate_map(7, map_type)
+        start = next(n for n in data["nodes"] if n["role"] == "start")
+        assert start["encounter"] in G.BATTLE_POOLS["early"]
 
 
 if __name__ == "__main__":

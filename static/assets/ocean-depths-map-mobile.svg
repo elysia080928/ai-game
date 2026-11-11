@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1200" viewBox="0 0 640 1200" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="depth" x2="0" y2="1"><stop stop-color="#9edbd1"/><stop offset=".45" stop-color="#70b9bb"/><stop offset="1" stop-color="#397e91"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#d8f4d3" stop-opacity=".75"/><stop offset="1" stop-color="#8bd2ce" stop-opacity="0"/></radialGradient>
+    <linearGradient id="cave" x2="0" y2="1"><stop stop-color="#397883"/><stop offset="1" stop-color="#285466"/></linearGradient>
+    <linearGradient id="shell" x2="1" y2="1"><stop stop-color="#fff1d6"/><stop offset=".55" stop-color="#e7c6ae"/><stop offset="1" stop-color="#cf91a9"/></linearGradient>
+    <pattern id="grain" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="5" cy="8" r="1" fill="#e7fff1" opacity=".26"/><circle cx="20" cy="22" r="1.4" fill="#d8efff" opacity=".18"/></pattern>
+    <g id="bubble" fill="none" stroke="#e3fff4"><circle r="9" stroke-width="1.4" opacity=".62"/><path d="M-4-4q3-4 7-2" stroke-width="1.2" stroke-linecap="round" opacity=".8"/><circle cx="-4" cy="3" r="1" fill="#e3fff4" stroke="none" opacity=".55"/></g>
+    <g id="coral" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0 0c3-20-5-33 0-49m0 29c-15-8-18-20-18-29m17 38c15-8 19-20 20-32m-19 12c7-12 6-24 5-34m-5 63c-8-9-10-16-10-26" stroke="#527c75" stroke-width="8"/><path d="M0 0c3-20-5-33 0-49m0 29c-15-8-18-20-18-29m17 38c15-8 19-20 20-32m-19 12c7-12 6-24 5-34m-5 63c-8-9-10-16-10-26" stroke="#96c7a4" stroke-width="3.5"/><circle cy="-49" r="3" fill="#d6edac"/><circle cx="-18" cy="-49" r="3" fill="#f1b7ba"/><circle cx="20" cy="-52" r="3" fill="#f1b7ba"/></g>
+    <g id="fan" stroke="#665f89" stroke-width="2" fill="none" stroke-linejoin="round"><path d="M0 0c-4-22-30-35-29-54 14 8 25 17 30 34-4-27 5-48 17-58 6 21 2 42-10 60 14-18 31-22 43-20C42-18 23-3 0 0Z" fill="#a78fc0" fill-opacity=".5"/><path d="M0 0-29-54M0 0 18-78M0 0 61-38M0 0-12-60" opacity=".65"/></g>
+    <g id="shellShape" stroke="#9f6f79" stroke-width="2" stroke-linejoin="round"><path d="M-31 15C-28-13-15-31 0-34 17-31 29-13 31 15 15 30-15 30-31 15Z" fill="url(#shell)"/><path d="M0-32V22M-22-23-7 23M22-23 7 23M-29-8-14 25M29-8 14 25" fill="none" opacity=".7"/><path d="M-31 15Q0 6 31 15" fill="none"/></g>
+  </defs>
+  <rect width="640" height="1200" fill="url(#depth)"/><ellipse cx="320" cy="560" rx="300" ry="470" fill="url(#glow)"/>
+  <path d="M0 0h640v76l-33 17-12 34-31-10-19-37-26 12-12 42-34 12-21-22-18-40-28 9-14 41-31 17-25-9-17-37-24-14-19 15-9 34-30 11-22-14-12-28-25-10-19 15-9 29-31 9-26-17-11-29-25-6-18 16-7 29-34 8-36-17V0Z" fill="#d4efd1" opacity=".12"/>
+  <g fill="#dcf5d6" opacity=".09"><path d="M0 293 25 276l15 23 15 35 18 17 13-9 12-34 18-16 16 20 15 36-7 42H0Zm640 0-25-17-15 23-15 35-18 17-13-9-12-34-18-16-16 20-15 36 7 42h120Z"/></g>
+  <g fill="none" stroke="#d8fff0" stroke-width="2" opacity=".1"><path d="M0 460v40m0 18v34m640-47v45m0-82v24"/><path d="M76 0v87m486 0v70" stroke-width="3"/></g>
+  <path d="M0 1018c79-19 122 17 192 5 66-12 87-43 153-25s91 53 157 37c60-15 94-37 138-28v193H0Z" fill="url(#cave)" opacity=".48"/>
+  <path d="M0 1098c87-22 143 7 213 4 71-3 105-29 170-18 79 13 107 36 169 26 34-5 61-17 88-14v104H0Z" fill="#315d6d" opacity=".34"/>
+  <g fill="none" stroke="#e3fff2" opacity=".22"><path d="M20 20h600v1160H20zM28 28h584v1144H28z"/><path d="M0 400h640M0 800h640M320 0v1200" stroke-width="2"/></g>
+  <g opacity=".86"><use href="#coral" x="57" y="1116" transform="scale(1.6)"/><use href="#coral" x="580" y="1101" transform="scale(1.55)"/><use href="#fan" x="147" y="1140" transform="scale(1.1)"/><use href="#fan" x="490" y="1154" transform="scale(1.1)"/><use href="#shellShape" x="91" y="1084" transform="scale(.8)"/><use href="#shellShape" x="555" y="1061" transform="scale(.75)"/></g>
+  <g opacity=".72"><use href="#coral" x="45" y="230" transform="scale(.9)"/><use href="#fan" x="545" y="226" transform="scale(.8)"/><use href="#shellShape" x="574" y="285" transform="scale(.55)"/></g>
+  <g opacity=".78"><use href="#bubble" x="120" y="150" transform="scale(1.2)"/><use href="#bubble" x="170" y="210" transform="scale(.7)"/><use href="#bubble" x="514" y="150" transform="scale(1.15)"/><use href="#bubble" x="476" y="206" transform="scale(.65)"/><use href="#bubble" x="80" y="570" transform="scale(.62)"/><use href="#bubble" x="560" y="660" transform="scale(.7)"/><use href="#bubble" x="135" y="900" transform="scale(.52)"/><use href="#bubble" x="500" y="870" transform="scale(.6)"/></g>
+  <g fill="#d8fff0" opacity=".5"><circle cx="236" cy="268" r="2"/><circle cx="420" cy="345" r="1.5"/><circle cx="190" cy="718" r="2"/><circle cx="444" cy="785" r="1.5"/><circle cx="318" cy="462" r="1.8"/><circle cx="360" cy="934" r="2"/></g>
+  <rect width="640" height="1200" fill="url(#grain)" opacity=".45"/>
+</svg>

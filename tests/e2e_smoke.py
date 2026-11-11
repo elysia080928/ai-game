@@ -213,6 +213,8 @@ def win_battle(client, encounter_id, expected_hand=6):
         assert battle["turn"] == 1 and battle["energy"] == 4, battle
         assert len(battle["hand"]) == expected_hand, (expected_hand, len(battle["hand"]))
         assert battle_forecast(battle) == expected_forecast(encounter_id), (attempt, battle["forecast"])
+        if battle.get("tutorial"):
+            battle = client.ok("/api/battle/tutorial", {"skip": True})["battle"]
         battle = play_loop(client, battle)
         if battle["result"] == "win":
             client.ok("/api/battle/confirm", {})
@@ -246,7 +248,7 @@ def plan_elite_route(state):
     assert len(route) == state["runLength"] - 1, (route, state["runLength"])
     roles = [nodes[node_id]["role"] for node_id in route]
     assert "elite" in roles and "late" in roles and "boss" in roles, roles
-    expected = 4 if state["mapType"] == "map2" else 2
+    expected = 2 if state["mapType"] == "map1" else 4
     assert sum(1 for role in roles if role == "battle") == expected, roles
     assert sum(1 for role in roles if role == "event") == expected, roles
     event_types = [nodes[node_id]["type"] for node_id in route if nodes[node_id]["role"] == "event"]
@@ -316,7 +318,7 @@ def test_route(client):
     state = advance_to_node(client)
     assert state["node"]["role"] == "start", state["node"]
     early_encounter = state["node"]["encounter"]
-    assert early_encounter in CONTENT["mapGeneration"]["battlePools"]["early"]
+    assert early_encounter == "tutorial"
     early_reward = CONTENT["encounters"][early_encounter]["reward"]["gold"]
     win_battle(client, early_encounter)
     state = client.state()
@@ -451,11 +453,44 @@ def test_second_map(client):
                 assert state["phase"] == "after_story", state
         else:
             complete_event(client, node["type"])
+    state = advance_to_node(client)
+    assert state["phase"] == "node" and state["mapType"] == "map3", state
+    assert len(state["completed"]) == 0
+    assert state["canStartMap3"] is False
+    client.fail("/api/game/map3", {})
+    return state
+
+
+def test_third_map(client):
+    state = client.state()
+    assert state["phase"] == "node" and state["mapType"] == "map3", state
+    assert len(state["deck"]) == 8 and state["gold"] == 0
+    state = advance_to_node(client)
+    win_battle(client, state["node"]["encounter"])
     state = advance_state(client)
-    assert state["phase"] == "complete" and state["mapType"] == "map2", state
+    assert state["phase"] == "map" and state["mapType"] == "map3", state
+    assert state["runLength"] == 12
+    boss = next(node for node in state["map"]["nodes"] if node["role"] == "boss")
+    assert boss["encounter"] == "boss2" and boss["name"] == "海渊中枢"
+    route = plan_elite_route(state)
+    while route:
+        expected = route.pop(0)
+        state = advance_state(client)
+        assert expected in state["map"]["available"]
+        client.ok("/api/map/select", {"nodeId": expected})
+        state = advance_to_node(client)
+        node = state["node"]
+        if node["type"] == "battle":
+            win_battle(client, node["encounter"])
+            if node["role"] == "elite":
+                state = client.state()
+                client.ok("/api/elite/reward/leave", {})
+        else:
+            complete_event(client, node["type"])
+    state = advance_state(client)
+    assert state["complete"] and state["mapType"] == "map3", state
     assert len(state["completed"]) == 12
-    assert state["canStartMap2"] is False
-    client.fail("/api/game/map2", {})
+    client.fail("/api/game/map3", {})
     return state
 
 
@@ -492,7 +527,9 @@ def main():
     assert finished["phase"] == "node" and finished["node"]["role"] == "start"
 
     finished = test_second_map(client)
-    assert finished["complete"] is True and finished["mapType"] == "map2"
+    assert finished["complete"] is False and finished["mapType"] == "map3"
+    finished = test_third_map(client)
+    assert finished["complete"] is True and finished["mapType"] == "map3"
 
     assert other.state() == other_initial, "账号隔离失败"
 

@@ -360,6 +360,18 @@ def new_map2(user=Depends(current_user)):
     return {"username": user["username"], "state": game.public_state(state), "battle": None}
 
 
+@app.post("/api/game/map3")
+def new_map3(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        if not game.can_start_map3(state):
+            raise game.GameError("需要先通关地图二")
+        state = game.new_state(map_type="map3")
+        _save_state(user["id"], state)
+        _clear_battle(user["id"])
+    return {"username": user["username"], "state": game.public_state(state), "battle": None}
+
+
 @app.post("/api/story/advance")
 def story_advance(body: StoryBody, user=Depends(current_user)):
     with db.LOCK:
@@ -469,6 +481,16 @@ def battle_deploy(body: DeployBody, user=Depends(current_user)):
         state = _load_state(user["id"])
         battle_state = _current_battle(user["id"], state)
         B.deploy(battle_state, body.uid, body.column)
+        _store_battle(user["id"], battle_state)
+        return _battle_response(state, battle_state)
+
+
+@app.post("/api/battle/tutorial")
+def battle_tutorial(body: StoryBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"])
+        battle_state = _current_battle(user["id"], state)
+        B.tutorial_continue(battle_state, skip=body.skip)
         _store_battle(user["id"], battle_state)
         return _battle_response(state, battle_state)
 

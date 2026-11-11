@@ -13,6 +13,18 @@ ATTACK_PATTERNS = ("forward", "split_attack", "double_strike", "sweep")
 KNOWN_ABILITIES = ("wide_2", "flying", "reach")
 ON_DEPLOY_TRIGGERS = ("energy_penalty", "copy_opposite")
 ON_DESTROY_TRIGGERS = ("burst_adjacent", "hit_opposite")
+TUTORIAL_STEPS = (
+    {"action": "continue", "title": "爱：先看第 2 列", "text": "把敌方领袖生命降到 0 就能获胜。预告中，第 2 列的哨兵将在本回合结束后出现。我们先守住这里。", "side": "forecast", "column": 2},
+    {"action": "deploy", "cardId": "shell", "side": "player", "column": 2, "title": "拖出盾壳机器人", "text": "把高亮手牌拖到己方第 2 列。它花费 2 能量，能挡住这一列的攻击。"},
+    {"action": "end", "title": "让这一回合结算", "text": "点击结束回合。己方先攻击，随后敌人按预告部署并反击；空列的攻击会命中领袖。"},
+    {"action": "command", "cardId": "spark", "side": "enemy", "column": 2, "title": "清除面前的哨兵", "text": "能量每回合增加 2，剩余能量会保留。把闪电脉冲拖到敌方第 2 列，造成 2 点伤害。用过的牌本场不会再抽到。"},
+    {"action": "deploy", "cardId": "worker", "side": "player", "column": 3, "title": "读预告，再布防", "text": "下一名敌人会出现在第 3 列。把维修工偶拖到己方第 3 列，保护领袖。"},
+    {"action": "end", "title": "观察攻防交换", "text": "结束回合，看看两列单位如何分别攻击。盾壳面前没有敌人，它会直接攻击敌方领袖。"},
+    {"action": "recycle", "side": "player", "column": 2, "title": "回收，为下一张牌腾出空间", "text": "现在只有 2 能量。开启回收模式，选择己方第 2 列的盾壳并确认：花费过 2 能量，回收返还 1。它不会回到手牌。"},
+    {"action": "deploy", "cardId": "twin_rail", "side": "player", "column": 1, "width": 2, "title": "把两列连起来", "text": "现在有 3 能量。把双轨机偶拖到己方第 1 列；它占据第 1、2 列，需要连续空位，攻击时会分别攻击这两列。"},
+    {"action": "end", "title": "试一次双列攻击", "text": "结束回合，观察双轨机偶的两次攻击。之后由你自由决定站位、指令和回收，击败敌方领袖。"},
+    {"action": "continue", "title": "爱：接下来交给你", "text": "你已经学会了预告、部署、回合结算、指令和回收。第 4 列仍有敌人，记得保护领袖。获胜后领取金币，听完对话就能选择下一条路线。"},
+)
 
 
 class GameError(Exception):
@@ -137,7 +149,19 @@ def make_battle(
             }
         )
         b["next_uid"] += 1
-    rng.shuffle(b["deck"])
+    if encounter.get("tutorial"):
+        b["tutorialStep"] = 0
+        opening = encounter["openingHand"]
+        ordered = []
+        for card_id in opening:
+            card = next((c for c in b["deck"] if c["cardId"] == card_id), None)
+            if card is None:
+                raise GameError("教学牌组缺少必需卡牌，请重新开始冒险")
+            ordered.append(card)
+            b["deck"].remove(card)
+        b["deck"] = ordered + b["deck"]
+    else:
+        rng.shuffle(b["deck"])
     _start_turn(b, rng)
     return b
 
@@ -165,6 +189,10 @@ def _start_turn(b, rng):
 
 
 def _draw_opening(b, rng):
+    if "tutorialStep" in b:
+        b["hand"] = b["deck"][:OPENING_DRAW]
+        del b["deck"][:OPENING_DRAW]
+        return
     eligible = [c for c in b["deck"] if _card_cost(b, c) < HIGH_COST]
     count = min(b["openingDraw"], len(eligible))
     if count < 1:
@@ -212,6 +240,40 @@ def _require_playable(b):
         raise GameError("战斗已经结束")
     if b["phase"] == "discard":
         raise GameError("请先完成弃牌")
+
+
+def tutorial_step(b):
+    index = b.get("tutorialStep", len(TUTORIAL_STEPS))
+    if index >= len(TUTORIAL_STEPS) or b["phase"] == "over":
+        return None
+    return {**TUTORIAL_STEPS[index], "index": index, "total": len(TUTORIAL_STEPS)}
+
+
+def _require_tutorial(b, action, card_id=None, side=None, column=None):
+    step = tutorial_step(b)
+    if step and any((step["action"] != action,
+                     step.get("cardId") != card_id,
+                     step.get("side") != side,
+                     step.get("column") != column)):
+        raise GameError("请先完成当前引导：" + step["title"] + "；也可以跳过教程")
+
+
+def _advance_tutorial(b):
+    if tutorial_step(b):
+        b["tutorialStep"] += 1
+
+
+def tutorial_continue(b, skip=False):
+    _require_playable(b)
+    if not tutorial_step(b):
+        raise GameError("当前没有待完成的教学步骤")
+    if skip:
+        b["tutorialStep"] = len(TUTORIAL_STEPS)
+    else:
+        step = tutorial_step(b)
+        if step["action"] != "continue":
+            raise GameError("请完成当前教学操作，或跳过教程")
+        _advance_tutorial(b)
 
 
 def _hand_index(b, uid):
@@ -372,6 +434,7 @@ def deploy(b, uid, column):
     _require_playable(b)
     index = _hand_index(b, uid)
     card = b["hand"][index]
+    _require_tutorial(b, "deploy", card["cardId"], "player", column)
     stats = card_stats(
         b["cards"], card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
     )
@@ -393,6 +456,7 @@ def deploy(b, uid, column):
     span = f"{column}-{column + width - 1} 列" if width > 1 else f"{column} 列"
     _log(b, f"部署 {unit['name']} 到 {span}（花费 {stats['cost']} 能量）")
     _resolve_on_deploy(b, unit)
+    _advance_tutorial(b)
     _check_stalemate(b)
 
 
@@ -408,6 +472,7 @@ def play_command(b, uid, target_uid):
     target = _find_unit(b, target_uid)
     if target is None:
         raise GameError("目标无效")
+    _require_tutorial(b, "command", card["cardId"], target["side"], target["column"])
     if stats.get("heal") is not None:
         if target["side"] != "player":
             raise GameError("紧急维修只能选择己方单位")
@@ -431,6 +496,7 @@ def play_command(b, uid, target_uid):
     else:
         _log(b, f"闪电脉冲对 {target['name']} 造成 {stats['damage']} 点伤害")
         _damage_unit(b, target, stats["damage"])
+    _advance_tutorial(b)
     _check_stalemate(b)
 
 
@@ -441,10 +507,12 @@ def recycle(b, column):
     unit = b["board"]["player"][column - 1]
     if unit is None:
         raise GameError("该列没有己方单位")
+    _require_tutorial(b, "recycle", side="player", column=column)
     refund = recycle_refund(unit["paid"])
     b["energy"] += refund
     _remove_unit(b, unit)
     _log(b, f"回收 {unit['name']}，返还 {refund} 点能量")
+    _advance_tutorial(b)
 
 
 def discard(b, uids):
@@ -469,6 +537,7 @@ def discard(b, uids):
 def end_turn(b, rng=None):
     rng = rng or random.Random()
     _require_playable(b)
+    _require_tutorial(b, "end")
     _player_attack(b)
     if b["phase"] == "over":
         return
@@ -476,6 +545,7 @@ def end_turn(b, rng=None):
     if b["phase"] == "over":
         return
     _start_turn(b, rng)
+    _advance_tutorial(b)
 
 
 def _target_columns(unit):
@@ -677,6 +747,7 @@ def _unit_view(unit):
 
 def view(b):
     return {
+        "tutorial": tutorial_step(b),
         "turn": b["turn"],
         "energy": b["energy"],
         "hp": dict(b["hp"]),

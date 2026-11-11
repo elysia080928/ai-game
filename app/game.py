@@ -53,6 +53,10 @@ SECOND_MAP_CONFIG = CONTENT.get("secondMap") or {}
 SECOND_MAP_RUN_LENGTHS = tuple(SECOND_MAP_CONFIG.get("runLengths") or ())
 SECOND_MAP_MAX_BRANCHES = SECOND_MAP_CONFIG.get("maxBranches", MAP_MAX_BRANCHES)
 SECOND_MAP_TEMPLATES = {**MAP_TEMPLATES, **(SECOND_MAP_CONFIG.get("templates") or {})}
+THIRD_MAP_CONFIG = CONTENT.get("thirdMap") or {}
+THIRD_MAP_RUN_LENGTHS = tuple(THIRD_MAP_CONFIG.get("runLengths") or ())
+THIRD_MAP_MAX_BRANCHES = THIRD_MAP_CONFIG.get("maxBranches", MAP_MAX_BRANCHES)
+THIRD_MAP_TEMPLATES = {**MAP_TEMPLATES, **(THIRD_MAP_CONFIG.get("templates") or {})}
 MAP_META = {
     "chapter": MAP_CONFIG.get("chapter", "第一章"),
     "title": MAP_CONFIG.get("title", "回路边境"),
@@ -67,6 +71,13 @@ SECOND_MAP_META = {
     "caption": SECOND_MAP_CONFIG.get("caption", "第二条路线"),
     "destination": SECOND_MAP_CONFIG.get("destination", "深层核心"),
 }
+THIRD_MAP_META = {
+    "chapter": THIRD_MAP_CONFIG.get("chapter", "第三章"),
+    "title": THIRD_MAP_CONFIG.get("title", "静海档案"),
+    "subtitle": THIRD_MAP_CONFIG.get("subtitle", "THE ABYSSAL ARCHIVE"),
+    "caption": THIRD_MAP_CONFIG.get("caption", "沉在海底的记忆库"),
+    "destination": THIRD_MAP_CONFIG.get("destination", "海渊中枢"),
+}
 MAPS = {
     "map1": {
         "runLengths": MAP_RUN_LENGTHS,
@@ -79,6 +90,8 @@ MAPS = {
         "templates": MAP_TEMPLATES,
         "bossEncounter": "boss",
         "bossTemplate": "boss",
+        "startEncounter": "tutorial",
+        "startTemplate": "tutorial_start",
         "meta": MAP_META,
     },
     "map2": {
@@ -93,6 +106,19 @@ MAPS = {
         "bossEncounter": SECOND_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": SECOND_MAP_CONFIG.get("bossTemplate", "boss2"),
         "meta": SECOND_MAP_META,
+    },
+    "map3": {
+        "runLengths": THIRD_MAP_RUN_LENGTHS,
+        "maxBranches": THIRD_MAP_MAX_BRANCHES,
+        "middleBattles": THIRD_MAP_CONFIG.get("middleBattles", 0),
+        "extraBattleNodes": THIRD_MAP_CONFIG.get("extraBattleNodes", 0),
+        "extraEventNodes": THIRD_MAP_CONFIG.get("extraEventNodes", 0),
+        "eventTypes": MAP_EVENT_TYPES,
+        "battlePools": BATTLE_POOLS,
+        "templates": THIRD_MAP_TEMPLATES,
+        "bossEncounter": THIRD_MAP_CONFIG.get("bossEncounter", "boss2"),
+        "bossTemplate": THIRD_MAP_CONFIG.get("bossTemplate", "boss3"),
+        "meta": THIRD_MAP_META,
     },
 }
 DEFAULT_MAP_TYPE = "map1"
@@ -401,6 +427,29 @@ def validate_content():
         or not isinstance(boss_template.get("after"), list)
     ):
         raise RuntimeError("第二张地图终点模板非法")
+    if (
+        not THIRD_MAP_RUN_LENGTHS
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 6
+            for value in THIRD_MAP_RUN_LENGTHS
+        )
+    ):
+        raise RuntimeError("第三张地图路线长度非法")
+    if not isinstance(THIRD_MAP_MAX_BRANCHES, int) or THIRD_MAP_MAX_BRANCHES < 2:
+        raise RuntimeError("第三张地图分支数量非法")
+    boss_encounter = THIRD_MAP_CONFIG.get("bossEncounter", "boss2")
+    if boss_encounter not in ENCOUNTERS:
+        raise RuntimeError("第三张地图终点遭遇非法")
+    boss_template_id = THIRD_MAP_CONFIG.get("bossTemplate", "boss3")
+    boss_template = THIRD_MAP_TEMPLATES.get(boss_template_id) or NODE_BY_ID.get(boss_template_id)
+    if (
+        not isinstance(boss_template, dict)
+        or boss_template.get("type") != "battle"
+        or not boss_template.get("name")
+        or not isinstance(boss_template.get("before"), list)
+        or not isinstance(boss_template.get("after"), list)
+    ):
+        raise RuntimeError("第三张地图终点模板非法")
 
     for map_type, definition in MAPS.items():
         battles = definition.get("middleBattles", 0)
@@ -617,7 +666,10 @@ def _validate_generated_map(data, legacy=False):
             not in definition["battlePools"]["early"] + definition["battlePools"]["late"]
         ):
             raise RuntimeError("地图中段战斗节点非法")
-        if node["role"] == "start" and node.get("encounter") not in definition["battlePools"]["early"]:
+        allowed_start = list(definition["battlePools"]["early"])
+        if definition.get("startEncounter"):
+            allowed_start = [*allowed_start, definition["startEncounter"]] if legacy else [definition["startEncounter"]]
+        if node["role"] == "start" and node.get("encounter") not in allowed_start:
             raise RuntimeError("地图战斗节点非法")
         if node["role"] == "late" and node.get("encounter") not in definition["battlePools"]["late"]:
             raise RuntimeError("地图战斗节点非法")
@@ -707,14 +759,14 @@ def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
         used.update(picks)
         return picks
 
-    early_encounter = pick_encounters("early", 1)[0]
+    early_encounter = definition.get("startEncounter") or pick_encounters("early", 1)[0]
     late_encounter = pick_encounters("late", 1)[0]
     event_types = rng.sample(event_types_all, event_slots)
     layer_pools = {}
     for order, index in enumerate(battle_layers):
         layer_pools[index] = "early" if order % 2 == 0 else "late"
     layers = [
-        [_make_map_node("battle_early", 0, 0, "start", templates, encounter=early_encounter)]
+        [_make_map_node(definition.get("startTemplate", "battle_early"), 0, 0, "start", templates, encounter=early_encounter)]
     ]
     for index, kind in enumerate(plan):
         layer = []
@@ -826,6 +878,10 @@ def can_start_map2(state):
     return state.get("phase") == "complete" and current_map_type(state) == "map1"
 
 
+def can_start_map3(state):
+    return state.get("phase") == "complete" and current_map_type(state) == "map2"
+
+
 def current_node(state):
     return _map_nodes(state).get(state.get("nodeId"))
 
@@ -885,6 +941,9 @@ def _after_story_done(state):
     elif current_map_type(state) == "map1":
         state.clear()
         state.update(new_state(map_type="map2"))
+    elif current_map_type(state) == "map2":
+        state.clear()
+        state.update(new_state(map_type="map3"))
     else:
         state["phase"] = "complete"
 
@@ -2182,6 +2241,7 @@ def public_state(state):
         "mapType": map_type,
         "mapMeta": map_meta(map_type),
         "canStartMap2": can_start_map2(state),
+        "canStartMap3": can_start_map3(state),
         "gold": state["gold"],
         "node": {
             "id": node["id"],

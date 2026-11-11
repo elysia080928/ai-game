@@ -71,6 +71,17 @@
 
       <section id="battle-view" class="view" hidden>
         <div class="battle-head">
+          <div class="tutorial-coach" id="tutorial-panel" hidden>
+            <div class="tutorial-copy" aria-live="polite" aria-atomic="true">
+              <p class="tutorial-kicker">初次协作 <span id="tutorial-progress"></span></p>
+              <h2 id="tutorial-title"></h2>
+              <p id="tutorial-text"></p>
+            </div>
+            <div class="tutorial-actions">
+              <button id="tutorial-skip" class="ghost">跳过引导</button>
+              <button id="tutorial-next" class="primary">开始部署</button>
+            </div>
+          </div>
           <div class="leader enemy"><span>敌方领袖</span><b id="enemy-hp">15</b></div>
           <div class="turn-box">
             <span>回合 <b id="turn">1</b></span>
@@ -117,18 +128,6 @@
           </div>
         </div>
 
-        <div class="overlay" id="tutorial-panel" hidden>
-          <div class="modal tutorial-modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
-            <p class="tutorial-kicker">第一关 · 新手教程</p>
-            <h2 id="tutorial-title"></h2>
-            <p id="tutorial-text"></p>
-            <div class="tutorial-dots" id="tutorial-dots"></div>
-            <div class="tutorial-actions">
-              <button id="tutorial-skip" class="ghost">跳过教程</button>
-              <button id="tutorial-next" class="primary">下一步</button>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section id="elite-reward-view" class="view" hidden>

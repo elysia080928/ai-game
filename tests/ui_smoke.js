@@ -194,17 +194,94 @@ async function main() {
     console.log("ok 进入战斗界面");
 
     if (!(await visible("tutorial-panel"))) throw new Error("第一场战斗没有显示新手教程");
-    const tutorialTitles = [];
-    for (let index = 0; index < 5; index += 1) {
-      tutorialTitles.push(await evaluate("document.getElementById('tutorial-title').textContent"));
+    if (process.env.TUTORIAL_UI_ONLY === "1") {
+      async function expectStep(index) {
+        await waitFor(() => evaluate(`battle.tutorial?.index === ${index} && !busy`), `教学步骤 ${index}`);
+      }
+      async function dragCard(cardId, side, column) {
+        const points = await evaluate(`(() => {
+          const card = battle.hand.find(c => c.cardId === ${JSON.stringify(cardId)});
+          const source = document.querySelector('#hand [data-uid="' + card.uid + '"]');
+          source.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          const a = source.getBoundingClientRect();
+          const b = document.querySelector('#${side}-row [data-column="${column}"]').getBoundingClientRect();
+          return { x: a.x + a.width / 2, y: a.y + a.height / 2, tx: b.x + b.width / 2, ty: b.y + b.height / 2 };
+        })()`);
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: points.x, y: points.y });
+        await command("Input.dispatchMouseEvent", { type: "mousePressed", x: points.x, y: points.y, button: "left", clickCount: 1 });
+        for (let i = 1; i <= 12; i += 1) {
+          await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: points.x + (points.tx - points.x) * i / 12, y: points.y + (points.ty - points.y) * i / 12, button: "left", buttons: 1 });
+          await sleep(30);
+        }
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: points.tx, y: points.ty, buttons: 1 });
+        await sleep(100);
+        await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: points.tx, y: points.ty, button: "left", clickCount: 1 });
+        await sleep(200);
+      }
+      await expectStep(0);
+      await screenshot("ai-game-tutorial-start.png");
       await click("#tutorial-next");
+      await expectStep(1);
+      if (!(await evaluate("document.getElementById('end-turn').disabled"))) throw new Error("教学未禁止提前结束回合");
+      for (const [width, height] of [[1024, 600], [667, 375]]) {
+        await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+        await sleep(200);
+        const layout = await evaluate(`(() => {
+          const coach = document.getElementById('tutorial-panel').getBoundingClientRect();
+          const hand = document.getElementById('hand').getBoundingClientRect();
+          const board = document.getElementById('player-row').getBoundingClientRect();
+          const card = document.querySelector('#hand [draggable="true"]').getBoundingClientRect();
+          return { overflow: document.documentElement.scrollWidth > innerWidth + 1 || document.documentElement.scrollHeight > innerHeight + 1,
+            overlap: coach.bottom > board.top || board.bottom > hand.top, cardHeight: card.height,
+            clipped: coach.top < 0 || hand.bottom > innerHeight + 1, boardHeight: board.height,
+            coachTop: coach.top, stageScroll: document.querySelector('.stage').scrollTop };
+        })()`);
+        if (layout.overflow || layout.overlap || layout.clipped || layout.cardHeight < 80 || layout.boardHeight < 28) throw new Error(`教学布局 ${width}x${height}: ${JSON.stringify(layout)}`);
+        await screenshot(`ai-game-tutorial-${width}.png`);
+      }
+      await command("Emulation.clearDeviceMetricsOverride");
+      await sleep(300);
+      await dragCard("shell", "player", 2);
+      await expectStep(2);
+      await click("#end-turn");
+      await expectStep(3);
+      await command("Page.reload");
+      await waitFor(() => evaluate("typeof battle !== 'undefined' && battle?.tutorial?.index === 3"), "刷新恢复教学");
+      await dragCard("spark", "enemy", 2);
+      await expectStep(4);
+      await dragCard("worker", "player", 3);
+      await expectStep(5);
+      await click("#end-turn");
+      await expectStep(6);
+      await click("#recycle-btn");
+      // confirm 会阻塞 Runtime.evaluate，先触发点击，再由 CDP 确认。
+      const recycleClick = click('#player-row [data-column="2"]');
+      await sleep(200);
+      await command("Page.handleJavaScriptDialog", { accept: true });
+      await recycleClick;
+      await expectStep(7);
+      await dragCard("twin_rail", "player", 1);
+      await expectStep(8);
+      await click("#end-turn");
+      await expectStep(9);
+      await screenshot("ai-game-tutorial-finish.png");
+      await click("#tutorial-next");
+      await waitFor(() => evaluate("!battle.tutorial && !busy"), "教学完成后自由战斗");
+      for (let turn = 0; turn < 8 && !(await evaluate("battle.result === 'win'")); turn += 1) {
+        await click("#end-turn");
+        await waitFor(() => evaluate("!busy"), "自由回合结算");
+      }
+      if (!(await evaluate("battle.result === 'win'"))) throw new Error("教学后未能获胜");
+      await click("#result-action");
+      await storyUntil("map-view");
+      if (!(await evaluate("state.gold === 20 && state.progress === 1"))) throw new Error("首战奖励或剧情衔接错误");
+      console.log("ok 实际鼠标拖动完成完整教学、刷新恢复、小屏布局、获胜与地图衔接");
+      ws.close();
+      return;
     }
-    if (await visible("tutorial-panel")) throw new Error("新手教程没有在最后一步关闭");
-    if (new Set(tutorialTitles).size !== 5) throw new Error(`新手教程步骤没有推进：${JSON.stringify(tutorialTitles)}`);
-    if (!(await evaluate("localStorage.getItem('ai-game.tutorial.map1.v1') === '1'"))) {
-      throw new Error("新手教程完成后没有记录本地标记");
-    }
-    console.log("ok 第一关新手教程显示、推进与关闭");
+    await click("#tutorial-skip");
+    await waitFor(async () => !(await visible("tutorial-panel")), "跳过教程");
+    console.log("ok 第一关新手教程与跳过");
 
     const battleBeforeReload = await evaluate(`JSON.stringify({
       turn: battle.turn, energy: battle.energy, hp: battle.hp,
@@ -897,6 +974,7 @@ async function main() {
           seed: map.seed,
           mapType: state.mapType,
           boardMap2: document.querySelector('.map-board').classList.contains('map-type-map2'),
+          boardMap3: document.querySelector('.map-board').classList.contains('map-type-map3'),
           terrainImage: getComputedStyle(document.querySelector('.map-terrain')).backgroundImage,
           eyebrow: document.getElementById('map-eyebrow').textContent,
           cartouche: document.querySelector('.map-cartouche').textContent,
@@ -921,6 +999,10 @@ async function main() {
       if (check.mapType === "map2" &&
           (!check.boardMap2 || !check.terrainImage.includes("deep-circuit-map"))) {
         throw new Error(`第二张地图背景或标题异常：${JSON.stringify(check)}`);
+      }
+      if (check.mapType === "map3" &&
+          (!check.boardMap3 || !check.terrainImage.includes("ocean-depths-map"))) {
+        throw new Error(`第三张地图背景或标题异常：${JSON.stringify(check)}`);
       }
       return check;
     }
@@ -1131,7 +1213,7 @@ async function main() {
               entered.deck !== 8 || entered.phase === "complete") {
             throw new Error(`自动进入第二张地图状态异常：${JSON.stringify(entered)}`);
           }
-          console.log("ok 第一张地图通关后自动进入第二张地图");
+    console.log("ok 第一张地图通关后自动进入第二张地图");
         } else {
           await storyUntil("map-view");
         }
