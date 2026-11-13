@@ -307,15 +307,33 @@ def _side_units(b, side):
             yield unit
 
 
+def repair_board(b):
+    changed = False
+    for side in ("player", "enemy"):
+        slots = b["board"][side]
+        positions = {}
+        for column, unit in enumerate(slots):
+            if unit is not None:
+                positions.setdefault(unit["uid"], []).append(column)
+        for columns in positions.values():
+            unit = slots[columns[0]]
+            expected = list(range(unit["column"] - 1, unit["column"] - 1 + unit.get("width", 1)))
+            if columns != expected:
+                for column in columns:
+                    slots[column] = None
+                changed = True
+    return changed
+
+
 def _remove_unit(b, unit):
     slots = b["board"][unit["side"]]
     for index, slot in enumerate(slots):
-        if slot is unit:
+        if slot is not None and slot["uid"] == unit["uid"]:
             slots[index] = None
 
 
 def _on_board(b, unit):
-    return any(slot is unit for slot in b["board"][unit["side"]])
+    return any(slot is not None and slot["uid"] == unit["uid"] for slot in b["board"][unit["side"]])
 
 
 def _resolve_on_deploy(b, unit):
@@ -364,7 +382,7 @@ def _resolve_on_destroy(b, unit):
 def _guard_for(b, target):
     target_columns = set(_unit_columns(target))
     for unit in _side_units(b, "player"):
-        if unit is target or unit.get("guard", 0) <= 0:
+        if unit["uid"] == target["uid"] or unit.get("guard", 0) <= 0:
             continue
         if any(
             abs(guard_column - column) == 1

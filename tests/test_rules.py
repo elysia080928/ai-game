@@ -1329,6 +1329,8 @@ def test_challenge_battle_modifiers():
 
 def test_wide_unit_placement():
     b, card = battle_with_card("twin_rail")
+    replacement_uid = b["next_uid"]
+    b["next_uid"] += 1
     energy = b["energy"]
     for column in (0, 4):
         try:
@@ -1339,6 +1341,9 @@ def test_wide_unit_placement():
             raise AssertionError("宽体单位越界应被拒绝")
     assert b["energy"] == energy and len(b["hand"]) == 6
 
+    b["energy"] += 1
+    energy = b["energy"]
+    b["hand"].append({**card, "uid": replacement_uid})
     B.deploy(b, card["uid"], 3)
     unit = b["board"]["player"][2]
     assert unit is b["board"]["player"][3], "宽体单位应同时占据两列"
@@ -1347,9 +1352,17 @@ def test_wide_unit_placement():
     slots = B.view(b)["board"]["player"]
     assert slots[2]["uid"] == slots[3]["uid"] and slots[2]["width"] == 2
 
+    orphaned = json.loads(json.dumps(b))
+    orphaned["board"]["player"][2] = None
+    B.repair_board(orphaned)
+    assert orphaned["board"]["player"] == [None] * 4, "应清理旧存档中回收遗留的单格宽体单位"
+
+    b = json.loads(json.dumps(b))  # battle saves restore each occupied column as a separate object
     B.recycle(b, 4)
     assert b["board"]["player"] == [None] * 4, "回收应释放两列"
     assert b["energy"] == energy - 3 + B.recycle_refund(3)
+    B.deploy(b, replacement_uid, 1)
+    assert b["board"]["player"][0] is b["board"]["player"][1], "回收后应能再次部署到已释放列"
 
     for blocker in (2, 3):
         blocked, blocked_card = battle_with_card("twin_rail")

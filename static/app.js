@@ -5,6 +5,9 @@ const $ = (id) => document.getElementById(id);
 let state = null;
 let battle = null;
 let username = "";
+let screen = "auth";
+let saveSlots = [];
+let activeSlot = 1;
 let selectedUid = null;
 let recycleMode = false;
 let discardSelection = new Set();
@@ -23,6 +26,10 @@ let dragDropped = false;
 let busy = false;
 let loadingBattle = false;
 let toastTimer = null;
+let storyTypingTimer = null;
+let storyLineKey = "";
+let storyCharacters = [];
+let storyVisibleCharacters = 0;
 
 const NODE_TYPES = {
   battle: "战斗",
@@ -102,10 +109,12 @@ function trapDialogFocus(event) {
   }
 }
 
-async function api(path, body) {
-  const options = body === undefined
-    ? { method: "GET" }
-    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+async function api(path, body, method) {
+  const options = method
+    ? { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) }
+    : body === undefined
+      ? { method: "GET" }
+      : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   let response;
@@ -122,6 +131,8 @@ async function api(path, body) {
     if (response.status === 401) {
       state = null;
       battle = null;
+      username = "";
+      screen = "auth";
       render();
     }
     const detail = data && data.detail;
@@ -134,6 +145,13 @@ async function api(path, body) {
 function apply(data) {
   if (!data) return;
   if (data.state) {
+    if (!data.state.story) {
+      if (storyTypingTimer !== null) clearInterval(storyTypingTimer);
+      storyTypingTimer = null;
+      storyLineKey = "";
+      storyCharacters = [];
+      storyVisibleCharacters = 0;
+    }
     const previousNode = state && state.node ? state.node.id : null;
     const nextNode = data.state.node ? data.state.node.id : null;
     if (previousNode !== nextNode) {
@@ -168,23 +186,79 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
+  ["menu-view", "save-slots-view", "cg-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
 
+function renderSaveSlots() {
+  const active = saveSlots.find((slot) => slot.slotId === activeSlot);
+  $("continue-btn").disabled = !active || active.empty || active.corrupt;
+  $("title-user").textContent = username;
+  $("save-slots").innerHTML = saveSlots.map((slot) => {
+    const title = slot.corrupt ? "存档无法读取" : slot.empty ? "空存档槽" : esc(slot.mapTitle || "未命名路线");
+    const detail = slot.corrupt ? "数据已保留，可删除此存档槽。" : slot.empty
+      ? "尚未开始冒险。"
+      : `${esc(slot.chapter)}<br>进度 ${slot.progress}/${slot.runLength} · ${esc(slot.nodeName)}${slot.complete ? " · 已通关" : ""}`;
+    const time = slot.updatedAt ? new Date(slot.updatedAt * 1000).toLocaleString() : "";
+    const actions = slot.corrupt
+      ? `<button class="ghost" data-slot-action="delete" data-slot="${slot.slotId}">删除存档</button>`
+      : slot.empty
+        ? `<button data-slot-action="new" data-slot="${slot.slotId}">开始新游戏</button>`
+        : `<button data-slot-action="continue" data-slot="${slot.slotId}">继续</button><button class="ghost" data-slot-action="new" data-slot="${slot.slotId}">新游戏</button><button class="ghost" data-slot-action="delete" data-slot="${slot.slotId}">删除</button>`;
+    return `<article class="save-slot${slot.empty ? " empty" : ""}${slot.corrupt ? " corrupt" : ""}${slot.slotId === activeSlot ? " active" : ""}">
+      <h2>存档 ${slot.slotId}${slot.slotId === activeSlot ? " · 最近使用" : ""}</h2><p class="slot-chapter">${title}</p>
+      <p class="slot-progress">${detail}</p><time class="slot-time">${time ? `保存于 ${esc(time)}` : ""}</time>
+      <div class="slot-actions">${actions}</div></article>`;
+  }).join("");
+}
+
 function render() {
-  const loggedIn = !!state;
+  if (screen !== "game" || !state || !["before_story", "after_story"].includes(state.phase)) {
+    if (storyTypingTimer !== null) clearInterval(storyTypingTimer);
+    storyTypingTimer = null;
+    storyLineKey = "";
+    storyCharacters = [];
+    storyVisibleCharacters = 0;
+  }
+  const loggedIn = !!username;
   $("auth").hidden = loggedIn;
   $("game").hidden = !loggedIn;
-  updateViewportGuard(loggedIn);
+  updateViewportGuard(loggedIn && screen === "game");
   if (!loggedIn) {
     $("auth-error").textContent = "";
     return;
   }
 
-  $("hud-gold").textContent = state.gold;
   $("hud-user").textContent = username;
+  $("menu-btn").hidden = screen === "menu";
+  if (screen !== "game") {
+    $("hud-gold").textContent = "—";
+    $("hud-node").textContent = "";
+  }
+  hideViews();
+  if (screen === "menu") {
+    $("menu-view").hidden = false;
+    renderSaveSlots();
+    return;
+  }
+  if (screen === "slots") {
+    $("save-slots-view").hidden = false;
+    renderSaveSlots();
+    return;
+  }
+  if (screen === "gallery") {
+    $("cg-view").hidden = false;
+    return;
+  }
+  if (screen !== "game" || !state) {
+    screen = "menu";
+    $("menu-view").hidden = false;
+    renderSaveSlots();
+    return;
+  }
+
+  $("hud-gold").textContent = state.gold;
   if (state.complete) {
     $("hud-node").textContent = "路线完成";
   } else if (state.phase === "map") {
@@ -195,7 +269,6 @@ function render() {
     $("hud-node").textContent = "";
   }
 
-  hideViews();
   if (state.complete) {
     renderComplete();
     return;
@@ -267,6 +340,9 @@ function updateViewportGuard(loggedIn = !!state) {
   const width = mobile ? 667 : 1024;
   const height = mobile ? 375 : 600;
   $("orientation-guard").hidden = !loggedIn || !portrait;
+  $("orientation-guard").querySelector("p").textContent = state && state.story
+    ? "为了完整呈现场景、立绘和对白，请横向旋转设备。"
+    : "机偶回路的战术界面需要横向空间。";
   $("size-guard").hidden = !loggedIn || portrait || window.innerWidth >= width && window.innerHeight >= height;
 }
 
@@ -293,28 +369,20 @@ function refreshPagedLists(root = document) {
 
 /* ---------- 剧情 ---------- */
 
-function renderPortrait(story) {
-  const holder = $("story-portrait");
-  holder.innerHTML = "";
-  const fallback = () => {
-    holder.innerHTML = `<svg class="portrait-figure" viewBox="0 0 140 190" aria-hidden="true">
-      <circle cx="70" cy="76" r="46"></circle>
-      <path class="shoulders" d="M24 190v-36c0-22 20-36 46-36s46 14 46 36v36"></path>
-      <rect x="44" y="48" width="52" height="58" rx="20"></rect>
-      <path d="M52 68h36M52 82h36M70 48V32M58 32h24M58 118h24"></path>
-      <circle class="eye" cx="60" cy="68" r="2.5"></circle>
-      <circle class="eye" cx="80" cy="68" r="2.5"></circle>
-    </svg>`;
-  };
-  if (story.portrait) {
-    const image = document.createElement("img");
-    image.alt = "";
-    image.src = story.portrait;
-    image.addEventListener("error", fallback);
-    holder.appendChild(image);
-  } else {
-    fallback();
-  }
+function finishStoryTyping() {
+  if (storyTypingTimer !== null) clearInterval(storyTypingTimer);
+  storyTypingTimer = null;
+  storyVisibleCharacters = storyCharacters.length;
+  $("story-text").textContent = storyCharacters.join("");
+  const options = state.story.options || [];
+  $("story-options").hidden = options.length === 0;
+  $("story-continue-hint").hidden = options.length > 0;
+}
+
+function advanceStoryFromScene() {
+  if (busy || !state || !state.story) return;
+  if (storyVisibleCharacters < storyCharacters.length) finishStoryTyping();
+  else if (!state.story.options?.length) advanceStory(false);
 }
 
 function renderStory() {
@@ -324,13 +392,30 @@ function renderStory() {
     return;
   }
   $("story-view").hidden = false;
-  const background = String(story.background || "").replace(/[^A-Za-z0-9_-]/g, "");
-  $("story-panel").className = "story-panel" + (background ? ` bg-${background}` : "");
+  $("story-panel").className = "story-panel";
   $("story-node").textContent = `${state.node.name} · ${state.phase === "after_story" ? "后日谈" : "前日谈"}`;
-  renderPortrait(story);
   $("story-speaker").textContent = story.speaker;
-  $("story-text").textContent = story.text;
+  $("story-text").setAttribute("aria-label", story.text);
   $("story-progress").textContent = `${story.line} / ${story.total}`;
+
+  const lineKey = `${state.node.id}:${state.phase}:${story.line}:${story.text}`;
+  if (lineKey !== storyLineKey) {
+    if (storyTypingTimer !== null) clearInterval(storyTypingTimer);
+    storyTypingTimer = null;
+    storyLineKey = lineKey;
+    storyCharacters = Array.from(story.text || "");
+    storyVisibleCharacters = 0;
+    $("story-text").textContent = "";
+    if (storyCharacters.length && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      storyTypingTimer = setInterval(() => {
+        storyVisibleCharacters += 1;
+        $("story-text").textContent = storyCharacters.slice(0, storyVisibleCharacters).join("");
+        if (storyVisibleCharacters >= storyCharacters.length) finishStoryTyping();
+      }, 25);
+    } else {
+      finishStoryTyping();
+    }
+  }
 
   const options = story.options || [];
   $("story-options").innerHTML = options.length
@@ -338,9 +423,9 @@ function renderStory() {
         .map((option) => `<button class="story-option" data-option="${esc(option.id)}">${esc(option.text)}</button>`)
         .join("")
     : "";
-  $("story-options").hidden = options.length === 0;
-  $("story-next").disabled = options.length > 0;
   $("story-skip").disabled = options.length > 0;
+  $("story-options").hidden = options.length === 0 || storyVisibleCharacters < storyCharacters.length;
+  $("story-continue-hint").hidden = options.length > 0 && storyVisibleCharacters >= storyCharacters.length;
 }
 
 async function advanceStory(skip) {
@@ -580,11 +665,11 @@ function traitText(card, short = false) {
 }
 
 const CARD_ART = {
-  bean: "sci-robot-small", shell: "sci-turret", scout: "sci-drone",
+  bean: "sci-robot-small", shell: "shell-bot", scout: "sci-drone",
   repair: "sci-medkit", spark: "lightning-bolt-pickup", worker: "companion-robot",
-  striker: "neon-mech", heavy: "sci-robot", guard: "sci-turret", flyer: "sci-fighter",
-  twin_rail: "neon-mech", arc_drone: "sci-drone", double_claw: "crab",
-  phase_flyer: "sci-drone", burst_beetle: "beetle", shield_moth: "butterfly",
+  striker: "neon-mech", heavy: "sci-robot", guard: "guard-mech", flyer: "sci-fighter",
+  twin_rail: "twin-rail-rover", arc_drone: "arc-drone", double_claw: "crab",
+  phase_flyer: "phase-shuttle", burst_beetle: "beetle", shield_moth: "butterfly",
   rail_guard: "sci-turret", generator: "sci-generator"
 };
 const PIXEL_ALIASES = {
@@ -715,6 +800,7 @@ function renderBattle() {
   $("turn").textContent = battle.turn;
   $("energy").textContent = battle.energy;
   $("deck-count").textContent = battle.deckCount;
+  $("hand-count").textContent = battle.hand.length;
 
   renderForecast();
 
@@ -728,6 +814,8 @@ function renderBattle() {
         battle.phase === "player",
       )).join("")
     : "<p class='hint'>手牌为空</p>";
+
+  $("hand-dock").classList.toggle("has-cards", battle.hand.length > 0);
 
   $("log").innerHTML = battle.log.map(esc).join("<br>");
 
@@ -1410,12 +1498,15 @@ function renderTraining() {
 
 async function loginOrRegister(path) {
   $("auth-error").textContent = "";
-  $("reset-save-btn").hidden = true;
   const payload = { username: $("username").value.trim(), password: $("password").value };
   try {
     const data = await api(path, payload);
     $("password").value = "";
-    apply(data);
+    username = data.username;
+    state = null;
+    battle = null;
+    screen = "menu";
+    await refreshSaveSlots();
   } catch (error) {
     $("auth-error").textContent = error.message;
   }
@@ -1428,13 +1519,79 @@ async function logout() {
   state = null;
   battle = null;
   username = "";
-  $("reset-save-btn").hidden = true;
+  screen = "auth";
+  saveSlots = [];
   render();
 }
 
+async function refreshSaveSlots() {
+  const data = await api("/api/save-slots");
+  username = data.username;
+  activeSlot = data.activeSlot;
+  saveSlots = data.slots;
+  render();
+}
+
+async function openMenu() {
+  screen = "menu";
+  render();
+  try { await refreshSaveSlots(); } catch (error) { showToast(error.message); }
+}
+
+async function continueGame(slotId = activeSlot) {
+  const slot = saveSlots.find((item) => item.slotId === slotId);
+  if (!slot || slot.empty || slot.corrupt) {
+    screen = "slots";
+    render();
+    return;
+  }
+  try {
+    const data = await api(`/api/save-slots/${slotId}/select`, {});
+    activeSlot = data.activeSlot;
+    screen = "game";
+    apply(data);
+  } catch (error) { showToast(error.message); }
+}
+
+async function startNewGame(slotId) {
+  const slot = saveSlots.find((item) => item.slotId === slotId);
+  if (!slot || slot.corrupt) return;
+  if (!slot.empty && !confirm(`开始新游戏将覆盖存档 ${slotId} 的全部进度与战斗状态，确定继续吗？`)) return;
+  try {
+    const data = await api("/api/game/new", { slotId, confirm: true });
+    activeSlot = slotId;
+    screen = "game";
+    apply(data);
+  } catch (error) { showToast(error.message); }
+}
+
+async function deleteSaveSlot(slotId) {
+  const slot = saveSlots.find((item) => item.slotId === slotId);
+  if (!slot || slot.empty) return;
+  if (!confirm(`确定删除存档 ${slotId} 吗？此操作会永久清除该槽的冒险、战斗状态和备份。`)) return;
+  try {
+    const data = await api(`/api/save-slots/${slotId}`, undefined, "DELETE");
+    activeSlot = data.activeSlot;
+    saveSlots = data.slots;
+    render();
+  } catch (error) { showToast(error.message); }
+}
+
+function setVolume(value) {
+  const volume = Math.max(0, Math.min(100, Number(value) || 0));
+  $("master-volume").value = String(volume);
+  $("volume-value").value = `${volume}%`;
+  $("volume-value").textContent = `${volume}%`;
+  try { localStorage.setItem("ai-game-master-volume", String(volume)); } catch (_) { /* 浏览器存储不可用时仍可调节 */ }
+}
+
+function openSettings() {
+  showDialog($("settings-panel"), $("settings-close"));
+}
+
 function bindEvents() {
-  window.addEventListener("resize", () => updateViewportGuard());
-  window.addEventListener("orientationchange", () => updateViewportGuard());
+  window.addEventListener("resize", () => updateViewportGuard(!!username && screen === "game"));
+  window.addEventListener("orientationchange", () => updateViewportGuard(!!username && screen === "game"));
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-page-step]");
     if (!button) return;
@@ -1451,25 +1608,46 @@ function bindEvents() {
   window.addEventListener("resize", () => requestAnimationFrame(() => refreshPagedLists()));
   $("login-btn").addEventListener("click", () => loginOrRegister("/api/login"));
   $("register-btn").addEventListener("click", () => loginOrRegister("/api/register"));
-  $("reset-save-btn").addEventListener("click", async () => {
-    if (!confirm("当前存档无法读取。重置会覆盖它并开始新冒险，确定吗？")) return;
-    try {
-      const data = await api("/api/game/new", { confirm: true });
-      $("reset-save-btn").hidden = true;
-      $("auth-error").textContent = "";
-      apply(data);
-    } catch (error) {
-      $("auth-error").textContent = error.message;
-    }
-  });
   $("password").addEventListener("keydown", (event) => {
     if (event.key === "Enter") loginOrRegister("/api/login");
   });
   $("logout-btn").addEventListener("click", logout);
+  $("menu-btn").addEventListener("click", openMenu);
+  $("continue-btn").addEventListener("click", () => continueGame());
+  $("slots-open").addEventListener("click", () => { screen = "slots"; render(); });
+  $("gallery-open").addEventListener("click", () => { screen = "gallery"; render(); });
+  $("settings-open").addEventListener("click", openSettings);
+  $("settings-close").addEventListener("click", () => hideDialog($("settings-panel")));
+  $("settings-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
+  $("master-volume").addEventListener("input", (event) => setVolume(event.target.value));
+  try { setVolume(localStorage.getItem("ai-game-master-volume") ?? 100); } catch (_) { setVolume(100); }
+  $("save-slots").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-slot-action]");
+    if (!button) return;
+    const slotId = Number(button.dataset.slot);
+    if (button.dataset.slotAction === "continue") continueGame(slotId);
+    else if (button.dataset.slotAction === "new") startNewGame(slotId);
+    else if (button.dataset.slotAction === "delete") deleteSaveSlot(slotId);
+  });
+  document.querySelectorAll("[data-menu-back]").forEach((button) => button.addEventListener("click", openMenu));
+  $("settings-panel").addEventListener("click", (event) => {
+    if (event.target === $("settings-panel")) hideDialog($("settings-panel"));
+  });
+  window.addEventListener("keydown", (event) => {
+    if (!$('story-view').hidden && (event.key === " " || event.key === "Enter")) {
+      if (event.target.closest?.("button, input, select, textarea, a, [contenteditable='true']")) return;
+      event.preventDefault();
+      advanceStoryFromScene();
+    }
+    if (event.key === "Escape" && !$("settings-panel").hidden) hideDialog($("settings-panel"));
+  });
   $("discard-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
   $("result-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
 
-  $("story-next").addEventListener("click", () => advanceStory(false));
+  $("story-panel").addEventListener("click", (event) => {
+    if (event.target.closest("#story-skip, .story-option")) return;
+    advanceStoryFromScene();
+  });
   $("story-skip").addEventListener("click", () => advanceStory(true));
   $("story-options").addEventListener("click", (event) => {
     const button = event.target.closest(".story-option");
@@ -1484,6 +1662,15 @@ function bindEvents() {
   });
 
   $("end-turn").addEventListener("click", () => act("/api/battle/end", {}));
+  $("hand-toggle").addEventListener("click", () => {
+    $("hand-count").textContent = $("hand").querySelectorAll(".card").length;
+    const open = $("hand-dock").classList.toggle("is-open");
+    $("hand-toggle").setAttribute("aria-expanded", String(open));
+  });
+  $("battle-table").addEventListener("click", () => {
+    $("hand-dock").classList.remove("is-open");
+    $("hand-toggle").setAttribute("aria-expanded", "false");
+  });
   $("recycle-btn").addEventListener("click", () => {
     recycleMode = !recycleMode;
     if (recycleMode) selectedUid = null;
@@ -1520,6 +1707,8 @@ function bindEvents() {
     }
     draggingUid = card.uid;
     dragDropped = false;
+    $("hand-dock").classList.remove("is-open");
+    $("hand-toggle").setAttribute("aria-expanded", "false");
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", String(card.uid));
     element.classList.add("dragging");
@@ -1767,9 +1956,16 @@ function bindEvents() {
   });
   $("training-leave").addEventListener("click", () => act("/api/training/leave", {}));
 
-  $("restart-btn").addEventListener("click", () => {
+  const restartGame = () => {
     if (!confirm("重新开始会覆盖当前冒险进度，确定吗？")) return;
     act("/api/game/new", { confirm: true });
+  };
+  $("restart-btn").addEventListener("click", restartGame);
+  window.addEventListener("keydown", (event) => {
+    if (event.ctrlKey && event.altKey && !event.repeat && event.key.toLowerCase() === "p" && state) {
+      event.preventDefault();
+      restartGame();
+    }
   });
   $("map2-btn").addEventListener("click", () => {
     const third = state.canStartMap3;
@@ -1781,13 +1977,15 @@ function bindEvents() {
 async function init() {
   bindEvents();
   try {
-    const data = await api("/api/state");
-    apply(data);
+    await refreshSaveSlots();
+    screen = "menu";
+    render();
   } catch (error) {
     state = null;
+    username = "";
+    screen = "auth";
     render();
-    $("auth-error").textContent = error.message;
-    $("reset-save-btn").hidden = !error.message.includes("存档无法读取");
+    if (!error.message.includes("未登录")) $("auth-error").textContent = error.message;
   }
 }
 

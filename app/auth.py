@@ -60,13 +60,29 @@ def create_session(user_id):
     now = time.time()
     with db.LOCK:
         conn = db.conn()
+        user = conn.execute("SELECT recent_slot FROM users WHERE id = ?", (user_id,)).fetchone()
+        slot = user["recent_slot"] if user else 1
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
         conn.execute(
-            "INSERT INTO sessions(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
-            (token_hash(token), user_id, now + SESSION_TTL),
+            "INSERT INTO sessions(token_hash, user_id, expires_at, active_slot) VALUES (?, ?, ?, ?)",
+            (token_hash(token), user_id, now + SESSION_TTL, slot),
         )
         conn.commit()
     return token
+
+
+def set_session_slot(token, slot):
+    with db.LOCK:
+        conn = db.conn()
+        row = conn.execute(
+            "SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at >= ?",
+            (token_hash(token), time.time()),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=401, detail="登录已过期")
+        conn.execute("UPDATE sessions SET active_slot = ? WHERE token_hash = ?", (slot, token_hash(token)))
+        conn.execute("UPDATE users SET recent_slot = ? WHERE id = ?", (slot, row["user_id"]))
+        conn.commit()
 
 
 def delete_session(token):
@@ -83,14 +99,17 @@ def user_from_request(request):
     with db.LOCK:
         conn = db.conn()
         row = conn.execute(
-            "SELECT user_id, expires_at FROM sessions WHERE token_hash = ?", (token_hash(token),)
+            "SELECT user_id, expires_at, active_slot FROM sessions WHERE token_hash = ?", (token_hash(token),)
         ).fetchone()
         if row is None or row["expires_at"] < time.time():
             return None
         user = conn.execute("SELECT id, username FROM users WHERE id = ?", (row["user_id"],)).fetchone()
     if user is None:
         return None
-    return {"id": user["id"], "username": user["username"]}
+    return {
+        "id": user["id"], "username": user["username"], "slot": row["active_slot"],
+        "session_token": token,
+    }
 
 
 def rate_limit(key, limit, window):
