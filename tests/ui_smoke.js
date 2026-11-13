@@ -39,6 +39,9 @@ async function main() {
     [
       "--headless=new",
       "--disable-gpu",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-background-timer-throttling",
       "--no-first-run",
       "--no-default-browser-check",
       `--remote-debugging-port=${CDP_PORT}`,
@@ -67,8 +70,13 @@ async function main() {
 
     let nextId = 0;
     const pending = new Map();
+    let dialogResolver = null;
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
+      if (message.method === "Page.javascriptDialogOpening" && dialogResolver) {
+        dialogResolver();
+        dialogResolver = null;
+      }
       if (message.id && pending.has(message.id)) {
         const { resolve, reject } = pending.get(message.id);
         pending.delete(message.id);
@@ -104,9 +112,7 @@ async function main() {
     }
 
     async function finishStoryText() {
-      await waitFor(() => evaluate(
-        "!!state.story && document.getElementById('story-text').textContent === state.story.text"
-      ), "剧情逐字显示完成");
+      await evaluate("if (state.story) finishStoryTyping(); true;");
     }
 
     async function advanceVisibleStory() {
@@ -115,7 +121,6 @@ async function main() {
       );
       if (optionsVisible) await click("#story-options .story-option");
       else {
-        await finishStoryText();
         await click("#story-panel");
       }
     }
@@ -124,6 +129,47 @@ async function main() {
     async function storyUntil(viewId) {
       for (let index = 0; index < 16; index += 1) {
         if (await visible(viewId)) return;
+        if (await visible("transition-view")) {
+          await command("Page.setWebLifecycleState", { state: "active" });
+          await command("Page.bringToFront");
+          await waitFor(() => evaluate("document.visibilityState === 'visible'"), "转场时浏览器页面可见");
+          const transition = await evaluate(`(() => {
+            const view = document.getElementById('transition-view').getBoundingClientRect();
+            const frame = document.getElementById('transition-frame');
+            const rect = frame.getBoundingClientRect();
+            return {target: state.transitionTarget, src: frame.src,
+              fullScreen: view.left === 0 && view.top === 0 && view.width === innerWidth && view.height === innerHeight &&
+                rect.left === 0 && rect.top === 0 && rect.width === innerWidth && rect.height === innerHeight,
+              topbarHidden: getComputedStyle(document.querySelector('#game > .topbar')).display === 'none',
+              otherViewsHidden: [...document.querySelectorAll('.stage > .view:not(#transition-view)')].every((view) => view.hidden)};
+          })()`);
+          const expected = { map: "clip-01", map2: "clip-02", map3: "clip-04", complete: "clip-03" }[transition.target];
+          if (!expected || !transition.src.includes(expected + ".html") || !transition.fullScreen ||
+              !transition.topbarHidden || !transition.otherViewsHidden) {
+            throw new Error(`转场映射或全屏遮挡异常：${JSON.stringify(transition)}`);
+          }
+          try {
+            await waitFor(async () => {
+              const finished = await evaluate("state.phase !== 'transition' || !document.getElementById('transition-error').hidden");
+              if (!finished && await evaluate("document.visibilityState !== 'visible'")) {
+                await command("Page.setWebLifecycleState", { state: "active" });
+                await command("Page.bringToFront");
+              }
+              return finished;
+            }, `${expected} 播放结束`, 12000);
+          } catch (error) {
+            const details = await evaluate(`(() => {
+              const frame = document.getElementById('transition-frame');
+              const doc = frame.contentDocument;
+              return {phase:state.phase, status:transitionStatus, time:frame.contentWindow.seaGate?.time,
+                duration:frame.contentWindow.seaGate?.duration, visibility:doc.visibilityState, hidden:doc.hidden,
+                canvas:doc.getElementById('stage')?.getBoundingClientRect().toJSON(), token:transitionToken};
+            })()`);
+            throw new Error(`${error.message} ${JSON.stringify(details)}`);
+          }
+          if (await visible("transition-error")) throw new Error(await evaluate("document.getElementById('transition-error-text').textContent"));
+          continue;
+        }
         const canVerifySkip = !storySkipVerified && await evaluate(
           "state.phase === 'after_story' && state.story?.line === 1 && state.story?.total > 1"
         );
@@ -171,6 +217,38 @@ async function main() {
       return !(await evaluate(`document.getElementById(${JSON.stringify(id)}).hidden`));
     }
 
+    async function playClipToEnd(filename) {
+      return evaluate(`(async () => {
+        const token = crypto.randomUUID();
+        const frame = document.createElement('iframe');
+        frame.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;z-index:2000';
+        document.body.appendChild(frame);
+        try {
+          return await new Promise((resolve, reject) => {
+            const messages = [];
+            const finish = (error, result) => {
+              clearTimeout(timer);
+              window.removeEventListener('message', onMessage);
+              error ? reject(error) : resolve(result);
+            };
+            const onMessage = (event) => {
+              if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.token !== token) return;
+              messages.push(event.data.type);
+              if (event.data.type === 'seagate-transition-error') finish(new Error(event.data.detail));
+              if (event.data.type === 'seagate-transition-ended') {
+                finish(null, { messages, duration: frame.contentWindow.seaGate?.duration, clip: frame.contentWindow.seaGate?.clip });
+              }
+            };
+            const timer = setTimeout(() => finish(new Error('动画结束通知超时')), 12000);
+            window.addEventListener('message', onMessage);
+            frame.src = '/assets/transitions/seagate/' + ${JSON.stringify(filename)} + '.html?gameTransition=' + encodeURIComponent(token);
+          });
+        } finally {
+          frame.remove();
+        }
+      })()`);
+    }
+
     async function reloadAndContinue(viewId, label) {
       await command("Page.reload", {});
       await waitFor(() => visible("menu-view"), "刷新后标题菜单");
@@ -188,6 +266,20 @@ async function main() {
       if (!ok) throw new Error(`无法点击 ${selector}`);
     }
 
+    async function clickDialog(selector, accept) {
+      const opened = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          dialogResolver = null;
+          reject(new Error(`等待确认框超时：${selector}`));
+        }, 15000);
+        dialogResolver = () => { clearTimeout(timer); resolve(); };
+      });
+      const clicked = click(selector);
+      await opened;
+      await command("Page.handleJavaScriptDialog", { accept });
+      await clicked;
+    }
+
     await command("Page.enable");
     await command("Runtime.enable");
     await command("Emulation.setEmulatedMedia", {
@@ -198,6 +290,14 @@ async function main() {
       async () => (await evaluate("document.readyState")) === "complete",
       "页面加载"
     );
+    for (const [filename, index] of [["clip-01", 0], ["clip-02", 1], ["clip-04", 3], ["clip-03", 2]]) {
+      const playback = await playClipToEnd(filename);
+      if (playback.duration !== 4.5 || playback.clip !== index ||
+          JSON.stringify(playback.messages) !== JSON.stringify(["seagate-transition-ready", "seagate-transition-ended"])) {
+        throw new Error(`${filename} 未完整播放或结束通知异常：${JSON.stringify(playback)}`);
+      }
+      console.log(`ok ${filename} 完整播放并在 ${playback.duration}s 正常结束`);
+    }
     await waitFor(async () => !(await evaluate("document.getElementById('auth').hidden")), "登录页显示");
     await screenshot("ai-game-login.png");
 
@@ -254,32 +354,28 @@ async function main() {
     await waitFor(async () => await visible("menu-view"), "返回主菜单");
     await click("#slots-open");
     await waitFor(() => evaluate("document.querySelectorAll('#save-slots .save-slot').length === 3 && !document.querySelector('#save-slots .save-slot:nth-child(2)').classList.contains('empty')"), "新槽写入");
-    const cancelOverwrite = click('#save-slots [data-slot-action="new"][data-slot="2"]');
-    await sleep(100);
-    await command("Page.handleJavaScriptDialog", { accept: false });
-    await cancelOverwrite;
+    await clickDialog('#save-slots [data-slot-action="new"][data-slot="2"]', false);
     if (!(await visible("save-slots-view"))) throw new Error("取消覆盖后离开了存档选择界面");
-    const confirmOverwrite = click('#save-slots [data-slot-action="new"][data-slot="2"]');
-    await sleep(100);
-    await command("Page.handleJavaScriptDialog", { accept: true });
-    await confirmOverwrite;
+    await clickDialog('#save-slots [data-slot-action="new"][data-slot="2"]', true);
     await waitFor(async () => await visible("story-view"), "确认覆盖已有存档");
     await click("#menu-btn");
     await waitFor(async () => await visible("menu-view"), "覆盖后返回主菜单");
     await click("#slots-open");
-    const cancelDelete = click('#save-slots [data-slot-action="delete"][data-slot="2"]');
-    await sleep(100);
-    await command("Page.handleJavaScriptDialog", { accept: false });
-    await cancelDelete;
+    await clickDialog('#save-slots [data-slot-action="delete"][data-slot="2"]', false);
     if (await evaluate("document.querySelector('#save-slots .save-slot:nth-child(2)').classList.contains('empty')")) throw new Error("取消删除仍然清除了存档");
-    const confirmDelete = click('#save-slots [data-slot-action="delete"][data-slot="2"]');
-    await sleep(100);
-    await command("Page.handleJavaScriptDialog", { accept: true });
-    await confirmDelete;
+    await clickDialog('#save-slots [data-slot-action="delete"][data-slot="2"]', true);
     await waitFor(() => evaluate("document.querySelector('#save-slots .save-slot:nth-child(2)').classList.contains('empty')"), "删除指定存档槽");
     await click("#save-slots-view [data-menu-back]");
     await click("#continue-btn");
     await waitFor(async () => await visible("story-view"), "继续初始冒险");
+    const openingProgress = await evaluate("({phase: state.phase, line: state.story?.line, title: state.story?.title})");
+    if (openingProgress.phase !== "map_story" || openingProgress.line !== 1 || !openingProgress.title.includes("序幕")) {
+      throw new Error(`新游戏未恢复在章节开场剧情：${JSON.stringify(openingProgress)}`);
+    }
+    await reloadAndContinue("story-view", "刷新后恢复章节开场剧情");
+    if (await evaluate("state.phase !== 'map_story' || state.story?.line !== 1")) {
+      throw new Error("刷新后未恢复章节开场剧情位置");
+    }
     console.log("ok 标题菜单、三槽新开/取消删除/删除、CG 空状态和音量保存");
     const storyVisual = await evaluate(`(() => {
       const panel = document.getElementById('story-panel');
@@ -346,7 +442,8 @@ async function main() {
       });
       await sleep(200);
       if (!(await visible("orientation-guard")) || !(await evaluate("document.querySelector('#orientation-guard p').textContent.includes('场景、立绘和对白')"))) {
-        throw new Error("剧情竖屏没有显示横屏提示");
+        const diagnostic = await evaluate("JSON.stringify({hidden:document.getElementById('orientation-guard').hidden, text:document.querySelector('#orientation-guard p').textContent, phase:state?.phase, width:innerWidth, height:innerHeight, screen})");
+        throw new Error(`剧情竖屏没有显示横屏提示：${diagnostic}`);
       }
       await command("Emulation.setDeviceMetricsOverride", {
         width: 667, height: 375, deviceScaleFactor: 1, mobile: true,
@@ -366,6 +463,9 @@ async function main() {
         throw new Error(`手机横屏剧情布局异常：${JSON.stringify(landscapeStory)}`);
       }
       await command("Emulation.clearDeviceMetricsOverride");
+      await command("Page.setWebLifecycleState", { state: "active" });
+      await command("Page.bringToFront");
+      await waitFor(() => evaluate("document.visibilityState === 'visible'"), "恢复浏览器页面可见状态");
       await sleep(200);
       console.log("ok 最低桌面剧情布局、手机竖屏旋转提示与横屏适配");
     }
@@ -373,6 +473,21 @@ async function main() {
     await evaluate("document.getElementById('story-panel').focus(); true;");
     await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await waitFor(() => evaluate("state.phase === 'map_story' && state.story?.line === 2"), "章节开场剧情按回车推进");
+    await storyUntil("map-view");
+    const openingMap = await evaluate(`({
+      phase: state.phase,
+      available: state.map.available,
+      start: state.node.id,
+      battleHidden: document.getElementById('battle-view').hidden,
+    })`);
+    if (openingMap.phase !== "map" || openingMap.available.length !== 1 ||
+        openingMap.available[0] !== openingMap.start || !openingMap.battleHidden) {
+      throw new Error(`章节开场后未停在起点选图：${JSON.stringify(openingMap)}`);
+    }
+    await click('.map-node[data-id="' + openingMap.start + '"]');
+    await waitFor(async () => await visible("story-view"), "起点战前剧情");
+    await storyUntil("battle-view");
     await waitFor(
       async () => (await visible("battle-view")) &&
         (await evaluate("document.querySelectorAll('#hand .card').length")) > 0,
@@ -1230,7 +1345,8 @@ async function main() {
           paths: paths.length,
           available: available.length,
           availableIds: available.map((node) => node.dataset.id),
-          connected,
+          connected: connected || (state.completed.length === 0 && available.length === 1 &&
+            state.map.nodes.find((item) => item.id === available[0]?.dataset.id)?.role === 'start'),
           targetSize: available.every((node) => {
             const rect = node.getBoundingClientRect();
             return rect.width >= 44 && rect.height >= 44;
@@ -1468,13 +1584,15 @@ async function main() {
               visited.length !== done.runLength || visited.some((id) => !done.completed.includes(id))) {
             throw new Error(`第一张地图路线完成状态异常：${JSON.stringify({ visited, done })}`);
           }
-          await storyUntil("battle-view");
+          await storyUntil("map-view");
           const entered = await evaluate(`({
             phase: state.phase, mapType: state.mapType, canStartMap2: state.canStartMap2,
-            gold: state.gold, deck: state.deck.length,
+            gold: state.gold, deck: state.deck.length, available: state.map.available,
+            start: state.node.id, battleHidden: document.getElementById('battle-view').hidden,
           })`);
           if (entered.mapType !== "map2" || entered.canStartMap2 || entered.gold !== 0 ||
-              entered.deck !== 8 || entered.phase === "complete") {
+              entered.deck !== 8 || entered.phase !== "map" || entered.available.length !== 1 ||
+              entered.available[0] !== entered.start || !entered.battleHidden) {
             throw new Error(`自动进入第二张地图状态异常：${JSON.stringify(entered)}`);
           }
     console.log("ok 第一张地图通关后自动进入第二张地图");
@@ -1500,6 +1618,9 @@ async function main() {
 
     console.log("ok 随机分支选择、单路收束与完整路线");
 
+    await click('.map-node[data-id="' + await evaluate("state.node.id") + '"]');
+    await waitFor(async () => await visible("story-view"), "第二张地图起点战前剧情");
+    await storyUntil("battle-view");
     await winBattle();
     await click("#result-action");
     await storyUntil("map-view");

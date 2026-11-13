@@ -15,6 +15,24 @@ from app import game as game_data
 
 DB_PATH = Path(DATA.name) / "game.db"
 
+
+def enter_start_battle(client):
+    for _ in range(40):
+        state = client.get("/api/state").json()["state"]
+        if state["phase"] == "node":
+            return state
+        if state["phase"] == "map":
+            start_id = state["node"]["id"]
+            assert state["map"]["available"] == [start_id], state["map"]
+            response = client.post("/api/map/select", json={"nodeId": start_id})
+        elif state["phase"] == "transition":
+            response = client.post("/api/story/advance", json={"transition": True})
+        else:
+            assert state["phase"] in ("map_story", "before_story", "after_story"), state
+            response = client.post("/api/story/advance", json={"skip": True})
+        assert response.status_code == 200, response.text
+    raise AssertionError("未能进入起点战斗节点")
+
 # Seed a real v1 schema before importing the app so startup exercises the upgrade path.
 legacy = sqlite3.connect(DB_PATH)
 legacy.executescript("""
@@ -51,14 +69,31 @@ def main():
     restored, changed = api.game.migrate_state(json.loads(api.db.conn().execute(
         "SELECT state FROM save_slots WHERE user_id=900 AND slot_id=1"
     ).fetchone()[0]))
-    assert not changed and api.game.public_state(restored)["phase"] == "before_story"
+    assert not changed and api.game.public_state(restored)["phase"] == "map_story"
     client = TestClient(app)
     response = client.post(
         "/api/register", json={"username": "futuresave123", "password": "test-pass-123"}
     )
     assert response.status_code == 200, response.text
+    assert response.json()["state"]["phase"] == "map_story"
+    assert client.post("/api/battle/start").status_code == 400
     response = client.post("/api/story/advance", json={"skip": False})
     assert response.status_code == 200, response.text
+    saved_opening = client.get("/api/state").json()["state"]
+    assert saved_opening["phase"] == "map_story" and saved_opening["story"]["line"] == 2
+    response = client.post("/api/story/advance", json={"skip": True})
+    assert response.status_code == 200 and response.json()["state"]["phase"] == "transition"
+    assert response.json()["state"]["transitionTarget"] == "map"
+    premature = client.post("/api/story/advance", json={"skip": True})
+    assert premature.status_code == 400
+    assert client.get("/api/state").json()["state"]["phase"] == "transition"
+    response = client.post("/api/story/advance", json={"transition": True})
+    assert response.status_code == 200 and response.json()["state"]["phase"] == "map"
+    assert response.json()["state"]["map"]["available"] == [response.json()["state"]["node"]["id"]]
+    assert client.post("/api/battle/start").status_code == 400
+    start_id = response.json()["state"]["node"]["id"]
+    selected = client.post("/api/map/select", json={"nodeId": start_id})
+    assert selected.status_code == 200 and selected.json()["state"]["phase"] == "before_story"
 
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -163,15 +198,7 @@ def main():
             "/api/register", json={"username": "battlepersist", "password": "password123"}
         )
         assert response.status_code == 200, response.text
-        for _ in range(40):
-            state = battle_client.get("/api/state").json()["state"]
-            if state["phase"] == "node":
-                break
-            assert state["phase"] in ("before_story", "after_story"), state
-            response = battle_client.post("/api/story/advance", json={"skip": True})
-            assert response.status_code == 200, response.text
-        else:
-            raise AssertionError("未能进入战斗节点")
+        state = enter_start_battle(battle_client)
         started = battle_client.post("/api/battle/start").json()["battle"]
         assert started and started["phase"] == "player"
         resumed = battle_client.post("/api/battle/start").json()["battle"]
@@ -196,14 +223,7 @@ def main():
         ).status_code == 200
         assert third_session.get("/api/save-slots").json()["activeSlot"] == 2
         third_session.close()
-        for _ in range(40):
-            other_state = second_session.get("/api/state").json()["state"]
-            if other_state["phase"] == "node":
-                break
-            assert other_state["phase"] in ("before_story", "after_story"), other_state
-            second_session.post("/api/story/advance", json={"skip": True})
-        else:
-            raise AssertionError("第二槽未能进入战斗节点")
+        enter_start_battle(second_session)
         assert second_session.post("/api/battle/start").status_code == 200
         assert battle_client.get("/api/state").json()["state"] == state
         assert battle_client.post("/api/battle/start").json()["battle"] == resumed

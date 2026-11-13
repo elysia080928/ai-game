@@ -93,6 +93,7 @@ MAPS = {
         "startEncounter": "tutorial",
         "startTemplate": "tutorial_start",
         "meta": MAP_META,
+        "openingStory": MAP_CONFIG.get("openingStory"),
     },
     "map2": {
         "runLengths": SECOND_MAP_RUN_LENGTHS,
@@ -106,6 +107,7 @@ MAPS = {
         "bossEncounter": SECOND_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": SECOND_MAP_CONFIG.get("bossTemplate", "boss2"),
         "meta": SECOND_MAP_META,
+        "openingStory": SECOND_MAP_CONFIG.get("openingStory"),
     },
     "map3": {
         "runLengths": THIRD_MAP_RUN_LENGTHS,
@@ -119,6 +121,7 @@ MAPS = {
         "bossEncounter": THIRD_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": THIRD_MAP_CONFIG.get("bossTemplate", "boss3"),
         "meta": THIRD_MAP_META,
+        "openingStory": THIRD_MAP_CONFIG.get("openingStory"),
     },
 }
 DEFAULT_MAP_TYPE = "map1"
@@ -139,9 +142,9 @@ NODE_TYPES = (
     "training",
     "relay",
 )
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
-VALID_PHASES = ("before_story", "node", "after_story", "map", "elite_reward", "complete")
+VALID_PHASES = ("map_story", "before_story", "node", "after_story", "transition", "map", "elite_reward", "complete")
 
 
 def validate_content():
@@ -452,6 +455,21 @@ def validate_content():
         raise RuntimeError("第三张地图终点模板非法")
 
     for map_type, definition in MAPS.items():
+        intro = definition.get("openingStory")
+        if (
+            not isinstance(intro, list)
+            or not intro
+            or any(
+                not isinstance(line, dict)
+                or not isinstance(line.get("speaker"), str)
+                or not line["speaker"]
+                or not isinstance(line.get("text"), str)
+                or not line["text"]
+                or line.get("options")
+                for line in intro
+            )
+        ):
+            raise RuntimeError(f"{map_type} 地图开场剧情非法")
         battles = definition.get("middleBattles", 0)
         extra = definition.get("extraBattleNodes", 0)
         for pool_name, layers in (
@@ -839,7 +857,7 @@ def new_state(seed=None, map_type=DEFAULT_MAP_TYPE):
     state = {
         "schemaVersion": SCHEMA_VERSION,
         "nodeId": map_data["start"],
-        "phase": "before_story",
+        "phase": "map_story",
         "storyLine": 0,
         "gold": 0,
         "cards": [_new_card(card_id) for card_id in INITIAL_DECK],
@@ -887,6 +905,8 @@ def current_node(state):
 
 
 def story_lines(state):
+    if state["phase"] == "map_story":
+        return MAPS[current_map_type(state)]["openingStory"]
     node = current_node(state)
     if node is None:
         return []
@@ -939,18 +959,33 @@ def _after_story_done(state):
     if node["next"]:
         state["phase"] = "map"
     elif current_map_type(state) == "map1":
-        state.clear()
-        state.update(new_state(map_type="map2"))
+        state["phase"] = "transition"
+        state["transitionTarget"] = "map2"
     elif current_map_type(state) == "map2":
-        state.clear()
-        state.update(new_state(map_type="map3"))
+        state["phase"] = "transition"
+        state["transitionTarget"] = "map3"
     else:
-        state["phase"] = "complete"
+        state["phase"] = "transition"
+        state["transitionTarget"] = "complete"
 
 
 def _normalize(state):
     for _ in range(100):
         if state["phase"] == "complete":
+            return
+        if state["phase"] == "transition":
+            return
+        if state["phase"] == "map_story":
+            lines = story_lines(state)
+            _skip_invisible(state, lines)
+            if state["storyLine"] >= len(lines):
+                if current_map_type(state) == "map1":
+                    state["phase"] = "transition"
+                    state["transitionTarget"] = "map"
+                else:
+                    state["phase"] = "map"
+                state["storyLine"] = 0
+                state["nodeData"] = {}
             return
         node = current_node(state)
         if node is None:
@@ -972,7 +1007,7 @@ def _normalize(state):
 
 
 def _require_story(state):
-    if state["phase"] not in ("before_story", "after_story"):
+    if state["phase"] not in ("map_story", "before_story", "after_story"):
         raise GameError("当前不在剧情阶段")
     lines = story_lines(state)
     if state["storyLine"] >= len(lines):
@@ -996,6 +1031,25 @@ def advance_story(state, skip_whole_slot=False):
         state["storyLine"] = len(lines)
     else:
         state["storyLine"] = index + 1
+    _normalize(state)
+
+
+def finish_transition(state):
+    if state.get("phase") != "transition":
+        raise GameError("当前没有待完成的转场")
+    target = state.pop("transitionTarget", None)
+    if target == "map":
+        state["phase"] = "map"
+    elif target == "map2" and current_map_type(state) == "map1":
+        state.clear()
+        state.update(new_state(map_type="map2"))
+    elif target == "map3" and current_map_type(state) == "map2":
+        state.clear()
+        state.update(new_state(map_type="map3"))
+    elif target == "complete" and current_map_type(state) == "map3":
+        state["phase"] = "complete"
+    else:
+        raise GameError("转场目标非法")
     _normalize(state)
 
 
@@ -1116,6 +1170,14 @@ def available_nodes(state):
     node = current_node(state)
     if node is None:
         return []
+    map_data = state.get("mapData")
+    if (
+        state["phase"] == "map"
+        and isinstance(map_data, dict)
+        and node["id"] == map_data.get("start")
+        and node["id"] not in state["completed"]
+    ):
+        return [node["id"]]
     route = state.get("route") or {}
     result = []
     for node_id in node["next"]:
@@ -1871,13 +1933,18 @@ def _effect_text(stats):
 
 
 def _story_view(state):
-    if state["phase"] not in ("before_story", "after_story"):
+    if state["phase"] not in ("map_story", "before_story", "after_story"):
         return None
     lines = story_lines(state)
     if not lines or state["storyLine"] >= len(lines):
         return None
     line = lines[state["storyLine"]]
     view = {
+        "title": (
+            f"{map_meta(current_map_type(state))['chapter']} · {map_meta(current_map_type(state))['title']} · 序幕"
+            if state["phase"] == "map_story"
+            else f"{current_node(state)['name']} · {'后日谈' if state['phase'] == 'after_story' else '前日谈'}"
+        ),
         "speaker": line.get("speaker", ""),
         "text": line["text"],
         "line": state["storyLine"] + 1,
@@ -2238,6 +2305,7 @@ def public_state(state):
     map_type = current_map_type(state)
     return {
         "phase": state["phase"],
+        "transitionTarget": state.get("transitionTarget"),
         "mapType": map_type,
         "mapMeta": map_meta(map_type),
         "canStartMap2": can_start_map2(state),
@@ -2321,6 +2389,28 @@ def migrate_state(state):
         raise ValueError("存档完成记录非法")
     if len(completed) != len(set(completed)):
         raise ValueError("存档完成记录重复")
+    if state["phase"] == "map_story" and (
+        not isinstance(map_data, dict)
+        or state["nodeId"] != map_data["start"]
+        or completed
+    ):
+        raise ValueError("地图开场剧情存档非法")
+    if state["phase"] == "transition":
+        transition_target = state.get("transitionTarget")
+        valid_targets = {
+            "map": current_map_type(state) == "map1" and not completed
+                and state["nodeId"] == map_data.get("start"),
+            "map2": current_map_type(state) == "map1" and map_data.get("boss") in completed
+                and state["nodeId"] == map_data.get("boss"),
+            "map3": current_map_type(state) == "map2" and map_data.get("boss") in completed
+                and state["nodeId"] == map_data.get("boss"),
+            "complete": current_map_type(state) == "map3" and map_data.get("boss") in completed
+                and state["nodeId"] == map_data.get("boss"),
+        } if isinstance(map_data, dict) else {}
+        if not valid_targets.get(transition_target, False):
+            raise ValueError("转场阶段存档非法")
+    else:
+        state.pop("transitionTarget", None)
     route = state.get("route")
     if isinstance(route, str):
         if route not in ("recruit", "signal"):

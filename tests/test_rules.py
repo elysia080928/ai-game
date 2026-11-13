@@ -309,8 +309,20 @@ def test_forced_discard():
 
 def test_story_flow_and_new_game():
     state = G.new_state(42)
-    assert state["phase"] == "before_story"
+    assert state["phase"] == "map_story"
     assert state["nodeId"] == state["mapData"]["start"]
+    G.advance_story(state)
+    assert state["phase"] == "map_story"
+    G.advance_story(state)
+    assert state["phase"] == "transition" and state["transitionTarget"] == "map"
+    restored, _ = G.migrate_state(json.loads(json.dumps(state)))
+    assert restored["phase"] == "transition" and restored["transitionTarget"] == "map"
+    G.finish_transition(state)
+    assert state["phase"] == "map"
+    assert G.available_nodes(state) == [state["mapData"]["start"]]
+    G.select_node(state, state["mapData"]["start"])
+    assert state["phase"] == "before_story"
+    assert G.public_state(state)["story"]["text"].startswith("别着急")
     G.advance_story(state)
     assert state["phase"] == "node"
     assert G.current_node(state)["role"] == "start"
@@ -318,6 +330,31 @@ def test_story_flow_and_new_game():
     assert state2["nodeId"] == state["nodeId"] and state2["gold"] == 0
     assert state2["mapData"]["nodes"] == state["mapData"]["nodes"]
     assert len(state2["cards"]) == 8
+
+
+def test_map_opening_story_save_and_legacy_story_compatibility():
+    state = G.new_state(42, "map2")
+    G.advance_story(state)
+    restored, changed = G.migrate_state(json.loads(json.dumps(state)))
+    assert not changed
+    assert restored["phase"] == "map_story" and restored["storyLine"] == 1
+    assert G.public_state(restored)["story"]["title"].startswith("第二章")
+
+    legacy = G.new_state(42)
+    legacy["schemaVersion"] = 7
+    legacy["phase"] = "before_story"
+    restored, changed = G.migrate_state(json.loads(json.dumps(legacy)))
+    assert restored["phase"] == "before_story" and restored["storyLine"] == 0
+    assert G.current_node(restored)["role"] == "start"
+
+    legacy["phase"] = "map_story"
+    legacy.pop("mapData")
+    try:
+        G.migrate_state(json.loads(json.dumps(legacy)))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("无地图数据的旧存档不能进入地图开场剧情")
 
 
 def test_story_options_flags_and_skip():
@@ -487,7 +524,10 @@ def test_migration_old_saves():
 
 def clear_story(state):
     for _ in range(20):
-        if state["phase"] not in ("before_story", "after_story"):
+        if state["phase"] == "transition":
+            G.finish_transition(state)
+            continue
+        if state["phase"] not in ("map_story", "before_story", "after_story"):
             return
         story = G.public_state(state)["story"] or {}
         if story.get("options"):
@@ -556,6 +596,10 @@ def test_generated_map_route_persistence_and_closed_branches():
     for seed in range(12):
         state = G.new_state(seed)
         clear_story(state)
+        assert state["phase"] == "map"
+        assert G.available_nodes(state) == [state["mapData"]["start"]]
+        G.select_node(state, state["mapData"]["start"])
+        clear_story(state)
         assert G.current_node(state)["role"] == "start"
         G.confirm_battle_result(state)
         clear_story(state)
@@ -604,7 +648,7 @@ def test_generated_map_route_persistence_and_closed_branches():
                     G.finish_node(state, node["id"])
             elif state["phase"] == "elite_reward":
                 G.elite_reward_leave(state)
-            elif state["phase"] in ("before_story", "after_story"):
+            elif state["phase"] in ("map_story", "before_story", "after_story"):
                 clear_story(state)
         assert state["mapData"]["mapType"] == "map2"
         assert state["phase"] != "complete" and state["completed"] == []
@@ -776,6 +820,10 @@ def test_second_map_route_persistence_and_completion_transition():
     for seed in range(6):
         state = G.new_state(seed, "map2")
         clear_story(state)
+        assert state["phase"] == "map"
+        assert G.available_nodes(state) == [state["mapData"]["start"]]
+        G.select_node(state, state["mapData"]["start"])
+        clear_story(state)
         assert state["mapData"]["mapType"] == "map2"
         G.confirm_battle_result(state)
         clear_story(state)
@@ -797,9 +845,12 @@ def test_second_map_route_persistence_and_completion_transition():
                     G.finish_node(state, node["id"])
             elif state["phase"] == "elite_reward":
                 G.elite_reward_leave(state)
-            elif state["phase"] in ("before_story", "after_story"):
+            elif state["phase"] in ("map_story", "before_story", "after_story"):
                 clear_story(state)
         assert state["mapData"]["mapType"] == "map3"
+        assert state["phase"] == "map"
+        G.select_node(state, state["mapData"]["start"])
+        clear_story(state)
         assert state["phase"] == "node"
         G.confirm_battle_result(state)
         clear_story(state)
@@ -816,7 +867,7 @@ def test_second_map_route_persistence_and_completion_transition():
                     G.finish_node(state, node["id"])
             elif state["phase"] == "elite_reward":
                 G.elite_reward_leave(state)
-            elif state["phase"] in ("before_story", "after_story"):
+            elif state["phase"] in ("map_story", "before_story", "after_story"):
                 clear_story(state)
         assert state["phase"] == "complete"
         assert len(state["completed"]) == 12
@@ -846,14 +897,19 @@ def test_second_map_route_persistence_and_completion_transition():
         raise AssertionError("未知地图类型应拒绝读取")
 
 
-def test_map1_completion_auto_starts_map2():
+def test_map_chapter_changes_wait_for_transition_completion():
     state = G.new_state(11, "map1")
     boss = next(node for node in state["mapData"]["nodes"] if node["role"] == "boss")
     state["nodeId"] = boss["id"]
     state["phase"] = "after_story"
+    state["completed"] = [boss["id"]]
     G._after_story_done(state)
-    assert state["mapData"]["mapType"] == "map2"
-    assert state["phase"] != "complete"
+    assert state["mapData"]["mapType"] == "map1"
+    assert state["phase"] == "transition" and state["transitionTarget"] == "map2"
+    restored, changed = G.migrate_state(json.loads(json.dumps(state)))
+    assert not changed and restored["phase"] == "transition"
+    G.finish_transition(state)
+    assert state["mapData"]["mapType"] == "map2" and state["phase"] == "map_story"
     assert state["gold"] == 0
     assert len(state["cards"]) == len(G.INITIAL_DECK)
     assert state["completed"] == []
@@ -861,15 +917,21 @@ def test_map1_completion_auto_starts_map2():
     boss2 = next(node for node in state["mapData"]["nodes"] if node["role"] == "boss")
     state["nodeId"] = boss2["id"]
     state["phase"] = "after_story"
+    state["completed"] = [boss2["id"]]
     G._after_story_done(state)
-    assert state["mapData"]["mapType"] == "map3"
-    assert state["phase"] != "complete"
+    assert state["mapData"]["mapType"] == "map2"
+    assert state["phase"] == "transition" and state["transitionTarget"] == "map3"
+    G.finish_transition(state)
+    assert state["mapData"]["mapType"] == "map3" and state["phase"] == "map_story"
 
     boss3 = next(node for node in state["mapData"]["nodes"] if node["role"] == "boss")
     state["nodeId"] = boss3["id"]
     state["phase"] = "after_story"
+    state["completed"] = [boss3["id"]]
     G._after_story_done(state)
     assert state["mapData"]["mapType"] == "map3"
+    assert state["phase"] == "transition" and state["transitionTarget"] == "complete"
+    G.finish_transition(state)
     assert state["phase"] == "complete"
 
 

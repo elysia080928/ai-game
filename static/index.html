@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>机偶回路 · MVP</title>
-  <link rel="stylesheet" href="/style.css?v=20261113-visual-novel-4">
+  <link rel="stylesheet" href="/style.css?v=20261113-transitions-1">
 </head>
 <body>
   <div id="auth" class="screen auth-screen">
@@ -60,6 +60,15 @@
       <section id="cg-view" class="view menu-subview" hidden>
         <div class="subview-head"><div><p class="eyebrow">MEMORY GALLERY</p><h1>记忆回廊</h1></div><button class="ghost" data-menu-back>返回主菜单</button></div>
         <div class="gallery-empty"><span class="gallery-mark" aria-hidden="true">✦</span><h2>尚无已解锁的 CG</h2><p>故事中的记忆将在解锁后收录于此。</p></div>
+      </section>
+
+      <section id="transition-view" class="view" hidden aria-label="章节转场">
+        <iframe id="transition-frame" title="章节转场动画" scrolling="no"></iframe>
+        <div id="transition-error" class="transition-error" hidden role="alert">
+          <p id="transition-error-text">转场动画未能完成。</p>
+          <button id="transition-retry" type="button">重试动画</button>
+          <button id="transition-continue" class="ghost" type="button">继续游戏</button>
+        </div>
       </section>
 
       <section id="story-view" class="view" hidden>
@@ -335,6 +344,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   </div>
 
-  <script src="/app.js?v=20261113-visual-novel-2"></script>
+  <script src="/app.js?v=20261113-transitions-2"></script>
 </body>
 </html>

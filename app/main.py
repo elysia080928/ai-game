@@ -50,6 +50,7 @@ class AuthBody(BaseModel):
 
 class StoryBody(BaseModel):
     skip: bool = False
+    transition: bool = False
 
 
 class DeployBody(BaseModel):
@@ -490,7 +491,12 @@ def new_map3(user=Depends(current_user)):
 def story_advance(body: StoryBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
-        game.advance_story(state, skip_whole_slot=body.skip)
+        if body.transition:
+            if body.skip:
+                raise game.GameError("转场请求非法")
+            game.finish_transition(state)
+        else:
+            game.advance_story(state, skip_whole_slot=body.skip)
         _save_state(user["id"], state, user["slot"])
         if state["phase"] != "node":
             _clear_battle(user["id"], user["slot"])

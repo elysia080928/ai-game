@@ -377,6 +377,10 @@
     "subtitle": "THE BORDERLANDS",
     "caption": "一张尚未写完的地图",
     "destination": "镜像核心",
+    "openingStory": [
+      {"speaker": "爱", "text": "前方就是回路边境，旧航道在这里分成了许多支路。"},
+      {"speaker": "爱", "text": "地图已经展开。先选一处落脚点吧，我会陪你一起看清这片区域。"}
+    ],
     "eventTypes": [
       "recruit", "signal", "relay", "adventure", "calibration", "drones",
       "drift", "recycle", "shop", "trial", "training"
@@ -432,6 +436,10 @@
     "subtitle": "THE DEEP CIRCUIT",
     "caption": "记忆正在变得清晰",
     "destination": "深层核心",
+    "openingStory": [
+      {"speaker": "爱", "text": "深层回路正在回放我们走过的路线，连战斗记录也被保存了下来。"},
+      {"speaker": "爱", "text": "我会继续陪你往前。先看看地图，选择这次要走的路吧。"}
+    ],
     "templates": {
       "boss2": {
         "type": "battle",
@@ -458,6 +466,10 @@
     "subtitle": "THE ABYSSAL ARCHIVE",
     "caption": "沉在海底的记忆库",
     "destination": "海渊中枢",
+    "openingStory": [
+      {"speaker": "爱", "text": "静海档案就在前方，那里封存着很久以前的信号与记忆。"},
+      {"speaker": "爱", "text": "无论里面记录了什么，我都想和你一起找到答案。我们从地图开始吧。"}
+    ],
     "templates": {
       "boss3": {
         "type": "battle",

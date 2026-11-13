@@ -73,7 +73,10 @@ def advance_state(client):
         state = client.state()
         if state["phase"] in ("map", "complete"):
             return state
-        assert state["phase"] in ("before_story", "after_story"), state
+        if state["phase"] == "transition":
+            client.ok("/api/story/advance", {"transition": True})
+            continue
+        assert state["phase"] in ("map_story", "before_story", "after_story"), state
         story = state.get("story") or {}
         if story.get("options"):
             client.ok("/api/story/choose", {"optionId": story["options"][0]["id"]})
@@ -87,13 +90,37 @@ def advance_to_node(client):
         state = client.state()
         if state["phase"] == "node":
             return state
-        assert state["phase"] in ("before_story", "after_story"), state
+        if state["phase"] == "map":
+            if state["completed"]:
+                raise AssertionError("已开始路线时应先由调用方选择节点")
+            start_id = state["node"]["id"]
+            assert state["map"]["available"] == [start_id], state["map"]
+            client.ok("/api/map/select", {"nodeId": start_id})
+            continue
+        if state["phase"] == "transition":
+            client.ok("/api/story/advance", {"transition": True})
+            continue
+        assert state["phase"] in ("map_story", "before_story", "after_story"), state
         story = state.get("story") or {}
         if story.get("options"):
             client.ok("/api/story/choose", {"optionId": story["options"][0]["id"]})
         else:
             client.ok("/api/story/advance", {"skip": True})
     raise AssertionError("无法进入节点")
+
+
+def advance_until_transition(client):
+    for _ in range(30):
+        state = client.state()
+        if state["phase"] == "transition":
+            return state
+        assert state["phase"] == "after_story", state
+        story = state.get("story") or {}
+        if story.get("options"):
+            client.ok("/api/story/choose", {"optionId": story["options"][0]["id"]})
+        else:
+            client.ok("/api/story/advance", {"skip": True})
+    raise AssertionError("通关剧情未进入章节转场")
 
 
 def map_status(state):
@@ -315,6 +342,13 @@ def complete_event(client, node_type):
 
 
 def test_route(client):
+    opening = client.state()
+    assert opening["phase"] == "map_story" and opening["map"] is None
+    assert opening["story"]["title"].startswith("第一章")
+    map_state = advance_state(client)
+    assert map_state["phase"] == "map"
+    assert map_state["map"]["available"] == [map_state["node"]["id"]]
+    client.fail("/api/battle/start", {})
     state = advance_to_node(client)
     assert state["node"]["role"] == "start", state["node"]
     early_encounter = state["node"]["encounter"]
@@ -398,9 +432,16 @@ def test_route(client):
             complete_event(client, node["type"])
         if node["role"] == "boss":
             assert CONTENT["encounters"][node["encounter"]]["reward"]["gold"] == 0, "终点战不应配置金币奖励"
-    state = advance_to_node(client)
-    assert state["phase"] == "node" and state["mapType"] == "map2", state
-    assert state["node"]["role"] == "start", state["node"]
+    transition = advance_until_transition(client)
+    assert transition["phase"] == "transition" and transition["transitionTarget"] == "map2", transition
+    client.ok("/api/story/advance", {"transition": True})
+    state = client.state()
+    assert state["phase"] == "map_story" and state["mapType"] == "map2", state
+    assert state["story"]["title"].startswith("第二章")
+    state = advance_state(client)
+    assert state["phase"] == "map" and state["map"]["available"] == [state["node"]["id"]]
+    assert client.ok("/api/state")["state"]["phase"] == "map"
+    client.fail("/api/battle/start", {})
     assert state["canStartMap2"] is False
     assert state["gold"] == 0 and len(state["deck"]) == 8, state
     return state
@@ -408,10 +449,10 @@ def test_route(client):
 
 def test_second_map(client):
     state = client.state()
-    assert state["phase"] == "node" and state["mapType"] == "map2", state
+    assert state["phase"] == "map" and state["mapType"] == "map2", state
     assert state["canStartMap2"] is False
     assert state["gold"] == 0, state
-    assert len(state["deck"]) == 8 and state["map"] is None
+    assert len(state["deck"]) == 8 and state["map"] is not None
 
     state = advance_to_node(client)
     assert state["node"]["role"] == "start", state["node"]
@@ -453,8 +494,14 @@ def test_second_map(client):
                 assert state["phase"] == "after_story", state
         else:
             complete_event(client, node["type"])
-    state = advance_to_node(client)
-    assert state["phase"] == "node" and state["mapType"] == "map3", state
+    transition = advance_until_transition(client)
+    assert transition["phase"] == "transition" and transition["transitionTarget"] == "map3", transition
+    client.ok("/api/story/advance", {"transition": True})
+    state = client.state()
+    assert state["phase"] == "map_story" and state["mapType"] == "map3", state
+    assert state["story"]["title"].startswith("第三章")
+    state = advance_state(client)
+    assert state["phase"] == "map" and state["map"]["available"] == [state["node"]["id"]]
     assert len(state["completed"]) == 0
     assert state["canStartMap3"] is False
     client.fail("/api/game/map3", {})
@@ -463,7 +510,7 @@ def test_second_map(client):
 
 def test_third_map(client):
     state = client.state()
-    assert state["phase"] == "node" and state["mapType"] == "map3", state
+    assert state["phase"] == "map" and state["mapType"] == "map3", state
     assert len(state["deck"]) == 8 and state["gold"] == 0
     state = advance_to_node(client)
     win_battle(client, state["node"]["encounter"])
@@ -487,7 +534,11 @@ def test_third_map(client):
                 client.ok("/api/elite/reward/leave", {})
         else:
             complete_event(client, node["type"])
-    state = advance_state(client)
+    transition = advance_until_transition(client)
+    assert transition["phase"] == "transition" and transition["transitionTarget"] == "complete", transition
+    client.fail("/api/story/advance", {"transition": True, "skip": True})
+    client.ok("/api/story/advance", {"transition": True})
+    state = client.state()
     assert state["complete"] and state["mapType"] == "map3", state
     assert len(state["completed"]) == 12
     client.fail("/api/game/map3", {})
@@ -510,7 +561,7 @@ def main():
     client.password = "test-pass-123"
     client.ok("/api/register", {"username": name, "password": client.password})
     state = client.state()
-    assert state["phase"] == "before_story" and state["gold"] == 0, state
+    assert state["phase"] == "map_story" and state["gold"] == 0, state
     assert state["node"]["role"] == "start" and "mapData" not in state
     assert len(state["deck"]) == 8 and len({card["uid"] for card in state["deck"]}) == 8
     assert state["map"] is None
@@ -524,7 +575,7 @@ def main():
     other.fail("/api/game/map2", {})
     finished = test_route(client)
     assert finished["complete"] is False and finished["mapType"] == "map2"
-    assert finished["phase"] == "node" and finished["node"]["role"] == "start"
+    assert finished["phase"] == "map" and finished["node"]["role"] == "start"
 
     finished = test_second_map(client)
     assert finished["complete"] is False and finished["mapType"] == "map3"
@@ -536,7 +587,7 @@ def main():
     client.fail("/api/game/new", {"confirm": False})
     client.ok("/api/game/new", {"confirm": True})
     state = client.state()
-    assert state["phase"] == "before_story" and state["gold"] == 0
+    assert state["phase"] == "map_story" and state["gold"] == 0
     assert state["node"]["role"] == "start"
     assert state["runLength"] == 8
     assert state["mapType"] == "map1" and state["canStartMap2"] is False

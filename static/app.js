@@ -30,6 +30,10 @@ let storyTypingTimer = null;
 let storyLineKey = "";
 let storyCharacters = [];
 let storyVisibleCharacters = 0;
+let transitionKey = null;
+let transitionToken = null;
+let transitionStatus = null;
+let transitionTimer = null;
 
 const NODE_TYPES = {
   battle: "战斗",
@@ -46,6 +50,7 @@ const NODE_TYPES = {
   relay: "中继",
 };
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
+const TRANSITION_CLIPS = { map: "clip-01", map2: "clip-02", map3: "clip-04", complete: "clip-03" };
 let autoMap2 = false;
 let autoMap3 = false;
 
@@ -186,7 +191,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["menu-view", "save-slots-view", "cg-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
+  ["menu-view", "save-slots-view", "cg-view", "transition-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -214,7 +219,8 @@ function renderSaveSlots() {
 }
 
 function render() {
-  if (screen !== "game" || !state || !["before_story", "after_story"].includes(state.phase)) {
+  if (screen !== "game" || !state || state.phase !== "transition") clearTransition();
+  if (screen !== "game" || !state || !["map_story", "before_story", "after_story"].includes(state.phase)) {
     if (storyTypingTimer !== null) clearInterval(storyTypingTimer);
     storyTypingTimer = null;
     storyLineKey = "";
@@ -224,7 +230,7 @@ function render() {
   const loggedIn = !!username;
   $("auth").hidden = loggedIn;
   $("game").hidden = !loggedIn;
-  updateViewportGuard(loggedIn && screen === "game");
+  updateViewportGuard(loggedIn && screen === "game" && state?.phase !== "transition");
   if (!loggedIn) {
     $("auth-error").textContent = "";
     return;
@@ -261,6 +267,8 @@ function render() {
   $("hud-gold").textContent = state.gold;
   if (state.complete) {
     $("hud-node").textContent = "路线完成";
+  } else if (state.phase === "map_story") {
+    $("hud-node").textContent = `${state.mapMeta?.chapter || "新章节"} 序幕`;
   } else if (state.phase === "map") {
     $("hud-node").textContent = `路线选择（${state.progress}/${state.runLength}）`;
   } else if (state.node) {
@@ -273,11 +281,15 @@ function render() {
     renderComplete();
     return;
   }
+  if (state.phase === "transition") {
+    renderTransition();
+    return;
+  }
   if (state.phase === "map") {
     renderMap();
     return;
   }
-  if (state.phase === "before_story" || state.phase === "after_story") {
+  if (state.phase === "map_story" || state.phase === "before_story" || state.phase === "after_story") {
     renderStory();
     return;
   }
@@ -393,7 +405,7 @@ function renderStory() {
   }
   $("story-view").hidden = false;
   $("story-panel").className = "story-panel";
-  $("story-node").textContent = `${state.node.name} · ${state.phase === "after_story" ? "后日谈" : "前日谈"}`;
+  $("story-node").textContent = story.title || `${state.node.name} · ${state.phase === "after_story" ? "后日谈" : "前日谈"}`;
   $("story-speaker").textContent = story.speaker;
   $("story-text").setAttribute("aria-label", story.text);
   $("story-progress").textContent = `${story.line} / ${story.total}`;
@@ -426,6 +438,89 @@ function renderStory() {
   $("story-skip").disabled = options.length > 0;
   $("story-options").hidden = options.length === 0 || storyVisibleCharacters < storyCharacters.length;
   $("story-continue-hint").hidden = options.length > 0 && storyVisibleCharacters >= storyCharacters.length;
+}
+
+function clearTransition() {
+  clearTimeout(transitionTimer);
+  transitionTimer = null;
+  if (transitionKey !== null) $("transition-frame").removeAttribute("src");
+  transitionKey = null;
+  transitionToken = null;
+  transitionStatus = null;
+}
+
+function failTransition(message) {
+  clearTimeout(transitionTimer);
+  transitionTimer = null;
+  transitionStatus = "failed";
+  $("transition-error-text").textContent = message;
+  $("transition-error").hidden = false;
+}
+
+function startTransitionPlayback(target) {
+  clearTimeout(transitionTimer);
+  transitionStatus = "loading";
+  transitionToken = crypto.randomUUID();
+  $("transition-error").hidden = true;
+  const clip = TRANSITION_CLIPS[target];
+  $("transition-frame").src = `/assets/transitions/seagate/${clip}.html?gameTransition=${encodeURIComponent(transitionToken)}`;
+  transitionTimer = setTimeout(() => failTransition("转场动画加载超时。可以重试动画，或继续游戏。"), 30000);
+}
+
+function renderTransition() {
+  const target = state.transitionTarget;
+  const clip = TRANSITION_CLIPS[target];
+  $("transition-view").hidden = false;
+  if (!clip) {
+    if (transitionStatus !== "failed") {
+      $("transition-continue").disabled = true;
+      failTransition("转场目标无效，无法继续播放。");
+    }
+    return;
+  }
+  $("transition-continue").disabled = false;
+  const key = `${state.mapType}:${target}`;
+  if (key !== transitionKey) {
+    transitionKey = key;
+    startTransitionPlayback(target);
+  }
+}
+
+async function completeTransition() {
+  if (busy || !["playing", "failed"].includes(transitionStatus)) return;
+  busy = true;
+  transitionStatus = "finishing";
+  clearTimeout(transitionTimer);
+  try {
+    const data = await api("/api/story/advance", { transition: true });
+    apply(data);
+  } catch (error) {
+    try {
+      const latest = await api("/api/state");
+      if (latest.state?.phase !== "transition") {
+        apply(latest);
+        return;
+      }
+    } catch (_) { /* 网络仍不可用时保留转场重试入口 */ }
+    failTransition(error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+function onTransitionMessage(event) {
+  const message = event.data;
+  if (event.origin !== location.origin || event.source !== $("transition-frame").contentWindow
+      || !message || message.token !== transitionToken) return;
+  if (message.type === "seagate-transition-ready" && transitionStatus === "loading") {
+    transitionStatus = "playing";
+    clearTimeout(transitionTimer);
+    transitionTimer = setTimeout(() => failTransition("转场动画未能正常结束。可以重试动画，或继续游戏。"), 30000);
+  } else if (message.type === "seagate-transition-ended" && transitionStatus === "playing") {
+    completeTransition();
+  } else if (message.type === "seagate-transition-error" && ["loading", "playing"].includes(transitionStatus)) {
+    failTransition(message.detail || "转场动画资源加载失败。可以重试动画，或继续游戏。");
+  }
 }
 
 async function advanceStory(skip) {
@@ -563,7 +658,9 @@ function renderMap() {
     </div>
     <p class="map-instruction">每一次选择，都留下一条不同的路。</p>`;
   $("map-route").textContent = `已行进 ${state.progress} / ${state.runLength}`;
-  const hint = available.length > 1
+  const hint = state.completed.length === 0 && state.node?.role === "start"
+    ? "选择起点，开启本章旅程。"
+    : available.length > 1
     ? "选择一条分支；确认后其余分支会关闭。"
     : "选择下一个节点，进入其前置剧情。";
   $("map-hint").textContent = state.pendingChallenge
@@ -1590,6 +1687,9 @@ function openSettings() {
 }
 
 function bindEvents() {
+  window.addEventListener("message", onTransitionMessage);
+  $("transition-retry").addEventListener("click", () => startTransitionPlayback(state?.transitionTarget));
+  $("transition-continue").addEventListener("click", completeTransition);
   window.addEventListener("resize", () => updateViewportGuard(!!username && screen === "game"));
   window.addEventListener("orientationchange", () => updateViewportGuard(!!username && screen === "game"));
   document.addEventListener("click", (event) => {
