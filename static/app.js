@@ -729,7 +729,7 @@ function unitHtml(unit, side, column) {
     ? [width > 1 ? `占 ${width} 格` : "", unit.shift ? "右移" : "", unit.anchor ? "锚定" : ""].filter(Boolean).join(" · ")
     : "";
   const label = unit
-    ? `${span} 列，${unit.name}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
+    ? `${span} 列，${unit.name}，等级 ${unit.level ?? 1}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
     : `${column} 列，空列`;
   if (!unit) {
     return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}"><span>空列</span></div>`;
@@ -737,7 +737,7 @@ function unitHtml(unit, side, column) {
   const style = width > 1 ? ` style="grid-column: span ${width};"` : "";
   return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit, side)}</div>
-      <div class="unit-name">${esc(unit.name)}${notes ? ` <small>${notes}</small>` : ""}</div>
+      <div class="unit-name"><span>${esc(unit.name)}</span><small class="unit-level">LV ${unit.level ?? 1}</small>${notes ? ` <small>${notes}</small>` : ""}</div>
       <div class="unit-stats"><span class="atk">攻 ${unit.atk}</span><span class="hp">耐 ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">盾 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">拦截 ${unit.guard}</span>` : ""}</div>
     </div>`;
 }
@@ -837,7 +837,7 @@ function renderForecast() {
       return `<div class="forecast-item ${current ? "current" : "next"}${width > 1 ? " wide" : ""}">
           <span class="forecast-when">${current ? "本回合" : "下回合"} · ${range}</span>
           <span class="forecast-name">${esc(item.name)}</span>
-          <span class="forecast-stats">⚔ ${item.atk} · ❤ ${item.hp}${trait ? ` · ${trait}` : ""}</span>
+          <span class="forecast-stats">攻 ${item.atk} · 耐 ${item.hp}${trait ? ` · ${trait}` : ""}</span>
         </div>`;
     }).join("");
     return `<div class="forecast-cell${items.length ? "" : " empty"}" data-column="${column}">
