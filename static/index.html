@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>机偶回路 · MVP</title>
-  <link rel="stylesheet" href="/style.css?v=20261113-transitions-1">
+  <link rel="stylesheet" href="/style.css?v=20261114-battle-layout-2">
 </head>
 <body>
   <div id="auth" class="screen auth-screen">
@@ -118,8 +118,7 @@
               <button id="tutorial-next" class="primary">开始部署</button>
             </div>
           </div>
-          <div class="leader enemy"><span>敌方领袖</span><b id="enemy-hp">15</b></div>
-          <div class="turn-box">
+          <div class="turn-box" role="group" aria-label="战斗状态">
             <span>回合 <b id="turn">1</b></span>
             <span>能量 <b id="energy">4</b></span>
             <span>牌堆 <b id="deck-count">0</b></span>
@@ -130,24 +129,25 @@
         <div class="forecast-row" id="forecast-row"></div>
         <div class="battle-table" id="battle-table">
           <div class="table-caption enemy-caption"><span>敌方部署</span><i></i></div>
+          <div class="leader enemy"><span>敌方领袖</span><b id="enemy-hp">15</b></div>
           <div class="board-row enemy-row" id="enemy-row"></div>
           <div class="board-middle"><span>对位战线</span></div>
+          <div class="leader player"><span>己方领袖</span><b id="player-hp">15</b></div>
           <div class="board-row player-row" id="player-row"></div>
           <div class="table-caption player-caption"><i></i><span>我的部署</span></div>
         </div>
 
         <div class="battle-bottom">
-          <div class="leader player"><span>己方领袖</span><b id="player-hp">15</b></div>
+          <div class="hand-dock" id="hand-dock">
+            <button id="hand-toggle" class="hand-toggle" type="button" aria-expanded="false" aria-controls="hand">手牌 <span id="hand-count">0</span></button>
+            <div class="hand" id="hand"></div>
+          </div>
           <div class="battle-actions">
             <button id="end-turn" class="primary">结束回合</button>
             <button id="recycle-btn" class="ghost">回收模式</button>
           </div>
         </div>
 
-        <div class="hand-dock" id="hand-dock">
-          <button id="hand-toggle" class="hand-toggle" type="button" aria-expanded="false" aria-controls="hand">手牌 <span id="hand-count">0</span></button>
-          <div class="hand" id="hand"></div>
-        </div>
         <div class="battle-log" id="log"></div>
 
         <div class="overlay" id="discard-panel" hidden>
@@ -344,6 +344,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   </div>
 
-  <script src="/app.js?v=20261113-transitions-2"></script>
+  <script src="/app.js?v=20261114-battle-layout"></script>
 </body>
 </html>

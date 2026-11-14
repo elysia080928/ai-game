@@ -264,15 +264,17 @@ function render() {
     return;
   }
 
-  $("hud-gold").textContent = state.gold;
+  $("hud-gold").textContent = Number.isFinite(state.gold) ? state.gold : "—";
+  const progress = Number.isInteger(state.progress) && Number.isInteger(state.runLength) && state.runLength > 0
+    ? `（${state.progress}/${state.runLength}）` : "";
   if (state.complete) {
     $("hud-node").textContent = "路线完成";
   } else if (state.phase === "map_story") {
     $("hud-node").textContent = `${state.mapMeta?.chapter || "新章节"} 序幕`;
   } else if (state.phase === "map") {
-    $("hud-node").textContent = `路线选择（${state.progress}/${state.runLength}）`;
+    $("hud-node").textContent = `路线选择${progress}`;
   } else if (state.node) {
-    $("hud-node").textContent = `${state.node.name}（${state.progress}/${state.runLength}）`;
+    $("hud-node").textContent = `${state.node.name || "当前节点"}${progress}`;
   } else {
     $("hud-node").textContent = "";
   }
@@ -657,7 +659,7 @@ function renderMap() {
       <span><i class="legend-closed" aria-hidden="true">×</i>已关闭</span>
     </div>
     <p class="map-instruction">每一次选择，都留下一条不同的路。</p>`;
-  $("map-route").textContent = `已行进 ${state.progress} / ${state.runLength}`;
+  $("map-route").textContent = `已行进 ${Number.isInteger(state.progress) ? state.progress : "—"} / ${Number.isInteger(state.runLength) ? state.runLength : "—"}`;
   const hint = state.completed.length === 0 && state.node?.role === "start"
     ? "选择起点，开启本章旅程。"
     : available.length > 1
@@ -732,9 +734,9 @@ function unitHtml(unit, side, column) {
     ? `${span} 列，${unit.name}，等级 ${unit.level ?? 1}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
     : `${column} 列，空列`;
   if (!unit) {
-    return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}"><span>空列</span></div>`;
+    return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}" style="grid-column: ${column};"><span>空列</span></div>`;
   }
-  const style = width > 1 ? ` style="grid-column: span ${width};"` : "";
+  const style = ` style="grid-column: ${unit.column} / span ${width};"`;
   return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit, side)}</div>
       <div class="unit-name"><span>${esc(unit.name)}</span><small class="unit-level" aria-hidden="true">LV ${unit.level ?? 1}</small>${notes ? ` <small>${notes}</small>` : ""}</div>
@@ -823,11 +825,7 @@ function cardHtml(card, selected, draggable = false) {
 
 function renderForecast() {
   const forecast = battle.forecast || [];
-  if (!forecast.length) {
-    $("forecast-row").innerHTML = `<div class="forecast-empty">没有待预告内容</div>`;
-    return;
-  }
-  $("forecast-row").innerHTML = [1, 2, 3, 4].map((column) => {
+  const cells = [1, 2, 3, 4].map((column) => {
     const items = forecast.filter((item) => item.column === column);
     const content = items.map((item) => {
       const current = item.turn === battle.turn;
@@ -841,9 +839,10 @@ function renderForecast() {
         </div>`;
     }).join("");
     return `<div class="forecast-cell${items.length ? "" : " empty"}" data-column="${column}">
-        <span class="forecast-col">${column} 列</span>${content}
+      <span class="forecast-col">${column} 列</span>${content || "<span class='forecast-empty'>—</span>"}
       </div>`;
   }).join("");
+  $("forecast-row").innerHTML = cells;
 }
 
 function renderTutorial() {
