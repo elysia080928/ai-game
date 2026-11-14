@@ -1415,6 +1415,8 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   border: 1px solid rgba(176, 130, 82, .48);
   border-radius: 5px;
   background:
+    linear-gradient(90deg, transparent 24.88%, rgba(176, 130, 82, .12) 24.88% 24.96%, transparent 24.96% 49.88%, rgba(176, 130, 82, .12) 49.88% 49.96%, transparent 49.96% 74.88%, rgba(176, 130, 82, .12) 74.88% 74.96%, transparent 74.96%),
+    repeating-linear-gradient(0deg, rgba(122, 216, 194, .025) 0 1px, transparent 1px 22px),
     linear-gradient(180deg, rgba(6, 13, 12, .12), rgba(6, 13, 12, .28));
   box-shadow: inset 0 0 0 4px rgba(4, 8, 8, .24), inset 0 0 0 6px rgba(176, 130, 82, .08), 0 22px 48px rgba(0, 0, 0, .26);
 }
@@ -1431,10 +1433,10 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #battle-view .enemy-caption { color: #d8867e; }
 #battle-view .player-caption { color: var(--table-mint); }
 #battle-view .board-middle {
-  min-height: 13px;
+  min-height: 9px;
   border-top: 1px solid rgba(122, 216, 194, .48);
   border-bottom: 1px solid rgba(176, 130, 82, .58);
-  background: linear-gradient(180deg, rgba(7, 13, 12, .88), rgba(23, 30, 25, .88));
+  background: linear-gradient(180deg, rgba(16, 28, 24, .62), rgba(7, 14, 13, .48));
   color: #d3bb8e;
   letter-spacing: .2em;
   text-shadow: 0 0 8px rgba(122, 216, 194, .42);
@@ -1453,12 +1455,15 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .38), inset 0 -14px 0 rgba(0, 0, 0, .12);
 }
 #battle-view .slot.empty {
-  border-color: rgba(122, 216, 194, .16);
-  background: rgba(6, 12, 11, .26);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .24);
+  border-color: rgba(122, 216, 194, .08);
+  background: repeating-linear-gradient(0deg, rgba(122, 216, 194, .025) 0 1px, transparent 1px 22px);
+  box-shadow: inset 0 1px rgba(176, 130, 82, .08), inset 0 -1px rgba(176, 130, 82, .1);
 }
-#battle-view .slot.unit { border-color: rgba(122, 216, 194, .6); background: linear-gradient(160deg, rgba(30, 58, 50, .9), rgba(7, 16, 15, .96)); }
-#battle-view .slot.unit.enemy { border-color: rgba(213, 134, 126, .6); background: linear-gradient(160deg, rgba(58, 34, 32, .92), rgba(17, 11, 12, .96)); }
+#battle-view .slot.unit { border-color: transparent; background: transparent; box-shadow: none; }
+#battle-view .slot.unit.enemy { border-color: transparent; background: transparent; }
+#battle-view .slot.unit:hover,
+#battle-view .slot.unit:focus-visible { border-color: var(--table-mint); }
+#battle-view .slot.unit.enemy:hover { border-color: #d8867e; }
 #battle-view .slot.unit::before {
   content: "";
   position: absolute;
@@ -1504,8 +1509,8 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 
 #battle-view #hand-dock { z-index: 20; display: flex; flex-direction: column; align-items: center; }
 #battle-view .hand-toggle { order: 2; align-self: flex-start; margin-left: clamp(12px, 3vw, 44px); min-height: 38px !important; border: 1px solid rgba(176, 130, 82, .72) !important; border-bottom: 0 !important; border-radius: 3px 3px 0 0; background: #111b18 !important; color: var(--table-mint) !important; box-shadow: 0 -3px 12px rgba(0, 0, 0, .22); }
-#battle-view #hand { background: linear-gradient(180deg, rgba(25, 33, 28, .99), rgba(7, 12, 11, .99)); border-color: rgba(176, 130, 82, .65); box-shadow: 0 -12px 28px rgba(0, 0, 0, .46), inset 0 1px rgba(122, 216, 194, .2); }
-#battle-view:has(#hand-dock.is-open) { padding-bottom: calc(min(28vh, 220px) + 38px); }
+#battle-view #hand { width: max-content; max-width: calc(100vw - 32px); background: linear-gradient(180deg, rgba(25, 33, 28, .99), rgba(7, 12, 11, .99)); border-color: rgba(176, 130, 82, .65); box-shadow: 0 -12px 28px rgba(0, 0, 0, .46), inset 0 1px rgba(122, 216, 194, .2); }
+#battle-view:has(#hand-dock.is-open) .battle-bottom { position: fixed; z-index: 21; left: 0; right: 0; bottom: calc(min(28vh, 220px) + 44px); width: auto; margin: 0; }
 #battle-view #hand::before { color: var(--table-amber); }
 #battle-view #hand .card { border-color: rgba(176, 130, 82, .72); background: #101715; }
 #battle-view #hand .card:hover { border-color: var(--table-mint); box-shadow: 0 0 0 1px var(--table-mint), 0 12px 20px rgba(0, 0, 0, .42); }
@@ -1523,13 +1528,11 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   #battle-view .forecast-row { margin-inline: 9px; }
   #battle-view .battle-table { padding: 4px 8px; }
   #battle-view .slot { min-height: 0; }
-  #battle-view:has(#hand-dock.is-open) { padding-bottom: calc(min(46vh, 190px) + 38px); }
   #battle-view .battle-bottom { position: fixed; z-index: 19; right: 8px; bottom: calc(46vh + 38px); width: auto; min-height: 34px; margin: 0; padding: 0; }
   #battle-view .battle-bottom .leader.player { display: none; }
 }
 
 @media (max-height: 700px) and (min-width: 761px) {
-  #battle-view:has(#hand-dock.is-open) { padding-bottom: calc(min(46vh, 190px) + 38px); }
   #battle-view .battle-bottom { position: fixed; z-index: 19; right: 18px; bottom: calc(min(46vh, 190px) + 54px); width: auto; min-height: 38px; margin: 0; padding: 0; }
   #battle-view .battle-bottom .leader.player { position: static; transform: none; }
 }
