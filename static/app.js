@@ -737,7 +737,7 @@ function unitHtml(unit, side, column) {
   const style = width > 1 ? ` style="grid-column: span ${width};"` : "";
   return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit, side)}</div>
-      <div class="unit-name"><span>${esc(unit.name)}</span><small class="unit-level">LV ${unit.level ?? 1}</small>${notes ? ` <small>${notes}</small>` : ""}</div>
+      <div class="unit-name"><span>${esc(unit.name)}</span><small class="unit-level" aria-hidden="true">LV ${unit.level ?? 1}</small>${notes ? ` <small>${notes}</small>` : ""}</div>
       <div class="unit-stats"><span class="atk">攻 ${unit.atk}</span><span class="hp">耐 ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">盾 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">拦截 ${unit.guard}</span>` : ""}</div>
     </div>`;
 }

@@ -666,6 +666,7 @@ input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 /* 牌桌战斗 */
 #battle-view {
+  --battle-inset: clamp(12px, 2.6vw, 34px);
   max-width: 1180px;
   margin: 0 auto;
   position: relative;
@@ -1358,6 +1359,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 }
 
 #battle-view .battle-head { justify-content: center; }
+#battle-view.tutorial-active .battle-head .leader.enemy { position: static; transform: none; }
 #battle-view .battle-head .leader.enemy,
 #battle-view .battle-bottom .leader.player {
   position: absolute;
@@ -1389,6 +1391,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #battle-view .turn-box b { color: var(--table-mint); font-variant-numeric: tabular-nums; }
 #battle-view .forecast-label { color: var(--table-amber); }
 #battle-view .forecast-row { gap: 6px; }
+#battle-view .forecast-row { margin-inline: calc(var(--battle-inset) + 1px); }
 #battle-view .forecast-cell {
   min-height: 42px;
   padding: 5px 7px;
@@ -1402,7 +1405,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #battle-view .battle-table {
   isolation: isolate;
   margin: 10px 0 12px;
-  padding: clamp(16px, 2.4vh, 28px) clamp(12px, 2.6vw, 34px);
+  padding: clamp(16px, 2.4vh, 28px) var(--battle-inset);
   border: 1px solid rgba(176, 130, 82, .7);
   border-radius: 5px;
   background:
@@ -1439,7 +1442,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #battle-view .slot {
   position: relative;
   min-height: clamp(112px, 15vh, 156px);
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(196, 177, 133, .28);
   border-radius: 2px;
   background: rgba(6, 12, 11, .52);
@@ -1490,7 +1493,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #battle-view .unit-stats .shield,
 #battle-view .unit-stats .guard { color: var(--table-mint); }
 
-#battle-view .battle-bottom { justify-content: center; min-height: 48px; margin: 4px 0 8px; }
+#battle-view .battle-bottom { justify-content: center; min-height: 48px; margin: 4px 0 8px; padding-inline: 132px; }
 #battle-view .battle-actions { gap: 8px; }
 #battle-view .battle-actions button { min-width: 132px; border-radius: 2px; }
 #battle-view #end-turn { color: #14241f; background: linear-gradient(135deg, #83c9bf, #a6dfc8); }
@@ -1510,7 +1513,13 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   #battle-view .battle-head .leader.enemy,
   #battle-view .battle-bottom .leader.player { position: static; transform: none; min-width: 0; }
   #battle-view .battle-head { justify-content: space-between; }
-  #battle-view .battle-bottom { justify-content: space-between; }
+  #battle-view .battle-bottom { justify-content: space-between; padding-inline: 0; }
+}
+
+@media (max-width: 760px) and (orientation: landscape) {
+  #battle-view .forecast-row { margin-inline: 9px; }
+  #battle-view .battle-table { padding: 4px 8px; }
+  #battle-view .slot { min-height: 0; }
 }
 
 @media (max-width: 520px) {
