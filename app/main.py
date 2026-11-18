@@ -592,6 +592,17 @@ def _battle_response(state, battle_state):
     return {"state": game.public_state(state), "battle": B.view(battle_state)}
 
 
+def _abandon_lost_challenge(state, user_id, slot_id):
+    previous = _load_battle(user_id, slot_id)
+    if (
+        previous is not None
+        and previous.get("phase") == "over"
+        and previous.get("result") != "win"
+        and game.abandon_failed_challenge(state)
+    ):
+        _save_state(user_id, state, slot_id)
+
+
 @app.post("/api/battle/start")
 def battle_start(user=Depends(current_user)):
     with db.LOCK:
@@ -613,6 +624,7 @@ def battle_start(user=Depends(current_user)):
 def battle_reset(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
+        _abandon_lost_challenge(state, user["id"], user["slot"])
         battle_state = _make_battle(user["id"], state, user["slot"])
         return _battle_response(state, battle_state)
 
@@ -681,14 +693,7 @@ def battle_end(user=Depends(current_user)):
 def battle_retry(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
-        previous = _load_battle(user["id"], user["slot"])
-        if (
-            previous is not None
-            and previous.get("phase") == "over"
-            and previous.get("result") != "win"
-            and game.abandon_failed_challenge(state)
-        ):
-            _save_state(user["id"], state, user["slot"])
+        _abandon_lost_challenge(state, user["id"], user["slot"])
         battle_state = _make_battle(user["id"], state, user["slot"])
         return _battle_response(state, battle_state)
 

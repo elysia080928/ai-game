@@ -185,7 +185,7 @@ def _deck_cap(state):
 
 
 def chapter_wins(state):
-    """已完成的章节必经普通战数量（不含教学、精英与 Boss）。"""
+    """已完成的章节必经普通战数量（含起点战，不含精英与 Boss）。"""
     nodes = _map_nodes(state)
     return sum(
         1
@@ -3067,22 +3067,38 @@ def _shop_view(state):
         if offer["kind"] == "boost":
             label = "攻击" if offer["effect"] == "atk" else "最大生命"
             view["effectText"] = f"{label} +{offer['amount']}"
-        buyable, reason = _shop_available(state, offer)
+        targets = []
+        if rules_version(state) >= 2 and offer["kind"] != "new":
+            for card in state["cards"]:
+                if card["cardId"] != offer["cardId"]:
+                    continue
+                target_buyable, target_reason = _shop_available(
+                    state, offer, card["uid"]
+                )
+                targets.append(
+                    {
+                        "uid": card["uid"],
+                        "level": card["level"],
+                        "atkBonus": card.get("atkBonus", 0),
+                        "hpBonus": card.get("hpBonus", 0),
+                        "buyable": target_buyable,
+                        "reason": target_reason,
+                    }
+                )
+            view["targets"] = targets
+        if targets:
+            buyable = any(item["buyable"] for item in targets)
+            reason = (
+                next((item["reason"] for item in targets if item["buyable"]), "")
+                if buyable
+                else targets[0]["reason"]
+            )
+        else:
+            buyable, reason = _shop_available(state, offer)
         if purchased:
             buyable, reason = False, "本节点已购买"
         elif state["gold"] < offer["price"]:
             buyable, reason = False, "金币不足"
-        if rules_version(state) >= 2 and offer["kind"] != "new":
-            view["targets"] = [
-                {
-                    "uid": card["uid"],
-                    "level": card["level"],
-                    "atkBonus": card.get("atkBonus", 0),
-                    "hpBonus": card.get("hpBonus", 0),
-                }
-                for card in state["cards"]
-                if card["cardId"] == offer["cardId"]
-            ]
         view["buyable"] = buyable
         view["reason"] = reason
         offers.append(view)

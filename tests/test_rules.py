@@ -1173,7 +1173,7 @@ def test_enemy_reserve_stays_fixed_and_full_reserve_stops_scheduling():
         ],
     }
     b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
-    assert len(B.view(b)["forecast"]) == B.MAX_ENEMY_RESERVE
+    assert len(B.view(b)["forecast"]) == B.COLUMNS
     B.end_turn(b, random.Random(2))
     forecast = B.view(b)["forecast"]
     assert len(forecast) == 1 and forecast[0]["column"] in range(1, 5)
@@ -2103,6 +2103,26 @@ def test_v2_shop_targets_exact_duplicate():
     assert [item["uid"] for item in offer["targets"]].count(second["uid"]) == 1
     G.shop_buy(state, "ship_boost", second["uid"])
     assert second["atkBonus"] == 1 and first["atkBonus"] == 0
+
+
+def test_v2_shop_upgrade_targets_exact_duplicate():
+    state = state_at("shop", "node", version=2)
+    state["gold"] = 30
+    state["nodeData"] = {"purchased": False}
+    first = next(card for card in state["cards"] if card["cardId"] == "worker")
+    first["level"] = len(G.CARDS["worker"]["levels"])
+    second = G._new_card("worker")
+    state["cards"].append(second)
+    offer = next(
+        item for item in G.public_state(state)["shop"]["offers"] if item["id"] == "ship_upgrade"
+    )
+    targets = {item["uid"]: item for item in offer["targets"]}
+    assert offer["buyable"] is True
+    assert targets[first["uid"]]["buyable"] is False
+    assert targets[second["uid"]]["buyable"] is True
+    G.shop_buy(state, "ship_upgrade", second["uid"])
+    assert first["level"] == len(G.CARDS["worker"]["levels"])
+    assert second["level"] == 2
 
 
 def trial_state(seed, gold=0, cards=None):

@@ -331,6 +331,45 @@ def main():
             assert again["board"] == deployed.json()["battle"]["board"]
         battle_client.close()
 
+        # 战败后重置战斗也必须移除补给挑战压力。
+        reset_client = TestClient(app)
+        response = reset_client.post(
+            "/api/register", json={"username": "challengereset", "password": "password123"}
+        )
+        assert response.status_code == 200, response.text
+        enter_start_battle(reset_client)
+        assert reset_client.post("/api/battle/start").status_code == 200
+        reset_user_id = conn.execute(
+            "SELECT id FROM users WHERE username = 'challengereset'"
+        ).fetchone()[0]
+        reset_state = json.loads(conn.execute(
+            "SELECT state FROM save_slots WHERE user_id = ? AND slot_id = 1", (reset_user_id,)
+        ).fetchone()[0])
+        reset_state["pendingChallenges"] = [{"id": "supply_energy", "rewardSeed": 1}]
+        conn.execute(
+            "UPDATE save_slots SET state = ? WHERE user_id = ? AND slot_id = 1",
+            (json.dumps(reset_state, ensure_ascii=False), reset_user_id),
+        )
+        reset_battle = json.loads(conn.execute(
+            "SELECT state FROM battle_slots WHERE user_id = ? AND slot_id = 1", (reset_user_id,)
+        ).fetchone()[0])
+        reset_battle["phase"] = "over"
+        reset_battle["result"] = "lose"
+        conn.execute(
+            "UPDATE battle_slots SET state = ? WHERE user_id = ? AND slot_id = 1",
+            (json.dumps(reset_battle, ensure_ascii=False), reset_user_id),
+        )
+        conn.commit()
+        response = reset_client.post("/api/battle/reset")
+        assert response.status_code == 200, response.text
+        assert response.json()["state"]["pendingChallenge"] is None
+        assert response.json()["battle"]["energy"] == 4
+        stored = json.loads(conn.execute(
+            "SELECT state FROM save_slots WHERE user_id = ? AND slot_id = 1", (reset_user_id,)
+        ).fetchone()[0])
+        assert stored["pendingChallenges"] == []
+        reset_client.close()
+
         # 过期会话不能再读取存档。
         conn.execute("UPDATE sessions SET expires_at = 0")
         conn.commit()

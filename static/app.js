@@ -1321,6 +1321,7 @@ function renderEliteReward() {
     return;
   }
   $("elite-reward-view").hidden = false;
+  $("elite-title").textContent = reward.source === "challenge" ? "挑战奖励" : "精英战利品";
   $("elite-offers").innerHTML = reward.candidates.map((card) => `
     <div class="offer card-offer">
       ${cardFaceHtml(card)}
@@ -1549,6 +1550,10 @@ function renderShop() {
     const target = targets.find((item) => item.uid === shopTarget) || targets[0] || null;
     const owned = target ? state.deck.find((item) => item.uid === target.uid) : null;
     const card = { ...offerCardView(offer), ...(owned || {}), ...(target || {}) };
+    const buyable = offer.buyable && (!target || target.buyable !== false);
+    const reason = !offer.buyable
+      ? offer.reason
+      : target && target.buyable === false ? target.reason : offer.reason;
     const targetPicker = targets.length > 1 ? `
         <div class="shop-targets">${targets.map((item, index) => `
           <button class="target-action shop-target${item.uid === target.uid ? " selected" : ""}"
@@ -1562,8 +1567,8 @@ function renderShop() {
         <div class="offer-meta">${meta}</div>
         ${targetPicker}
         <div class="offer-price">${offer.price} 金币</div>
-        <button class="buy-btn" data-id="${esc(offer.id)}" ${offer.buyable ? "" : "disabled"}>
-          ${shop.purchased ? "已购买" : offer.buyable ? "购买" : esc(offer.reason)}
+        <button class="buy-btn" data-id="${esc(offer.id)}" ${buyable ? "" : "disabled"}>
+          ${shop.purchased ? "已购买" : buyable ? "购买" : esc(reason)}
         </button>
       </div>`;
   }).join("");
@@ -1675,7 +1680,7 @@ function renderSupply() {
   let preview = "";
   if (challenging && challenge.targets.length) {
     preview = challenge.targets.map((target) => {
-      const plan = target.plan.map((step) => `T${step.turn} ${step.column + 1}列 ${step.name}(${step.atk ?? "?"}/${step.hp ?? "?"})`).join("；");
+      const plan = target.plan.map((step) => `T${step.turn} ${step.column}列 ${step.name}(${step.atk ?? "?"}/${step.hp ?? "?"})`).join("；");
       return `${target.name} · 敌方领袖 ${target.enemyHp ?? "?"}${plan ? ` · ${plan}` : ""}`;
     }).join(" / ");
   }
@@ -2203,11 +2208,17 @@ function bindEvents() {
     if (!state.supply) return;
     act("/api/supply/skip", { round: state.supply.round - 1 });
   });
-  $("supply-option-list").addEventListener("click", (event) => {
+  const pickSupplyOption = (event) => {
     const target = event.target.closest(".target");
     if (!target || !state.supply) return;
     supplyPick = target.dataset.challenge;
     renderSupply();
+  };
+  $("supply-option-list").addEventListener("click", pickSupplyOption);
+  $("supply-option-list").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    pickSupplyOption(event);
   });
   $("supply-pay-gold").addEventListener("click", () => {
     supplyPayment = "gold";
@@ -2219,11 +2230,17 @@ function bindEvents() {
     supplyRemoveUid = null;
     renderSupply();
   });
-  $("supply-remove-targets").addEventListener("click", (event) => {
+  const pickSupplyRemoval = (event) => {
     const target = event.target.closest(".target");
     if (!target || target.classList.contains("disabled")) return;
     supplyRemoveUid = target.dataset.uid;
     renderSupply();
+  };
+  $("supply-remove-targets").addEventListener("click", pickSupplyRemoval);
+  $("supply-remove-targets").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    pickSupplyRemoval(event);
   });
   $("supply-confirm").addEventListener("click", () => {
     if (!state.supply || !supplyPick) return;
