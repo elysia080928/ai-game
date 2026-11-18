@@ -21,6 +21,14 @@ with _CONTENT_PATH.open(encoding="utf-8") as _f:
 
 CARDS = CONTENT["cards"]
 INITIAL_DECK = CONTENT["initialDeck"]
+LEGACY_INITIAL_DECK = CONTENT.get("legacyInitialDeck") or INITIAL_DECK
+GROWTH = CONTENT.get("growth") or {}
+RULES_VERSION = GROWTH.get("rulesVersion", 2)
+CARD_UNLOCKS = GROWTH.get("unlocks") or {}
+SUPPLY = CONTENT.get("supply") or {}
+SUPPLY_SWAP_PRICES = SUPPLY.get("swapPrices") or {}
+SUPPLY_CHALLENGES = SUPPLY.get("challenges") or []
+SUPPLY_CHALLENGE_BY_ID = {item["id"]: item for item in SUPPLY_CHALLENGES}
 ENEMIES = CONTENT["enemies"]
 ENCOUNTERS = CONTENT["encounters"]
 NODES = CONTENT["nodes"]
@@ -87,6 +95,7 @@ MAPS = {
         "extraEventNodes": MAP_CONFIG.get("extraEventNodes", 0),
         "eventTypes": MAP_EVENT_TYPES,
         "battlePools": BATTLE_POOLS,
+        "growthBattlePools": MAP_CONFIG.get("growthBattlePools"),
         "templates": MAP_TEMPLATES,
         "bossEncounter": "boss",
         "bossTemplate": "boss",
@@ -103,6 +112,7 @@ MAPS = {
         "extraEventNodes": SECOND_MAP_CONFIG.get("extraEventNodes", 0),
         "eventTypes": MAP_EVENT_TYPES,
         "battlePools": BATTLE_POOLS,
+        "growthBattlePools": SECOND_MAP_CONFIG.get("growthBattlePools"),
         "templates": SECOND_MAP_TEMPLATES,
         "bossEncounter": SECOND_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": SECOND_MAP_CONFIG.get("bossTemplate", "boss2"),
@@ -117,6 +127,7 @@ MAPS = {
         "extraEventNodes": THIRD_MAP_CONFIG.get("extraEventNodes", 0),
         "eventTypes": MAP_EVENT_TYPES,
         "battlePools": BATTLE_POOLS,
+        "growthBattlePools": THIRD_MAP_CONFIG.get("growthBattlePools"),
         "templates": THIRD_MAP_TEMPLATES,
         "bossEncounter": THIRD_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": THIRD_MAP_CONFIG.get("bossTemplate", "boss3"),
@@ -127,7 +138,8 @@ MAPS = {
 DEFAULT_MAP_TYPE = "map1"
 ELITE_REWARD_COUNT = 3
 
-MAX_DECK = 20
+MAX_DECK = 20  # 仅旧版冒险使用；新版取消牌组数量上限
+CHAPTER_ORDER = ("map1", "map2", "map3")
 NODE_TYPES = (
     "battle",
     "recruit",
@@ -141,10 +153,102 @@ NODE_TYPES = (
     "drones",
     "training",
     "relay",
+    "supply",
 )
-SCHEMA_VERSION = 9
+GROWTH_LAYOUTS = {
+    "map1": (
+        ("start", 1), ("battle", 1), ("supply", 1), ("battle", 2),
+        ("adventure", 1), ("event", 2), ("elite", 1), ("late", 1),
+        ("supply", 1), ("boss", 1),
+    ),
+    "map2": (
+        ("start", 1), ("supply", 1), ("battle", 1), ("battle", 1),
+        ("supply", 1), ("adventure", 1), ("battle", 1), ("event", 3),
+        ("battle", 1), ("event", 2), ("event", 2), ("elite", 1),
+        ("late", 1), ("supply", 1), ("boss", 1),
+    ),
+}
+GROWTH_LAYOUTS["map3"] = GROWTH_LAYOUTS["map2"]
+SUPPLY_ROUNDS = 2
+SCHEMA_VERSION = 10
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
 VALID_PHASES = ("map_story", "before_story", "node", "after_story", "transition", "map", "elite_reward", "complete")
+
+
+def rules_version(state):
+    version = state.get("rulesVersion", 1)
+    return version if isinstance(version, int) else 1
+
+
+def _deck_cap(state):
+    return None if rules_version(state) >= 2 else MAX_DECK
+
+
+def chapter_wins(state):
+    """已完成的章节必经普通战数量（不含教学、精英与 Boss）。"""
+    nodes = _map_nodes(state)
+    return sum(
+        1
+        for node_id in state.get("completed") or []
+        if nodes.get(node_id, {}).get("role") in ("start", "battle", "late")
+    )
+
+
+def _chapter_unlocked_cards(state, chapter, wins=None):
+    if wins is None:
+        wins = chapter_wins(state) if chapter == current_map_type(state) else 0
+    return {
+        card_id
+        for stage in CARD_UNLOCKS.get(chapter, [])
+        if wins >= stage["at"]
+        for card_id in stage["cards"]
+    }
+
+
+def unlocked_card_ids(state):
+    if rules_version(state) < 2:
+        return set(CARDS)
+    chapter = current_map_type(state)
+    index = CHAPTER_ORDER.index(chapter) if chapter in CHAPTER_ORDER else 0
+    result = set()
+    for earlier in CHAPTER_ORDER[:index]:
+        result.update(_chapter_unlocked_cards(state, earlier, wins=999))
+    result.update(_chapter_unlocked_cards(state, chapter))
+    return result
+
+
+def chapter_new_cards(state):
+    if rules_version(state) < 2:
+        return set()
+    chapter = current_map_type(state)
+    cards = _chapter_unlocked_cards(state, chapter)
+    if chapter == "map1":
+        cards -= set(CARD_UNLOCKS.get("map1", [{}])[0].get("cards", []))
+    return cards
+
+
+def pick_candidates(state, pool, seed, count=3):
+    """种子稳定且卡种不重复的候选；新版保证至少一张本章新卡。"""
+    pool = list(dict.fromkeys(pool))
+    if not pool:
+        return []
+    count = min(count, len(pool))
+    rng = random.Random(seed)
+    fresh = [card_id for card_id in chapter_new_cards(state) if card_id in pool]
+    if not fresh:
+        return rng.sample(pool, count)
+    first = rng.choice(fresh)
+    rest = [card_id for card_id in pool if card_id != first]
+    return [first, *rng.sample(rest, min(count - 1, len(rest)))]
+
+
+def _supply_round_candidates(state, seed, round_index):
+    pool = sorted(unlocked_card_ids(state))
+    return pick_candidates(state, pool, seed + round_index * 7919)
+
+
+def _initial_deck(version):
+    return INITIAL_DECK if version >= 2 else LEGACY_INITIAL_DECK
 
 
 def validate_content():
@@ -161,11 +265,22 @@ def validate_content():
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise RuntimeError(f"{label} {field} 非法")
 
-    if len(INITIAL_DECK) != len(set(INITIAL_DECK)):
-        raise RuntimeError("初始牌组存在重复卡牌")
-    for card_id in INITIAL_DECK:
-        if card_id not in CARDS:
-            raise RuntimeError(f"初始牌组引用了未知卡牌 {card_id}")
+    for deck in (INITIAL_DECK, LEGACY_INITIAL_DECK):
+        for card_id in deck:
+            if card_id not in CARDS:
+                raise RuntimeError(f"初始牌组引用了未知卡牌 {card_id}")
+    for chapter, stages in CARD_UNLOCKS.items():
+        if chapter not in CHAPTER_ORDER or not isinstance(stages, list):
+            raise RuntimeError("卡牌开放配置非法")
+        for stage in stages:
+            if (
+                not isinstance(stage.get("at"), int)
+                or isinstance(stage["at"], bool)
+                or stage["at"] < 0
+                or not isinstance(stage.get("cards"), list)
+                or any(card_id not in CARDS for card_id in stage["cards"])
+            ):
+                raise RuntimeError("卡牌开放配置非法")
     for card_id, card in CARDS.items():
         if card["type"] not in ("unit", "command"):
             raise RuntimeError(f"卡牌 {card_id} 类型非法")
@@ -227,6 +342,47 @@ def validate_content():
         if node["id"] in ids:
             raise RuntimeError(f"节点 ID 重复：{node['id']}")
         ids.add(node["id"])
+    for variant in ("pure", "swap", "challenge"):
+        supply_template = NODE_BY_ID.get(f"supply_{variant}")
+        if (
+            not supply_template
+            or supply_template.get("type") != "supply"
+            or supply_template.get("variant") != variant
+        ):
+            raise RuntimeError("机偶补给站模板非法")
+    for chapter in CHAPTER_ORDER:
+        price = SUPPLY_SWAP_PRICES.get(chapter)
+        if not isinstance(price, int) or isinstance(price, bool) or price <= 0:
+            raise RuntimeError("补给交换价格非法")
+    challenge_ids = set()
+    for item in SUPPLY_CHALLENGES:
+        if item.get("id") in challenge_ids:
+            raise RuntimeError("补给挑战 ID 重复")
+        challenge_ids.add(item.get("id"))
+        if (
+            not isinstance(item.get("id"), str)
+            or not item.get("name")
+            or not item.get("description")
+            or not isinstance(item.get("energyPenalty", 0), int)
+            or isinstance(item.get("energyPenalty", 0), bool)
+            or item.get("energyPenalty", 0) < 0
+            or not isinstance(item.get("reward", -1), int)
+            or isinstance(item.get("reward", -1), bool)
+            or item.get("reward", -1) < 0
+        ):
+            raise RuntimeError("补给挑战配置非法")
+        extra = item.get("extraEnemy")
+        if extra is not None:
+            if extra not in ENEMIES:
+                raise RuntimeError("补给挑战引用了未知敌人")
+            column = item.get("column")
+            width = ENEMIES[extra].get("width", 1)
+            if (
+                not isinstance(column, int)
+                or isinstance(column, bool)
+                or not (1 <= column <= 4 - width + 1)
+            ):
+                raise RuntimeError("补给挑战列号非法")
     if FIRST_NODE not in NODE_BY_ID:
         raise RuntimeError("首个节点不存在")
     if RUN_LENGTH <= 0:
@@ -295,6 +451,87 @@ def validate_content():
             width = ENEMIES[item["enemy"]].get("width", 1)
             if not (1 <= item["column"] <= 4 - width + 1):
                 raise RuntimeError(f"遭遇 {encounter_id} 计划列号非法")
+    basic_enemies = {"small_sentry", "defender", "assault_sentry"}
+    growth_limits = {
+        "map1": {"normal": (15, 5, 8), "elite": (18, 8, 10), "boss": (18, 12, 14)},
+        "map2": {"normal": (18, 8, 10), "elite": (22, 10, 12), "boss": (24, 14, 16)},
+        "map3": {"normal": (20, 10, 12), "elite": (26, 12, 14), "boss": (30, 16, 18)},
+    }
+
+    def check_waves(encounter_id, kind, special_limit):
+        encounter = ENCOUNTERS[encounter_id]
+        turns = {}
+        specials = set()
+        for item in encounter["plan"]:
+            turns[item["turn"]] = turns.get(item["turn"], 0) + 1
+            if item["enemy"] not in basic_enemies:
+                specials.add(item["enemy"])
+        first_max = 1 if kind == "normal" else 2
+        later_max = 2 if kind == "normal" else 3
+        for turn, count in turns.items():
+            if count > (first_max if turn == 1 else later_max):
+                raise RuntimeError(f"遭遇 {encounter_id} 波次超过章节上限")
+        if len(specials) > special_limit:
+            raise RuntimeError(f"遭遇 {encounter_id} 特殊敌人种类过多")
+        triple_turns = sorted(turn for turn, count in turns.items() if count >= 3)
+        if kind == "elite" and len(triple_turns) > 1:
+            raise RuntimeError(f"精英遭遇 {encounter_id} 三敌波次过多")
+        if kind == "boss":
+            if len(triple_turns) > 2 or any(
+                right - left == 1 for left, right in zip(triple_turns, triple_turns[1:])
+            ):
+                raise RuntimeError(f"Boss 遭遇 {encounter_id} 三敌波次非法")
+        return specials
+
+    for map_type, limits in growth_limits.items():
+        config = MAPS[map_type].get("growthBattlePools") or {}
+        positions = config.get("positions") or []
+        for pool in positions:
+            for encounter_id in pool:
+                if encounter_id not in ENCOUNTERS:
+                    raise RuntimeError(f"章节战斗位置引用了未知遭遇 {encounter_id}")
+                normal_hp, low, high = limits["normal"]
+                encounter = ENCOUNTERS[encounter_id]
+                if encounter["enemyHp"] != normal_hp:
+                    raise RuntimeError(f"遭遇 {encounter_id} 敌方领袖生命不符合章节基线")
+                if not low <= len(encounter["plan"]) <= high:
+                    raise RuntimeError(f"遭遇 {encounter_id} 计划数量不符合章节基线")
+        introduced = set()
+        for pool in positions:
+            for encounter_id in pool:
+                specials = check_waves(
+                    encounter_id, "normal", 1 if map_type == "map1" else 2
+                )
+                for item in ENCOUNTERS[encounter_id]["plan"]:
+                    if (
+                        item["enemy"] in specials
+                        and item["enemy"] not in introduced
+                        and item["enemy"] != "mirror_drone"
+                        and item["turn"] < 3
+                    ):
+                        raise RuntimeError(f"遭遇 {encounter_id} 特殊敌人出场过早")
+                introduced |= specials
+        for encounter_id in config.get("eliteNormalPool") or []:
+            if encounter_id not in ENCOUNTERS:
+                raise RuntimeError(f"精英普通路线引用了未知遭遇 {encounter_id}")
+            normal_hp, low, high = limits["normal"]
+            encounter = ENCOUNTERS[encounter_id]
+            if encounter["enemyHp"] != normal_hp:
+                raise RuntimeError(f"遭遇 {encounter_id} 敌方领袖生命不符合章节基线")
+            if not low <= len(encounter["plan"]) <= high:
+                raise RuntimeError(f"遭遇 {encounter_id} 计划数量不符合章节基线")
+            check_waves(encounter_id, "normal", 3)
+        for kind, key in (("elite", "eliteEncounter"), ("boss", "bossEncounter")):
+            encounter_id = config.get(key)
+            if encounter_id not in ENCOUNTERS:
+                raise RuntimeError(f"章节{kind}遭遇缺失")
+            hp, low, high = limits[kind]
+            encounter = ENCOUNTERS[encounter_id]
+            if encounter["enemyHp"] != hp:
+                raise RuntimeError(f"遭遇 {encounter_id} 敌方领袖生命不符合章节基线")
+            if not low <= len(encounter["plan"]) <= high:
+                raise RuntimeError(f"遭遇 {encounter_id} 计划数量不符合章节基线")
+            check_waves(encounter_id, kind, 3)
     for offer in RECRUIT["offers"]:
         if offer["id"] not in CARDS or offer["price"] <= 0:
             raise RuntimeError("招募配置非法")
@@ -515,6 +752,8 @@ def _make_map_node(template_id, column, row, role, templates, encounter=None, el
         "after": copy.deepcopy(template.get("after", [])),
         "next": [],
     }
+    if template.get("variant") is not None:
+        node["variant"] = template["variant"]
     if encounter is not None:
         node["encounter"] = encounter
     if elite_reward:
@@ -566,9 +805,14 @@ def _validate_generated_map(data, legacy=False):
     if not isinstance(nodes, list):
         raise RuntimeError("地图节点非法")
     run_length = data.get("runLength")
-    allowed_lengths = set(definition["runLengths"])
-    if legacy and map_type == "map1":
-        allowed_lengths |= {6, 7}
+    growth = data.get("layout") == "growth"
+    expected_growth_length = {"map1": 10, "map2": 15, "map3": 15}[map_type]
+    if growth:
+        allowed_lengths = {expected_growth_length}
+    else:
+        allowed_lengths = set(definition["runLengths"])
+        if legacy and map_type == "map1":
+            allowed_lengths |= {6, 7}
     if run_length not in allowed_lengths:
         raise RuntimeError("地图路线长度非法")
     seed = data.get("seed")
@@ -581,7 +825,7 @@ def _validate_generated_map(data, legacy=False):
             raise RuntimeError("地图节点重复或非法")
         if node.get("type") not in NODE_TYPES or not isinstance(node.get("name"), str):
             raise RuntimeError("地图节点类型非法")
-        if node.get("role") not in ("start", "late", "boss", "event", "elite", "battle"):
+        if node.get("role") not in ("start", "late", "boss", "event", "elite", "battle", "supply"):
             raise RuntimeError("地图节点角色非法")
         column, row = node.get("column"), node.get("row")
         if (
@@ -600,6 +844,9 @@ def _validate_generated_map(data, legacy=False):
         if node["type"] == "battle":
             if node.get("encounter") not in ENCOUNTERS:
                 raise RuntimeError("地图遭遇非法")
+        elif node["type"] == "supply":
+            if node.get("role") != "supply":
+                raise RuntimeError("地图补给节点非法")
         elif node.get("role") != "event" or node["type"] not in definition["eventTypes"]:
             raise RuntimeError("地图奇遇类型非法")
         by_id[node["id"]] = node
@@ -672,26 +919,39 @@ def _validate_generated_map(data, legacy=False):
     events = [node for node in nodes if node.get("role") == "event"]
     if not events or len({node["type"] for node in events}) != len(events):
         raise RuntimeError("地图奇遇类型重复")
+    growth_pools = definition.get("growthBattlePools") or {}
+    growth_positions = growth_pools.get("positions") or []
+    growth_normal = [encounter_id for pool in growth_positions for encounter_id in pool]
+    growth_normal += growth_pools.get("eliteNormalPool") or []
+    expected_elite = growth_pools.get("eliteEncounter", "elite") if growth else "elite"
+    expected_boss = (
+        growth_pools.get("bossEncounter") or definition["bossEncounter"]
+    ) if growth else definition["bossEncounter"]
     for node in nodes:
         if node["role"] == "elite" and (
             node["type"] != "battle"
-            or node.get("encounter") != "elite"
+            or node.get("encounter") != expected_elite
             or not node.get("eliteReward")
         ):
             raise RuntimeError("地图精英节点非法")
-        if node["role"] == "battle" and (
-            node.get("encounter")
-            not in definition["battlePools"]["early"] + definition["battlePools"]["late"]
-        ):
+        normal_pool = (
+            definition["battlePools"]["early"] + definition["battlePools"]["late"] + growth_normal
+        )
+        if node["role"] == "battle" and node.get("encounter") not in normal_pool:
             raise RuntimeError("地图中段战斗节点非法")
         allowed_start = list(definition["battlePools"]["early"])
         if definition.get("startEncounter"):
             allowed_start = [*allowed_start, definition["startEncounter"]] if legacy else [definition["startEncounter"]]
+        if growth_positions:
+            allowed_start += growth_positions[0]
         if node["role"] == "start" and node.get("encounter") not in allowed_start:
             raise RuntimeError("地图战斗节点非法")
-        if node["role"] == "late" and node.get("encounter") not in definition["battlePools"]["late"]:
+        late_pool = list(definition["battlePools"]["late"])
+        if growth_positions:
+            late_pool += growth_positions[-1]
+        if node["role"] == "late" and node.get("encounter") not in late_pool:
             raise RuntimeError("地图战斗节点非法")
-        if node["role"] == "boss" and node.get("encounter") != definition["bossEncounter"]:
+        if node["role"] == "boss" and node.get("encounter") != expected_boss:
             raise RuntimeError("地图战斗节点非法")
         if node["role"] in ("start", "late", "boss") and node["type"] != "battle":
             raise RuntimeError("地图战斗节点非法")
@@ -706,16 +966,262 @@ def _validate_generated_map(data, legacy=False):
         return any(has_event(child, seen) for child in nexts[node_id])
     if not all(has_event(child, set()) for child in nexts[start]):
         raise RuntimeError("地图存在没有成长节点的路线")
+    if growth:
+        expected_supplies = (2, 8) if map_type == "map1" else (1, 4, 13)
+        supply_nodes = [node for node in nodes if node.get("role") == "supply"]
+        supply_columns = sorted({node["column"] for node in supply_nodes})
+        if tuple(supply_columns) != expected_supplies:
+            raise RuntimeError("地图补给位置非法")
+        if len(supply_nodes) != len(expected_supplies):
+            raise RuntimeError("地图补给节点数量非法")
+        expected_variants = (
+            ("pure", "swap") if map_type == "map1" else ("pure", "swap", "challenge")
+        )
+        if tuple(
+            node.get("variant") for node in sorted(supply_nodes, key=lambda node: node["column"])
+        ) != expected_variants:
+            raise RuntimeError("地图补给事件构成非法")
+        for column in supply_columns:
+            if len(columns[column]) != 1 or columns[column][0].get("role") != "supply":
+                raise RuntimeError("地图补给必须位于所有路线必经处")
+        if any(right - left == 1 for left, right in zip(supply_columns, supply_columns[1:])):
+            raise RuntimeError("地图补给不能相邻")
+        # 精英层的普通路线是同位置的替代战斗，不计入必经普通战数量。
+        battle_layers = sum(
+            1
+            for layer in columns.values()
+            if any(node.get("role") == "battle" for node in layer)
+            and not any(node.get("role") == "elite" for node in layer)
+        )
+        normal_battles = 2 + battle_layers
+        if normal_battles != (4 if map_type == "map1" else 6):
+            raise RuntimeError("地图必经普通战数量非法")
+        if not any(node.get("role") == "event" and node["type"] == "adventure" for node in nodes):
+            raise RuntimeError("地图缺少 Boss 前免费强化机会")
     return True
 
 
-def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
+def _generate_growth_map_positions(seed, map_type):
+    """按章节固定战斗位置抽取预设，保证教学顺序与每章难度坡度。"""
+    definition = MAPS[map_type]
+    layout = GROWTH_LAYOUTS[map_type]
+    config = definition["growthBattlePools"]
+    positions = config.get("positions")
+    expected_positions = 3 if map_type == "map1" else 6
+    if (
+        not isinstance(positions, list)
+        or len(positions) != expected_positions
+        or any(not isinstance(pool, list) or len(pool) < 3 for pool in positions)
+        or any(len(pool) != len(set(pool)) for pool in positions)
+    ):
+        raise GameError("章节战斗位置配置非法")
+    elite_normal_pool = config.get("eliteNormalPool") or []
+    if len(elite_normal_pool) < 2 or len(elite_normal_pool) != len(set(elite_normal_pool)):
+        raise GameError("精英普通路线配置非法")
+    boss_encounter = config.get("bossEncounter") or definition["bossEncounter"]
+    elite_encounter = config.get("eliteEncounter") or "elite"
+    rng = random.Random(seed)
+    templates = definition["templates"]
+    event_pool = [node_type for node_type in definition["eventTypes"] if node_type != "adventure"]
+    event_slots = sum(width for kind, width in layout if kind == "event")
+    if len(event_pool) < event_slots:
+        raise GameError("地图奇遇数量超过配置")
+    event_types = rng.sample(event_pool, event_slots)
+    layers = []
+    position_index = 0
+    for column, (kind, width) in enumerate(layout):
+        layer = []
+        if kind in ("start", "battle", "late", "boss"):
+            if kind == "boss":
+                encounters = [boss_encounter]
+            elif kind == "start" and map_type == "map1":
+                encounters = [definition["startEncounter"]]
+            else:
+                pool = positions[position_index]
+                position_index += 1
+                encounters = rng.sample(pool, width)
+            for row, encounter in enumerate(encounters):
+                template_id = {
+                    "start": definition.get("startTemplate", "battle_early"),
+                    "boss": definition["bossTemplate"],
+                }.get(kind) or ("battle_late" if kind == "late" else "battle_early")
+                node = _make_map_node(
+                    template_id,
+                    column,
+                    row,
+                    "start" if kind == "start" else "boss" if kind == "boss" else "late" if kind == "late" else "battle",
+                    templates,
+                    encounter=encounter,
+                )
+                node["name"] = ENCOUNTERS[encounter].get("name") or node["name"]
+                layer.append(node)
+        elif kind == "supply":
+            if map_type == "map1":
+                variant = "swap" if column == 8 else "pure"
+            else:
+                variant = "pure" if column == 1 else "swap" if column == 4 else "challenge"
+            layer.append(
+                _make_map_node(f"supply_{variant}", column, 0, "supply", templates)
+            )
+        elif kind == "adventure":
+            layer.append(_make_map_node("adventure", column, 0, "event", templates))
+        elif kind == "elite":
+            normal_encounter = rng.choice(elite_normal_pool)
+            normal_node = _make_map_node(
+                "battle_late", column, 0, "battle", templates, encounter=normal_encounter
+            )
+            normal_node["name"] = (
+                f"普通路线 · {ENCOUNTERS[normal_encounter].get('name') or normal_node['name']}"
+            )
+            elite_node = _make_map_node(
+                "elite", column, 1, "elite", templates,
+                encounter=elite_encounter,
+                elite_reward=True,
+            )
+            layer.extend([normal_node, elite_node])
+        else:
+            for row in range(width):
+                layer.append(_make_map_node(event_types.pop(), column, row, "event", templates))
+        layers.append(layer)
+    edges = _connect_map_layers(layers, rng)
+    nodes = [node for layer in layers for node in layer]
+    data = {
+        "mapType": map_type,
+        "layout": "growth",
+        "seed": seed,
+        "runLength": len(layers),
+        "start": layers[0][0]["id"],
+        "boss": layers[-1][0]["id"],
+        "elite": next(node["id"] for node in nodes if node.get("role") == "elite"),
+        "nodes": nodes,
+        "edges": edges,
+        "encounterIds": sorted({node["encounter"] for node in nodes if node.get("encounter")}),
+    }
+    _validate_generated_map(data)
+    return data
+
+
+def _generate_growth_map(seed, map_type):
+    definition = MAPS[map_type]
+    if definition.get("growthBattlePools"):
+        return _generate_growth_map_positions(seed, map_type)
+    layout = GROWTH_LAYOUTS[map_type]
+    rng = random.Random(seed)
+    templates = definition["templates"]
+    early = list(definition["battlePools"]["early"])
+    late = list(definition["battlePools"]["late"])
+    rng.shuffle(early)
+    rng.shuffle(late)
+    if len(early) < 3 or len(late) < 3:
+        raise GameError("战斗池容量不足")
+    battle_slots = sum(width for kind, width in layout if kind == "battle")
+    if battle_slots != (3 if map_type == "map1" else 4):
+        raise GameError("地图战斗位置非法")
+    if map_type == "map1":
+        start_encounter = definition["startEncounter"]
+        encounters = [(early.pop(0), "early") for _ in range(battle_slots)]
+        encounters.append((late.pop(0), "late"))
+    else:
+        start_encounter = early.pop(0)
+        encounters = [(early.pop(0), "early") for _ in range(2)]
+        encounters += [(late.pop(0), "late") for _ in range(2)]
+        encounters.append((late.pop(0), "late"))
+    event_pool = [node_type for node_type in definition["eventTypes"] if node_type != "adventure"]
+    event_slots = sum(width for kind, width in layout if kind == "event")
+    if len(event_pool) < event_slots:
+        raise GameError("地图奇遇数量超过配置")
+    event_types = rng.sample(event_pool, event_slots)
+    layers = []
+    encounter_index = 0
+    used_encounters = {start_encounter}
+    for column, (kind, width) in enumerate(layout):
+        layer = []
+        if kind in ("start", "battle", "late", "boss"):
+            for row in range(width):
+                if kind == "start":
+                    encounter, pool_name = start_encounter, "start"
+                elif kind == "boss":
+                    encounter, pool_name = definition["bossEncounter"], "boss"
+                else:
+                    encounter, pool_name = encounters[encounter_index]
+                    encounter_index += 1
+                    used_encounters.add(encounter)
+                template_id = {
+                    "start": definition.get("startTemplate", "battle_early"),
+                    "boss": definition["bossTemplate"],
+                }.get(kind) or ("battle_early" if pool_name == "early" else "battle_late")
+                node = _make_map_node(
+                    template_id,
+                    column,
+                    row,
+                    "start" if kind == "start" else "boss" if kind == "boss" else "late" if kind == "late" else "battle",
+                    templates,
+                    encounter=encounter,
+                )
+                node["name"] = ENCOUNTERS[encounter].get("name") or node["name"]
+                layer.append(node)
+        elif kind == "supply":
+            if map_type == "map1":
+                variant = "swap" if column == 8 else "pure"
+            else:
+                variant = "pure" if column == 1 else "swap" if column == 4 else "challenge"
+            layer.append(
+                _make_map_node(f"supply_{variant}", column, 0, "supply", templates)
+            )
+        elif kind == "adventure":
+            layer.append(_make_map_node("adventure", column, 0, "event", templates))
+        elif kind == "elite":
+            normal_pool = definition.get("eliteNormalPool") or [*late, *early]
+            normal_encounter = next(
+                (encounter_id for encounter_id in normal_pool if encounter_id not in used_encounters),
+                None,
+            )
+            if normal_encounter is None:
+                raise GameError("精英位置缺少可选普通战")
+            used_encounters.add(normal_encounter)
+            normal_node = _make_map_node(
+                "battle_late", column, 0, "battle", templates, encounter=normal_encounter
+            )
+            normal_node["name"] = (
+                f"普通路线 · {ENCOUNTERS[normal_encounter].get('name') or normal_node['name']}"
+            )
+            elite_node = _make_map_node(
+                "elite", column, 1, "elite", templates,
+                encounter=definition.get("eliteEncounter", "elite"),
+                elite_reward=True,
+            )
+            layer.extend([normal_node, elite_node])
+        else:
+            for row in range(width):
+                layer.append(_make_map_node(event_types.pop(), column, row, "event", templates))
+        layers.append(layer)
+    edges = _connect_map_layers(layers, rng)
+    nodes = [node for layer in layers for node in layer]
+    data = {
+        "mapType": map_type,
+        "layout": "growth",
+        "seed": seed,
+        "runLength": len(layers),
+        "start": layers[0][0]["id"],
+        "boss": layers[-1][0]["id"],
+        "elite": next(node["id"] for node in nodes if node.get("role") == "elite"),
+        "nodes": nodes,
+        "edges": edges,
+        "encounterIds": sorted({node["encounter"] for node in nodes if node.get("encounter")}),
+    }
+    _validate_generated_map(data)
+    return data
+
+
+def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE, version=1):
     if map_type not in MAPS:
         raise GameError("地图类型非法")
     if seed is None:
         seed = random.randrange(1, 2**31)
     if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
         raise GameError("地图种子非法")
+    if version >= 2:
+        return _generate_growth_map(seed, map_type)
     definition = MAPS[map_type]
     rng = random.Random(seed)
     run_length = rng.choice(definition["runLengths"])
@@ -852,20 +1358,22 @@ def generate_map(seed=None, map_type=DEFAULT_MAP_TYPE):
     return data
 
 
-def new_state(seed=None, map_type=DEFAULT_MAP_TYPE):
-    map_data = generate_map(seed, map_type)
+def new_state(seed=None, map_type=DEFAULT_MAP_TYPE, version=RULES_VERSION):
+    map_data = generate_map(seed, map_type, version)
     state = {
         "schemaVersion": SCHEMA_VERSION,
+        "rulesVersion": version,
         "nodeId": map_data["start"],
         "phase": "map_story",
         "storyLine": 0,
         "gold": 0,
-        "cards": [_new_card(card_id) for card_id in INITIAL_DECK],
+        "cards": [_new_card(card_id) for card_id in _initial_deck(version)],
         "completed": [],
         "nodeData": {},
         "route": {},
         "flags": {},
         "pendingChallenges": [],
+        "pendingChallengeReward": None,
         "pendingDrawBonus": 0,
         "mapData": map_data,
     }
@@ -947,6 +1455,19 @@ def _begin_node(state):
             "status": "choose",
             "trialId": None,
             "candidates": [],
+        }
+    elif node["type"] == "supply":
+        seed = random.randrange(1, 2**31)
+        state["nodeData"] = {
+            "seed": seed,
+            "round": 0,
+            "stage": "round",
+            "candidates": [
+                _supply_round_candidates(state, seed, round_index)
+                for round_index in range(SUPPLY_ROUNDS + 1)
+            ],
+            "claimed": [],
+            "swapUsed": False,
         }
     else:
         state["nodeData"] = {}
@@ -1034,6 +1555,22 @@ def advance_story(state, skip_whole_slot=False):
     _normalize(state)
 
 
+def _start_next_chapter(state, map_type):
+    if rules_version(state) < 2:
+        state.clear()
+        state.update(new_state(map_type=map_type, version=1))
+        return
+    cards = state["cards"]
+    gold = state["gold"]
+    flags = state["flags"]
+    version = rules_version(state)
+    state.clear()
+    state.update(new_state(map_type=map_type, version=version))
+    state["cards"] = cards
+    state["gold"] = gold
+    state["flags"] = flags
+
+
 def finish_transition(state):
     if state.get("phase") != "transition":
         raise GameError("当前没有待完成的转场")
@@ -1041,11 +1578,9 @@ def finish_transition(state):
     if target == "map":
         state["phase"] = "map"
     elif target == "map2" and current_map_type(state) == "map1":
-        state.clear()
-        state.update(new_state(map_type="map2"))
+        _start_next_chapter(state, "map2")
     elif target == "map3" and current_map_type(state) == "map2":
-        state.clear()
-        state.update(new_state(map_type="map3"))
+        _start_next_chapter(state, "map3")
     elif target == "complete" and current_map_type(state) == "map3":
         state["phase"] = "complete"
     else:
@@ -1096,14 +1631,41 @@ def confirm_battle_result(state):
         raise GameError("当前不在战斗节点")
     reward = ENCOUNTERS[node["encounter"]]["reward"]["gold"]
     state["gold"] += reward
-    settle_challenges(state)
+    challenge_reward = settle_challenges(state)
     state["pendingDrawBonus"] = 0
     if node.get("eliteReward"):
         state["phase"] = "elite_reward"
         state["storyLine"] = 0
-        state["nodeData"] = {"seed": random.randrange(1, 2**31), "claimed": False}
+        state["nodeData"] = {
+            "seed": random.randrange(1, 2**31),
+            "claimed": False,
+            "source": "elite",
+        }
+        state["pendingChallengeReward"] = challenge_reward
+    elif challenge_reward:
+        _start_challenge_reward(state, challenge_reward)
     else:
         finish_node(state, node["id"])
+
+
+def _start_challenge_reward(state, reward):
+    state["phase"] = "elite_reward"
+    state["storyLine"] = 0
+    state["nodeData"] = {
+        "seed": reward["seed"],
+        "claimed": False,
+        "source": "challenge",
+    }
+
+
+def _after_card_reward(state, node):
+    pending = state.get("pendingChallengeReward")
+    state["pendingChallengeReward"] = None
+    if isinstance(pending, dict) and pending.get("source") == "challenge":
+        _start_challenge_reward(state, pending)
+        return
+    state["phase"] = "node"
+    finish_node(state, node["id"])
 
 
 def _elite_candidates(state):
@@ -1111,16 +1673,24 @@ def _elite_candidates(state):
     seed = data.get("seed")
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise GameError("精英奖励种子缺失")
-    pool = list(CARDS)
-    return random.Random(seed).sample(pool, min(ELITE_REWARD_COUNT, len(pool)))
+    pool = list(CARDS) if rules_version(state) < 2 else sorted(unlocked_card_ids(state))
+    if rules_version(state) < 2:
+        return random.Random(seed).sample(pool, min(ELITE_REWARD_COUNT, len(pool)))
+    return pick_candidates(state, pool, seed, ELITE_REWARD_COUNT)
+
+
+def _reward_source(state):
+    data = state.get("nodeData") or {}
+    return data.get("source") if data.get("source") in ("elite", "challenge") else "elite"
 
 
 def _elite_reward_view(state):
     node = current_node(state)
+    source = _reward_source(state)
     if (
         state["phase"] != "elite_reward"
         or node is None
-        or not node.get("eliteReward")
+        or (not node.get("eliteReward") and source != "challenge")
     ):
         return None
     candidates = []
@@ -1129,40 +1699,206 @@ def _elite_reward_view(state):
         stats["effectText"] = _effect_text(stats)
         stats["duplicate"] = _owned_card(state, card_id) is not None
         candidates.append(stats)
+    cap = _deck_cap(state)
     return {
         "candidates": candidates,
-        "deckFull": len(state["cards"]) >= MAX_DECK,
+        "deckFull": cap is not None and len(state["cards"]) >= cap,
         "claimed": bool((state.get("nodeData") or {}).get("claimed")),
+        "source": source,
     }
 
 
 def elite_reward_choose(state, card_id):
     node = current_node(state)
-    if node is None or not node.get("eliteReward"):
-        raise GameError("当前不是精英奖励")
+    if node is None or (not node.get("eliteReward") and _reward_source(state) != "challenge"):
+        raise GameError("当前不是卡牌奖励")
     if node["id"] in state["completed"]:
         return
     if state["phase"] != "elite_reward":
-        raise GameError("当前不在精英奖励")
+        raise GameError("当前不在卡牌奖励")
     if card_id not in _elite_candidates(state):
         raise GameError("这张卡不在当前候选中")
-    if len(state["cards"]) >= MAX_DECK:
+    cap = _deck_cap(state)
+    if cap is not None and len(state["cards"]) >= cap:
         raise GameError("牌组已满，无法加入新卡")
     state["cards"].append(_new_card(card_id))
     state["nodeData"]["claimed"] = True
-    state["phase"] = "node"
-    finish_node(state, node["id"])
+    _after_card_reward(state, node)
 
 
 def elite_reward_leave(state):
     node = current_node(state)
-    if node is None or not node.get("eliteReward"):
-        raise GameError("当前不是精英奖励")
+    if node is None or (not node.get("eliteReward") and _reward_source(state) != "challenge"):
+        raise GameError("当前不是卡牌奖励")
     if node["id"] in state["completed"]:
         return
     if state["phase"] != "elite_reward":
-        raise GameError("当前不在精英奖励")
-    state["phase"] = "node"
+        raise GameError("当前不在卡牌奖励")
+    _after_card_reward(state, node)
+
+
+def _require_supply(state):
+    node = current_node(state)
+    if node is None or node["type"] != "supply":
+        raise GameError("当前不是机偶补给站")
+    if state["phase"] != "node" or node["id"] in state["completed"]:
+        raise GameError("当前不在补给阶段")
+    data = state.get("nodeData")
+    candidates = data.get("candidates") if isinstance(data, dict) else None
+    round_index = data.get("round") if isinstance(data, dict) else None
+    claimed = data.get("claimed") if isinstance(data, dict) else None
+    stage = data.get("stage") if isinstance(data, dict) else None
+    variant = node.get("variant")
+    if (
+        variant not in ("pure", "swap", "challenge")
+        or not isinstance(candidates, list)
+        or len(candidates) != SUPPLY_ROUNDS + 1
+        or any(not isinstance(item, list) for item in candidates)
+        or not isinstance(round_index, int)
+        or isinstance(round_index, bool)
+        or not isinstance(claimed, list)
+        or not isinstance(data.get("swapUsed"), bool)
+    ):
+        raise GameError("补给状态异常，请重新进入节点")
+    if stage == "round":
+        valid = round_index in (0, 1)
+    elif stage == "option":
+        valid = (
+            round_index == SUPPLY_ROUNDS
+            and variant in ("swap", "challenge")
+            and len(claimed) == SUPPLY_ROUNDS
+        )
+    else:
+        valid = False
+    if not valid or len(claimed) != round_index:
+        raise GameError("补给状态异常，请重新进入节点")
+    return node, data
+
+
+def _require_supply_option(state, variant):
+    node, data = _require_supply(state)
+    if data["stage"] != "option" or node.get("variant") != variant:
+        raise GameError("当前没有可选的补给附加事件")
+    return node, data
+
+
+def _check_supply_round(data, expected_round):
+    if (
+        data["stage"] != "round"
+        or not isinstance(expected_round, int)
+        or isinstance(expected_round, bool)
+        or expected_round != data["round"]
+    ):
+        raise GameError("补给轮次已变化，请刷新后重试")
+
+
+def _supply_advance(state, node, data, card_id):
+    data["claimed"].append(card_id)
+    data["round"] += 1
+    if data["round"] < SUPPLY_ROUNDS:
+        return
+    if node.get("variant") == "pure":
+        finish_node(state, node["id"])
+    else:
+        data["stage"] = "option"
+
+
+def supply_choose(state, expected_round, card_id):
+    node, data = _require_supply(state)
+    _check_supply_round(data, expected_round)
+    if card_id not in data["candidates"][data["round"]]:
+        raise GameError("这张卡不在当前候选中")
+    state["cards"].append(_new_card(card_id))
+    _supply_advance(state, node, data, card_id)
+
+
+def supply_skip(state, expected_round):
+    node, data = _require_supply(state)
+    _check_supply_round(data, expected_round)
+    _supply_advance(state, node, data, None)
+
+
+def _supply_swap_price(state):
+    price = SUPPLY_SWAP_PRICES.get(current_map_type(state))
+    if not isinstance(price, int) or isinstance(price, bool):
+        raise GameError("补给交换价格缺失")
+    return price
+
+
+def supply_swap_choose(state, card_id, payment, remove_uid=None):
+    node, data = _require_supply_option(state, "swap")
+    if data["swapUsed"]:
+        raise GameError("本次补给已经交换过")
+    if card_id not in data["candidates"][SUPPLY_ROUNDS]:
+        raise GameError("这张卡不在当前交换候选中")
+    price = _supply_swap_price(state)
+    removal = None
+    if payment == "gold":
+        if state["gold"] < price:
+            raise GameError("金币不足")
+    elif payment == "card":
+        removal = next(
+            (card for card in state["cards"] if card.get("uid") == remove_uid), None
+        )
+        if removal is None:
+            raise GameError("没有这张要移除的牌")
+        if not _recycle_removable(state, removal):
+            raise GameError("移除后无法满足起手保底条件")
+    else:
+        raise GameError("无效的交换支付方式")
+    if payment == "gold":
+        state["gold"] -= price
+    else:
+        state["cards"].remove(removal)
+    state["cards"].append(_new_card(card_id))
+    data["swapUsed"] = True
+    finish_node(state, node["id"])
+
+
+def supply_swap_skip(state):
+    node, _ = _require_supply_option(state, "swap")
+    finish_node(state, node["id"])
+
+
+def _supply_next_battles(state):
+    node = current_node(state)
+    nodes = _map_nodes(state)
+    found = []
+    seen = set()
+
+    def walk(node_id):
+        if node_id in seen:
+            return
+        seen.add(node_id)
+        child = nodes.get(node_id)
+        if child is None:
+            return
+        if child["type"] == "battle":
+            found.append(child)
+            return
+        for next_id in child.get("next") or []:
+            walk(next_id)
+
+    for next_id in node.get("next") or []:
+        walk(next_id)
+    return found
+
+
+def supply_challenge_accept(state, challenge_id):
+    node, _ = _require_supply_option(state, "challenge")
+    if state.get("pendingChallenges"):
+        raise GameError("已有未结算的挑战，不能接受新的挑战")
+    item = SUPPLY_CHALLENGE_BY_ID.get(challenge_id)
+    if item is None:
+        raise GameError("没有这个补给挑战")
+    state["pendingChallenges"] = [
+        {"id": item["id"], "rewardSeed": random.randrange(1, 2**31)}
+    ]
+    finish_node(state, node["id"])
+
+
+def supply_challenge_skip(state):
+    node, _ = _require_supply_option(state, "challenge")
     finish_node(state, node["id"])
 
 
@@ -1215,6 +1951,8 @@ def _legacy_layout():
                 queue.append(child)
     by_column = {}
     for node in NODES:
+        if node["id"] not in columns:
+            continue
         by_column.setdefault(columns[node["id"]], []).append(node)
     rows = {
         node["id"]: row
@@ -1281,6 +2019,8 @@ def map_view(state):
     status_by_id = {}
     nodes = []
     for node in NODES:
+        if node["id"] not in columns:
+            continue
         group = node.get("branchGroup")
         if node["id"] in state["completed"]:
             status = "completed"
@@ -1310,6 +2050,7 @@ def map_view(state):
             "status": _edge_status(status_by_id, node["id"], child),
         }
         for node in NODES
+        if node["id"] in columns
         for child in node["next"]
     ]
     return {
@@ -1382,14 +2123,21 @@ def recruit_buy(state, offer_id):
     card_id = offer["id"]
     max_level = len(CARDS[card_id]["levels"])
     owned = _owned_card(state, card_id)
-    if owned is not None and owned["level"] >= max_level:
-        raise GameError("该卡已经满级")
-    if owned is None and len(state["cards"]) >= MAX_DECK:
-        raise GameError("牌组已满，MVP 不支持替换")
+    if rules_version(state) >= 2:
+        if card_id not in unlocked_card_ids(state):
+            raise GameError("这张卡尚未开放")
+    else:
+        if owned is not None and owned["level"] >= max_level:
+            raise GameError("该卡已经满级")
+        cap = _deck_cap(state)
+        if owned is None and cap is not None and len(state["cards"]) >= cap:
+            raise GameError("牌组已满，MVP 不支持替换")
     if state["gold"] < offer["price"]:
         raise GameError("金币不足")
     state["gold"] -= offer["price"]
-    if owned is not None:
+    if rules_version(state) >= 2:
+        state["cards"].append(_new_card(card_id))
+    elif owned is not None:
         owned["level"] += 1
     else:
         state["cards"].append(_new_card(card_id))
@@ -1500,7 +2248,24 @@ def recycle_price(card):
     return RECYCLE["goldPerCost"] * stats["cost"] + RECYCLE["goldPerLevel"] * (card["level"] - 1)
 
 
+def _opening_deck_valid(cards):
+    low = []
+    drawable = 0
+    for card in cards:
+        stats = card_stats(
+            CARDS, card["cardId"], card["level"], card.get("atkBonus", 0), card.get("hpBonus", 0)
+        )
+        if stats["cost"] < 6:
+            drawable += 1
+        if stats["cost"] <= 2:
+            low.append(stats["type"])
+    return len(low) >= 4 and "unit" in low and drawable >= 6
+
+
 def _recycle_removable(state, card):
+    if rules_version(state) >= 2:
+        remaining = [item for item in state["cards"] if item is not card]
+        return bool(remaining) and _opening_deck_valid(remaining)
     if len(state["cards"]) <= 1:
         return False
     if CARDS[card["cardId"]]["type"] != "unit":
@@ -1537,7 +2302,10 @@ def recycle_leave(state):
 
 
 def _drift_pool(state):
-    full = len(state["cards"]) >= MAX_DECK
+    if rules_version(state) >= 2:
+        return sorted(unlocked_card_ids(state))
+    cap = _deck_cap(state)
+    full = cap is not None and len(state["cards"]) >= cap
     pool = []
     for card_id, definition in CARDS.items():
         owned = _owned_card(state, card_id)
@@ -1558,6 +2326,8 @@ def _drift_candidates(state, rerolls=None):
     pool = _drift_pool(state)
     if not pool:
         return []
+    if rules_version(state) >= 2:
+        return pick_candidates(state, pool, seed + count, DRIFT["candidateCount"])
     rng = random.Random(seed + count)
     return rng.sample(pool, min(DRIFT["candidateCount"], len(pool)))
 
@@ -1572,6 +2342,10 @@ def drift_choose(state, card_id):
         raise GameError("当前不在漂流卡匣")
     if card_id not in _drift_candidates(state):
         raise GameError("这张卡不在当前候选中")
+    if rules_version(state) >= 2:
+        state["cards"].append(_new_card(card_id))
+        finish_node(state, node["id"])
+        return
     owned = _owned_card(state, card_id)
     if owned is not None:
         if owned["level"] >= len(CARDS[card_id]["levels"]):
@@ -1618,12 +2392,17 @@ def _shop_offer(offer_id):
     raise GameError("没有这个商品")
 
 
-def _shop_available(state, offer):
-    card = _owned_card(state, offer["cardId"])
+def _shop_available(state, offer, card_uid=None):
+    card = _resolve_card(state, offer["cardId"], card_uid)
     if offer["kind"] == "new":
+        if rules_version(state) >= 2:
+            if offer["cardId"] not in unlocked_card_ids(state):
+                return False, "尚未开放"
+            return True, ""
         if card is not None:
             return False, "已拥有同名卡"
-        if len(state["cards"]) >= MAX_DECK:
+        cap = _deck_cap(state)
+        if cap is not None and len(state["cards"]) >= cap:
             return False, "牌组已满"
         return True, ""
     if card is None:
@@ -1635,7 +2414,7 @@ def _shop_available(state, offer):
     return True, ""
 
 
-def shop_buy(state, offer_id):
+def shop_buy(state, offer_id, card_uid=None):
     node = current_node(state)
     if node is None or node["type"] != "shop":
         raise GameError("当前不是断线商船")
@@ -1644,13 +2423,13 @@ def shop_buy(state, offer_id):
     if state["phase"] != "node":
         raise GameError("当前不在断线商船")
     offer = _shop_offer(offer_id)
-    buyable, reason = _shop_available(state, offer)
+    buyable, reason = _shop_available(state, offer, card_uid)
     if not buyable:
         raise GameError(reason)
     if state["gold"] < offer["price"]:
         raise GameError("金币不足")
     state["gold"] -= offer["price"]
-    card = _owned_card(state, offer["cardId"])
+    card = _resolve_card(state, offer["cardId"], card_uid)
     if offer["kind"] == "new":
         state["cards"].append(_new_card(offer["cardId"]))
     elif offer["kind"] == "upgrade":
@@ -1720,6 +2499,8 @@ def _trial_rewards(state):
     if not pool:
         return []
     seed = state["nodeData"]["seed"]
+    if rules_version(state) >= 2:
+        return pick_candidates(state, pool, seed + 7919, TRIAL["candidateCount"])
     rng = random.Random(seed + 7919)
     return rng.sample(pool, min(TRIAL["candidateCount"], len(pool)))
 
@@ -1760,6 +2541,10 @@ def trial_choose_card(state, card_id):
         raise GameError("没有可领取的试炼奖励")
     if card_id not in data.get("candidates", []):
         raise GameError("这张卡不在奖励候选中")
+    if rules_version(state) >= 2:
+        state["cards"].append(_new_card(card_id))
+        finish_node(state, node["id"])
+        return
     owned = _owned_card(state, card_id)
     if owned is not None:
         if owned["level"] >= len(CARDS[card_id]["levels"]):
@@ -1845,6 +2630,8 @@ def training_choose(state, challenge_id):
     item = _challenge_def(challenge_id)
     if not _challenge_available(state, item):
         raise GameError("该训练挑战尚未解锁")
+    if state.get("pendingChallenges"):
+        raise GameError("已有未结算的挑战，不能接受新的挑战")
     state["pendingChallenges"] = [{"id": item["id"]}]
     finish_node(state, node["id"])
 
@@ -1860,15 +2647,38 @@ def battle_challenge(state):
     pending = state.get("pendingChallenges") or []
     if not pending:
         return None
-    return _challenge_def(pending[0]["id"])
+    challenge_id = pending[0]["id"]
+    if challenge_id in SUPPLY_CHALLENGE_BY_ID:
+        return SUPPLY_CHALLENGE_BY_ID[challenge_id]
+    return _challenge_def(challenge_id)
+
+
+def abandon_failed_challenge(state):
+    """补给挑战首次战败后移除压力与额外奖励，训练挑战保持原规则。"""
+    pending = state.get("pendingChallenges") or []
+    if pending and pending[0].get("id") in SUPPLY_CHALLENGE_BY_ID:
+        state["pendingChallenges"] = []
+        state["pendingChallengeReward"] = None
+        return True
+    return False
 
 
 def settle_challenges(state):
-    """战斗胜利后结算并清空挂载的挑战；失败重试时保留。"""
+    """战斗胜利后结算并清空挂载的挑战；返回待处理的额外卡牌奖励。"""
     pending = state.get("pendingChallenges") or []
+    reward = None
     for item in pending:
-        state["gold"] += _challenge_def(item["id"])["reward"]
+        if item["id"] in SUPPLY_CHALLENGE_BY_ID:
+            definition = SUPPLY_CHALLENGE_BY_ID[item["id"]]
+            state["gold"] += definition.get("reward", 0)
+            seed = item.get("rewardSeed")
+            if not isinstance(seed, int) or isinstance(seed, bool):
+                seed = random.randrange(1, 2**31)
+            reward = {"source": "challenge", "seed": seed}
+        else:
+            state["gold"] += _challenge_def(item["id"])["reward"]
     state["pendingChallenges"] = []
+    return reward
 
 
 def relay_keep(state):
@@ -1968,6 +2778,20 @@ def _recruit_view(state):
         card_id = offer["id"]
         max_level = len(CARDS[card_id]["levels"])
         owned = _owned_card(state, card_id)
+        if rules_version(state) >= 2:
+            if card_id not in unlocked_card_ids(state):
+                continue
+            offers.append(
+                {
+                    "cardId": card_id,
+                    "name": CARDS[card_id]["name"],
+                    "price": offer["price"],
+                    "level": 1,
+                    "maxLevel": max_level,
+                    "owned": owned is not None,
+                }
+            )
+            continue
         if owned is not None and owned["level"] >= max_level:
             continue
         offers.append(
@@ -2193,8 +3017,9 @@ def _drift_view(state):
     if node is None or node["type"] != "drift" or state["phase"] != "node":
         return None
     candidates = []
+    new_entities = rules_version(state) >= 2
     for card_id in _drift_candidates(state):
-        owned = _owned_card(state, card_id)
+        owned = None if new_entities else _owned_card(state, card_id)
         current_level = owned["level"] if owned else 0
         target_level = current_level + 1 if owned else 1
         stats = card_stats(
@@ -2247,6 +3072,17 @@ def _shop_view(state):
             buyable, reason = False, "本节点已购买"
         elif state["gold"] < offer["price"]:
             buyable, reason = False, "金币不足"
+        if rules_version(state) >= 2 and offer["kind"] != "new":
+            view["targets"] = [
+                {
+                    "uid": card["uid"],
+                    "level": card["level"],
+                    "atkBonus": card.get("atkBonus", 0),
+                    "hpBonus": card.get("hpBonus", 0),
+                }
+                for card in state["cards"]
+                if card["cardId"] == offer["cardId"]
+            ]
         view["buyable"] = buyable
         view["reason"] = reason
         offers.append(view)
@@ -2273,8 +3109,9 @@ def _trial_view(state):
         )
     candidates = []
     if data.get("status") == "success":
+        new_entities = rules_version(state) >= 2
         for card_id in data.get("candidates", []):
-            owned = _owned_card(state, card_id)
+            owned = None if new_entities else _owned_card(state, card_id)
             current_level = owned["level"] if owned else 0
             target_level = current_level + 1 if owned else 1
             stats = card_stats(
@@ -2299,6 +3136,95 @@ def _trial_view(state):
     }
 
 
+def _supply_challenge_view(state):
+    blocked = bool(state.get("pendingChallenges"))
+    options = []
+    if not blocked:
+        for item in SUPPLY_CHALLENGES:
+            options.append(
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "description": item["description"],
+                    "reward": item.get("reward", 0),
+                }
+            )
+    targets = []
+    for battle in _supply_next_battles(state):
+        encounter = ENCOUNTERS.get(battle.get("encounter"), {})
+        plan = []
+        for step in encounter.get("plan", []):
+            enemy = ENEMIES.get(step["enemy"], {})
+            plan.append(
+                {
+                    "turn": step["turn"],
+                    "column": step["column"],
+                    "enemy": step["enemy"],
+                    "name": enemy.get("name", step["enemy"]),
+                    "atk": enemy.get("atk"),
+                    "hp": enemy.get("hp"),
+                    "width": enemy.get("width", 1),
+                }
+            )
+        targets.append(
+            {
+                "id": battle["id"],
+                "name": battle["name"],
+                "encounter": battle.get("encounter"),
+                "playerHp": encounter.get("playerHp"),
+                "enemyHp": encounter.get("enemyHp"),
+                "plan": plan,
+            }
+        )
+    return {"blocked": blocked, "options": options, "targets": targets}
+
+
+def _supply_view(state):
+    node = current_node(state)
+    if node is None or node["type"] != "supply" or state["phase"] != "node":
+        return None
+    try:
+        _, data = _require_supply(state)
+    except GameError:
+        return None
+    variant = node.get("variant", "pure")
+    stage = data["stage"]
+    if stage == "round":
+        candidate_ids = data["candidates"][data["round"]]
+    elif variant == "swap":
+        candidate_ids = data["candidates"][SUPPLY_ROUNDS]
+    else:
+        candidate_ids = []
+    candidates = []
+    for card_id in candidate_ids:
+        stats = card_stats(CARDS, card_id, 1)
+        stats["effectText"] = _effect_text(stats)
+        candidates.append(stats)
+    claimed = []
+    for card_id in data["claimed"]:
+        claimed.append(CARDS[card_id]["name"] if card_id else None)
+    view = {
+        "round": min(data["round"] + 1, SUPPLY_ROUNDS + 1),
+        "rounds": SUPPLY_ROUNDS,
+        "stage": stage,
+        "candidates": candidates,
+        "claimed": claimed,
+        "variant": variant,
+        "swap": None,
+        "challenge": None,
+    }
+    if stage == "option" and variant == "swap":
+        targets = []
+        for card in state["cards"]:
+            card_view = _card_view(card)
+            card_view["removable"] = _recycle_removable(state, card)
+            targets.append(card_view)
+        view["swap"] = {"price": _supply_swap_price(state), "targets": targets}
+    elif stage == "option" and variant == "challenge":
+        view["challenge"] = _supply_challenge_view(state)
+    return view
+
+
 def public_state(state):
     node = current_node(state)
     map_data = state.get("mapData")
@@ -2306,6 +3232,7 @@ def public_state(state):
     return {
         "phase": state["phase"],
         "transitionTarget": state.get("transitionTarget"),
+        "rulesVersion": rules_version(state),
         "mapType": map_type,
         "mapMeta": map_meta(map_type),
         "canStartMap2": can_start_map2(state),
@@ -2317,6 +3244,10 @@ def public_state(state):
             "name": node["name"],
             "role": node.get("role"),
             "encounter": node.get("encounter"),
+            "leaderMaxHp": {
+                side: ENCOUNTERS[node["encounter"]][f"{side}Hp"]
+                for side in ("player", "enemy")
+            } if node["type"] == "battle" else None,
         }
         if node
         else None,
@@ -2337,6 +3268,7 @@ def public_state(state):
         "drones": _drones_view(state),
         "training": _training_view(state),
         "relay": _relay_view(state),
+        "supply": _supply_view(state),
         "pendingChallenge": _pending_challenge_view(state),
         "eliteReward": _elite_reward_view(state),
         "map": map_view(state),
@@ -2353,6 +3285,13 @@ def migrate_state(state):
         raise ValueError("存档版本非法")
     if version > SCHEMA_VERSION:
         raise ValueError("存档版本高于当前程序版本")
+    rules = state.setdefault("rulesVersion", 1)
+    if (
+        not isinstance(rules, int)
+        or isinstance(rules, bool)
+        or not 1 <= rules <= RULES_VERSION
+    ):
+        raise ValueError("冒险规则版本非法")
     before = json.dumps(state, sort_keys=True, ensure_ascii=False)
 
     map_data = state.get("mapData")
@@ -2450,21 +3389,79 @@ def migrate_state(state):
         raise ValueError("存档节点数据非法")
     if state["phase"] == "elite_reward":
         active = _map_nodes(state).get(state["nodeId"])
-        if active is None or not active.get("eliteReward"):
-            raise ValueError("存档精英奖励节点非法")
+        source = node_data.get("source", "elite")
+        if active is None or (not active.get("eliteReward") and source != "challenge"):
+            raise ValueError("存档卡牌奖励节点非法")
         seed = node_data.get("seed")
         if not isinstance(seed, int) or isinstance(seed, bool):
-            raise ValueError("存档精英奖励种子非法")
+            raise ValueError("存档卡牌奖励种子非法")
         if not isinstance(node_data.get("claimed"), bool):
-            raise ValueError("存档精英奖励状态非法")
+            raise ValueError("存档卡牌奖励状态非法")
+        if node_data.get("source") is not None and source not in ("elite", "challenge"):
+            raise ValueError("存档卡牌奖励来源非法")
+    if state["phase"] == "node":
+        active = _map_nodes(state).get(state["nodeId"])
+        if active is not None and active.get("type") == "supply":
+            seed = node_data.get("seed")
+            round_index = node_data.get("round")
+            stage = node_data.get("stage")
+            candidates = node_data.get("candidates")
+            claimed = node_data.get("claimed")
+            variant = active.get("variant")
+            if (
+                variant not in ("pure", "swap", "challenge")
+                or not isinstance(seed, int)
+                or isinstance(seed, bool)
+                or not isinstance(candidates, list)
+                or len(candidates) != SUPPLY_ROUNDS + 1
+                or any(
+                    not isinstance(item, list)
+                    or any(card_id not in CARDS for card_id in item)
+                    for item in candidates
+                )
+                or not isinstance(round_index, int)
+                or isinstance(round_index, bool)
+                or not isinstance(claimed, list)
+                or len(claimed) != round_index
+                or any(card_id is not None and card_id not in CARDS for card_id in claimed)
+                or not isinstance(node_data.get("swapUsed"), bool)
+            ):
+                raise ValueError("存档补给状态非法")
+            if stage == "round":
+                valid = round_index in (0, 1)
+            elif stage == "option":
+                valid = (
+                    round_index == SUPPLY_ROUNDS
+                    and variant in ("swap", "challenge")
+                )
+            else:
+                valid = False
+            if not valid:
+                raise ValueError("存档补给阶段非法")
     pending = state.setdefault("pendingChallenges", [])
-    if not isinstance(pending, list):
+    if not isinstance(pending, list) or len(pending) > 1:
         raise ValueError("存档挑战非法")
     for item in pending:
-        if not isinstance(item, dict) or item.get("id") not in CHALLENGE_BY_ID:
+        if not isinstance(item, dict):
             raise ValueError("存档挑战非法")
-        if not _challenge_available(state, CHALLENGE_BY_ID[item["id"]]):
-            raise ValueError("存档挑战未解锁")
+        if item.get("id") in CHALLENGE_BY_ID:
+            if not _challenge_available(state, CHALLENGE_BY_ID[item["id"]]):
+                raise ValueError("存档挑战未解锁")
+        elif item.get("id") in SUPPLY_CHALLENGE_BY_ID:
+            seed = item.get("rewardSeed")
+            if not isinstance(seed, int) or isinstance(seed, bool):
+                raise ValueError("存档挑战奖励种子非法")
+        else:
+            raise ValueError("存档挑战非法")
+    pending_reward = state.setdefault("pendingChallengeReward", None)
+    if pending_reward is not None:
+        if (
+            not isinstance(pending_reward, dict)
+            or pending_reward.get("source") != "challenge"
+            or not isinstance(pending_reward.get("seed"), int)
+            or isinstance(pending_reward.get("seed"), bool)
+        ):
+            raise ValueError("存档挑战奖励非法")
     draw_bonus = state.setdefault("pendingDrawBonus", 0)
     if not isinstance(draw_bonus, int) or isinstance(draw_bonus, bool) or draw_bonus < 0:
         raise ValueError("存档抽牌加成非法")

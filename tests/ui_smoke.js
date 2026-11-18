@@ -1,5 +1,6 @@
 /**
  * 浏览器冒烟测试：node tests/ui_smoke.js（需要先启动服务，以及本机 Edge）。
+ * MAP_UI_ONLY=1 仅检查三章地图的四种窗口尺寸和地图菜单操作。
  * 通过 CDP 驱动无头 Edge：注册 → 标题/存档/设置 → 拖放/技能/宽体部署 → 随机地图与刷新持久化 →
  * 精英路线与三选一奖励；并检查桌面、窄窗与手机布局。
  */
@@ -290,6 +291,11 @@ async function main() {
       async () => (await evaluate("document.readyState")) === "complete",
       "页面加载"
     );
+    if (process.env.MAP_UI_ONLY === "1") {
+      await checkMapPreviews();
+      ws.close();
+      return;
+    }
     for (const [filename, index] of [["clip-01", 0], ["clip-02", 1], ["clip-04", 3], ["clip-03", 2]]) {
       const playback = await playClipToEnd(filename);
       if (playback.duration !== 4.5 || playback.clip !== index ||
@@ -593,6 +599,7 @@ async function main() {
       }
       await expectStep(0);
       await screenshot("ai-game-tutorial-start.png");
+      if (!(await evaluate("['enemy-hp','player-hp','energy','hand-toggle'].every(id => document.getElementById(id).classList.contains('tutorial-target'))"))) throw new Error("开场教程没有标出领袖生命、能量和手牌位置");
       await click("#tutorial-next");
       await expectStep(1);
       if (!(await evaluate("document.getElementById('end-turn').disabled"))) throw new Error("教学未禁止提前结束回合");
@@ -622,33 +629,12 @@ async function main() {
       await waitFor(() => evaluate("typeof battle !== 'undefined' && battle?.tutorial?.index === 3"), "恢复教学步骤");
       await dragCard("spark", "enemy", 2);
       await expectStep(4);
-      await dragCard("worker", "player", 3);
-      await expectStep(5);
-      await click("#end-turn");
-      await expectStep(6);
-      await click("#recycle-btn");
-      // confirm 会阻塞 Runtime.evaluate，先触发点击，再由 CDP 确认。
-      const recycleClick = click('#player-row [data-column="2"]');
-      await sleep(200);
-      await command("Page.handleJavaScriptDialog", { accept: true });
-      await recycleClick;
-      await expectStep(7);
-      await dragCard("twin_rail", "player", 1);
-      await expectStep(8);
-      await click("#end-turn");
-      await expectStep(9);
       await screenshot("ai-game-tutorial-finish.png");
       await click("#tutorial-next");
       await waitFor(() => evaluate("!battle.tutorial && !busy"), "教学完成后自由战斗");
-      for (let turn = 0; turn < 8 && !(await evaluate("battle.result === 'win'")); turn += 1) {
-        await click("#end-turn");
-        await waitFor(() => evaluate("!busy"), "自由回合结算");
-      }
-      if (!(await evaluate("battle.result === 'win'"))) throw new Error("教学后未能获胜");
-      await click("#result-action");
-      await storyUntil("map-view");
-      if (!(await evaluate("state.gold === 20 && state.progress === 1"))) throw new Error("首战奖励或剧情衔接错误");
-      console.log("ok 实际鼠标拖动完成完整教学、刷新恢复、小屏布局、获胜与地图衔接");
+      await dragCard("worker", "player", 4);
+      if (!(await evaluate("!battle.tutorial && battle.board.player[3]?.cardId === 'worker'"))) throw new Error("教学结束后没有恢复自由部署");
+      console.log("ok 实际鼠标拖动完成精简教学、刷新恢复、小屏布局与自由部署");
       ws.close();
       return;
     }
@@ -1318,6 +1304,82 @@ async function main() {
     await storyUntil("map-view");
     console.log("ok 战斗胜利后进入随机地图");
 
+    async function checkMapPreviews() {
+      const fixtures = JSON.parse(execFileSync(process.env.PYTHON || "python", ["-c", `
+import json
+from app import game
+states = []
+for kind in ('map1', 'map2', 'map3'):
+    s = game.new_state(97, kind)
+    s['phase'] = 'map'
+    s['completed'] = [s['nodeId']]
+    s['gold'] = 12345
+    states.append(game.public_state(s))
+print(json.dumps(states))
+      `], { cwd: path.join(__dirname, '..'), encoding: 'utf8' }));
+      await evaluate(`(async () => {
+        const auth = await api('/api/register', {username:'map'+Date.now().toString(36),password:'test-pass-123'});
+        username = auth.username;
+        return true;
+      })()`);
+      for (const fixture of fixtures) {
+        await evaluate(`screen='game'; battle=null; apply({state:${JSON.stringify(fixture)}}); true;`);
+        for (const [width, height] of [[1920,1080],[1366,768],[1024,600],[667,375]]) {
+          await command('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:width===667});
+          await command('Emulation.setEmulatedMedia', {features:width===667 ? [{name:'hover',value:'none'},{name:'pointer',value:'coarse'}] : []});
+          await command('Emulation.setTouchEmulationEnabled', {enabled:width===667,maxTouchPoints:1});
+          await sleep(250);
+          await checkMapLayout();
+          if (width===667 && !await evaluate(`(() => {
+            const nodes=[...document.querySelectorAll('.map-node')];
+            return [...document.querySelectorAll('.map-node:not(:disabled) .map-node-label')].every(label => {
+              const p=label.getBoundingClientRect();
+              return getComputedStyle(label).visibility==='visible' && nodes.filter(node=>!node.contains(label)).every(node=>{
+                const q=node.querySelector('.map-node-icon').getBoundingClientRect();
+                return p.right<=q.left || p.left>=q.right || p.bottom<=q.top || p.top>=q.bottom;
+              });
+            });
+          })()`)) throw Error('触屏节点名称被相邻图标遮挡');
+          await screenshot(`ai-game-${fixture.mapType}-${width}.png`);
+        }
+      }
+      await command('Emulation.setEmulatedMedia', {features:[]});
+      await command('Emulation.setTouchEmulationEnabled', {enabled:false});
+      await command('Input.dispatchKeyEvent', {type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+      await command('Input.dispatchKeyEvent', {type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+      if (!await evaluate(`(() => {
+        const node=document.querySelector('.map-node:not(:disabled)');
+        node.focus({preventScroll:true});
+        return node.matches(':focus-visible') && getComputedStyle(node.querySelector('.map-node-label')).visibility==='visible';
+      })()`)) throw Error('地图节点键盘焦点或名称缺失');
+      await evaluate(`document.activeElement.blur(); true;`);
+      await command('Emulation.setDeviceMetricsOverride', {width:1366,height:768,deviceScaleFactor:1,mobile:false});
+      const point=await evaluate(`(() => {const r=document.querySelector('.map-node:not(:disabled)').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await command('Input.dispatchMouseEvent', {type:'mouseMoved',...point});
+      await sleep(200);
+      if (!await evaluate(`getComputedStyle(document.querySelector('.map-node:not(:disabled) .map-node-label')).visibility==='visible'`)) throw Error('地图节点悬停名称缺失');
+      await command('Emulation.setDeviceMetricsOverride', {width:667,height:375,deviceScaleFactor:1,mobile:false});
+      await evaluate(`state.gold=987; state.progress=6; state.pendingChallenge={name:'信号同步：下一场战斗首回合额外出现突击哨兵'}; render(); true;`);
+      await checkMapLayout();
+      if (!await evaluate(`$('hud-gold').textContent==='987' && $('map-route').textContent.includes('6 /') && $('map-hint').textContent.includes('信号同步')`)) throw Error('地图资源或挑战提示未更新');
+      await screenshot('ai-game-map-challenge-phone.png');
+      await click('#menu-btn');
+      await waitFor(() => visible('menu-view'), '地图返回主菜单');
+      await waitFor(() => evaluate(`!$('continue-btn').disabled && !busy`), '菜单存档加载完成');
+      await click('#continue-btn');
+      await waitFor(() => visible('story-view'), '菜单继续游戏');
+      if (!await evaluate(`getComputedStyle(document.querySelector('#game > .topbar')).display==='none'`)) throw Error('剧情页面错误继承地图顶栏');
+      await storyUntil('map-view');
+      await click('.map-node:not(:disabled)');
+      await waitFor(() => visible('story-view'), '选择节点进入剧情');
+      await storyUntil('battle-view');
+      if (!await evaluate(`getComputedStyle(document.querySelector('#game > .topbar')).position==='sticky' && getComputedStyle(document.querySelector('.hud-resources')).display==='contents' && getComputedStyle($('map-route')).display==='none'`)) throw Error('战斗页面未恢复普通顶栏');
+      await evaluate(`screen='game'; apply({state:${JSON.stringify(fixtures[0])}}); true;`);
+      await click('#logout-btn');
+      await waitFor(() => visible('auth'), '地图退出登录');
+      console.log('ok 三章全屏地图、四种窗口、资源更新、挑战提示与菜单操作');
+    }
+
     async function mapDomState() {
       return evaluate(`(() => {
         const map = state.map;
@@ -1365,6 +1427,28 @@ async function main() {
           eyebrow: document.getElementById('map-eyebrow').textContent,
           cartouche: document.querySelector('.map-cartouche').textContent,
           destination: document.querySelector('.map-destination').textContent,
+          fullscreen: (() => {
+            const r = document.querySelector('.map-board').getBoundingClientRect();
+            return Math.abs(r.x)<1 && Math.abs(r.y)<1 && Math.abs(r.width-innerWidth)<1 && Math.abs(r.height-innerHeight)<1;
+          })(),
+          hudVisible: ['hud-gold','hud-user','menu-btn','logout-btn','map-route'].every(id => {
+            const el = document.getElementById(id), r = el.getBoundingClientRect();
+            return r.width>0 && r.height>0 && r.left>=0 && r.right<=innerWidth+1 && r.top>=0 && r.bottom<=innerHeight+1;
+          }),
+          goldUpdated: document.getElementById('hud-gold').textContent === String(state.gold),
+          noOverflow: document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight,
+          nodesClear: nodes.every(node => {
+            const r=node.getBoundingClientRect();
+            const pieces=[node, node.closest('.map-stop').querySelector('.map-pawn')].filter(Boolean);
+            const panels=[...document.querySelectorAll('.hud-resources,.hud-account,.map-head,#map-page-right')];
+            return pieces.every(piece => {
+              const p=piece.getBoundingClientRect();
+              return p.left>=0 && p.right<=innerWidth && p.top>=0 && p.bottom<=innerHeight && panels.every(panel => {
+                const q=panel.getBoundingClientRect();
+                return p.right<=q.left || p.left>=q.right || p.bottom<=q.top || p.top>=q.bottom;
+              });
+            }) && node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+          }),
         };
       })()`);
     }
@@ -1374,7 +1458,8 @@ async function main() {
       if (check.phase !== "map" || check.count !== check.total ||
           check.total <= check.runLength || check.paths !== check.edges ||
           check.available < 1 || !check.connected || !check.targetSize ||
-          !check.lockedDisabled || check.oldFixed ||
+          !check.lockedDisabled || check.oldFixed || !check.fullscreen || !check.hudVisible ||
+          !check.goldUpdated || !check.noOverflow || !check.nodesClear ||
           check.columns.length !== check.runLength) {
         throw new Error(`随机地图节点、连线或点击区域异常：${JSON.stringify(check)}`);
       }

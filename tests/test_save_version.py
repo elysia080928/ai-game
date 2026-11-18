@@ -266,6 +266,23 @@ def main():
         resumed = response.json()["battle"]
         assert resumed["tutorial"] is None
         assert battle_client.post("/api/battle/start").json()["battle"]["tutorial"] is None
+        battle_user_id = conn.execute(
+            "SELECT id FROM users WHERE username = 'battlepersist'"
+        ).fetchone()[0]
+        stored = json.loads(conn.execute(
+            "SELECT state FROM battle_slots WHERE user_id = ? AND slot_id = 1", (battle_user_id,)
+        ).fetchone()[0])
+        uid = max([card["uid"] for card in stored["hand"]] + [9000]) + 1
+        stored["hand"].append(
+            {"uid": uid, "cardId": "twin_rail", "level": 1, "atkBonus": 0, "hpBonus": 0}
+        )
+        stored["next_uid"] = max(stored.get("next_uid", 1), uid + 1)
+        conn.execute(
+            "UPDATE battle_slots SET state = ? WHERE user_id = ? AND slot_id = 1",
+            (json.dumps(stored, ensure_ascii=False), battle_user_id),
+        )
+        conn.commit()
+        resumed = battle_client.post("/api/battle/start").json()["battle"]
         twin_rail = next(card for card in resumed["hand"] if card["cardId"] == "twin_rail")
         deployed = battle_client.post(
             "/api/battle/deploy", json={"uid": twin_rail["uid"], "column": 1}

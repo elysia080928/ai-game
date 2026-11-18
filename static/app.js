@@ -18,6 +18,10 @@ let recycleTarget = null;
 let trialPick = null;
 let trainingPick = null;
 let relayAction = null;
+let supplyPick = null;
+let supplyPayment = null;
+let supplyRemoveUid = null;
+let shopTarget = null;
 let relayTarget = null;
 let signalAction = null;
 let signalTarget = null;
@@ -48,6 +52,7 @@ const NODE_TYPES = {
   drones: "无人机",
   training: "训练",
   relay: "中继",
+  supply: "补给",
 };
 const MAP_STATUS = { completed: "已完成", available: "可进入", locked: "未解锁", closed: "已关闭" };
 const TRANSITION_CLIPS = { map: "clip-01", map2: "clip-02", map3: "clip-04", complete: "clip-03" };
@@ -167,6 +172,10 @@ function apply(data) {
       recycleTarget = null;
       trialPick = null;
       trainingPick = null;
+      shopTarget = null;
+      supplyPick = null;
+      supplyPayment = null;
+      supplyRemoveUid = null;
       relayAction = null;
       relayTarget = null;
       signalAction = null;
@@ -191,7 +200,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["menu-view", "save-slots-view", "cg-view", "transition-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
+  ["menu-view", "save-slots-view", "cg-view", "transition-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "supply-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -345,6 +354,10 @@ function render() {
   }
   if (state.node && state.node.type === "trial") {
     renderTrial();
+    return;
+  }
+  if (state.node && state.node.type === "supply") {
+    renderSupply();
   }
 }
 
@@ -571,6 +584,7 @@ function mapNodeButton(node) {
     drones: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="9" width="8" height="7" rx="2"/><path d="m8 10-4-4m12 4 4-4M2 6h5m10 0h5M12 9V5m-3 14 3 2 3-2"/></svg>',
     relay: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21 5-13 5 13M8 17h8M6 10a8 8 0 0 1 0-7m12 7a8 8 0 0 0 0-7M12 8c-6-3-3-7 0-4 3-3 6 1 0 4Z"/></svg>',
     training: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="13" r="8"/><circle cx="11" cy="13" r="4"/><path d="m11 13 9-10m-4 0h4v4"/></svg>',
+    supply: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16v11H4V9Zm2 0V5h12v4M9 13h6M12 13v4"/></svg>',
     boss: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12ZM12 1v4m0 14v4M3 3l3 4m12 10 3 4M21 3l-3 4M6 17l-3 4"/><path d="m12 8 3 4-3 4-3-4 3-4Z"/></svg>'
   };
   const icon = node.role === "boss" ? icons.boss : icons[node.type] || icons.adventure;
@@ -640,16 +654,20 @@ function renderMap() {
   }).join("");
   const mapType = map.mapType || state.mapType || "map1";
   const meta = state.mapMeta || {};
+  $("game").dataset.mapType = mapType;
   const mapLabel = mapType === "map3" ? "第三章 · 静海档案" : mapType === "map2" ? "第二章 · 深层回路" : "第一章 · 回路边境";
-  $("map-eyebrow").textContent = meta.title ? `${meta.chapter} · ${meta.title}` : mapLabel;
+  $("map-eyebrow").textContent = meta.chapter || mapLabel.split(" · ")[0];
+  $("map-title").textContent = meta.title || mapLabel.split(" · ")[1];
+  $("map-subtitle").textContent = meta.subtitle || "THE BORDERLANDS";
   $("map-page-left").innerHTML = `
     <div class="map-board map-type-${esc(mapType)}" role="group" aria-label="${esc(meta.title || "回路边境")}冒险地图，选择亮起的事件图标前进">
       <div class="map-terrain" aria-hidden="true"></div>
-      <div class="map-cartouche" aria-hidden="true"><span>${esc(meta.subtitle || "THE BORDERLANDS")}</span><strong>${esc(meta.title || "回路边境")}</strong><i>${esc(meta.caption || "一张尚未写完的地图")}</i></div>
+      <div class="map-route-field">
       <svg class="map-paths map-paths-desktop" viewBox="0 0 1200 640" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>
       <svg class="map-paths map-paths-mobile" viewBox="0 0 640 1200" preserveAspectRatio="none" aria-hidden="true"><g transform="matrix(0 1 1 0 0 0)">${paths}</g></svg>
       ${nodes}
       <span class="map-destination" aria-hidden="true">${esc(meta.destination || "镜像核心")}</span>
+      </div>
     </div>`;
   $("map-page-right").innerHTML = `
     <div class="map-legend">
@@ -658,7 +676,7 @@ function renderMap() {
       <span><i class="legend-locked" aria-hidden="true"></i>未解锁</span>
       <span><i class="legend-closed" aria-hidden="true">×</i>已关闭</span>
     </div>
-    <p class="map-instruction">每一次选择，都留下一条不同的路。</p>`;
+    <p class="map-hint" id="map-hint" role="status"></p>`;
   $("map-route").textContent = `已行进 ${Number.isInteger(state.progress) ? state.progress : "—"} / ${Number.isInteger(state.runLength) ? state.runLength : "—"}`;
   const hint = state.completed.length === 0 && state.node?.role === "start"
     ? "选择起点，开启本章旅程。"
@@ -707,6 +725,12 @@ async function act(path, body) {
     const data = await api(path, body);
     selectedUid = null;
     if (path === "/api/battle/recycle") recycleMode = false;
+    if (path.startsWith("/api/shop/")) shopTarget = null;
+    if (path.startsWith("/api/supply/")) {
+      supplyPick = null;
+      supplyPayment = null;
+      supplyRemoveUid = null;
+    }
     apply(data);
   } catch (error) {
     showToast(error.message);
@@ -714,6 +738,39 @@ async function act(path, body) {
     busy = false;
   }
 }
+
+const UNIT_DOSSIERS = {
+  bean: "定位提案 · 低费轻型机体，适合抢先占位。",
+  shell: "定位提案 · 坚实耐久，适合稳住所在列。",
+  scout: "定位提案 · 轻型侦察单位，适合低费部署。",
+  worker: "定位提案 · 均衡型机体，适合补充战线。",
+  striker: "定位提案 · 攻防均衡，适合承担主攻。",
+  heavy: "定位提案 · 高攻高耐久，适合压制战线。",
+  guard: "定位提案 · 均衡守备，适合保护关键列。",
+  flyer: "定位提案 · 轻型空中支援，适合补充火力。",
+  twin_rail: "占据连续两列；每次攻击分别打击两列。",
+  arc_drone: "每次攻击当前列与右侧相邻列。",
+  double_claw: "每次攻击同一列两次。",
+  phase_flyer: "飞越没有对空能力的目标；只能被对空单位攻击。",
+  burst_beetle: "被摧毁时，对左右相邻敌军各造成 1 点伤害。",
+  shield_moth: "护盾可抵消一次伤害，并使该次伤害减少 1。",
+  rail_guard: "相邻友军受到敌方攻击时，可代为拦截一次。",
+  small_sentry: "定位提案 · 低威胁前哨，适合占据空列。",
+  defender: "定位提案 · 高耐久守备单位，适合拖慢推进。",
+  assault_sentry: "定位提案 · 高攻击轻装单位，优先施加压力。",
+  fork_sentry: "每次攻击当前列与右侧相邻列。",
+  wide_bulwark: "占据连续两列，以宽幅机体封锁战线。",
+  double_striker: "每次攻击同一列两次。",
+  reach_turret: "具备对空能力，可以攻击飞行单位。",
+  phase_hunter: "飞越没有对空能力的目标；只能被对空单位攻击。",
+  mine_beetle: "被摧毁时，对正对列单位造成 2 点伤害。",
+  signal_jammer: "首次部署后，使玩家下回合能量 -1（每场战斗一次）。",
+  drift_hunter: "敌方阶段结束时尝试向右移动一列。",
+  null_anchor: "锁定相邻列，使相邻友军无法被代为拦截。",
+  siege_carrier: "占据连续两列，以宽幅机体推进战线。",
+  mirror_core: "每次攻击覆盖全部列；护盾可抵消两次伤害。",
+  mirror_drone: "部署时复制正对单位的攻击模式。",
+};
 
 function unitHtml(unit, side, column) {
   if (unit && unit.column !== column) return "";
@@ -727,9 +784,7 @@ function unitHtml(unit, side, column) {
         unit.anchor ? "锚定" : "",
       ].filter(Boolean).join("，")
     : "";
-  const notes = unit
-    ? [width > 1 ? `占 ${width} 格` : "", unit.shift ? "右移" : "", unit.anchor ? "锚定" : ""].filter(Boolean).join(" · ")
-    : "";
+  const notes = unit ? UNIT_DOSSIERS[unit.cardId] || "定位提案 · 常规机体，按当前属性执行攻击。" : "";
   const label = unit
     ? `${span} 列，${unit.name}，等级 ${unit.level ?? 1}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
     : `${column} 列，空列`;
@@ -737,10 +792,20 @@ function unitHtml(unit, side, column) {
     return `<div class="slot empty" data-side="${side}" data-column="${column}" tabindex="0" aria-label="${esc(label)}" style="grid-column: ${column};"><span>空列</span></div>`;
   }
   const style = ` style="grid-column: ${unit.column} / span ${width};"`;
-  return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" tabindex="0" aria-label="${esc(label)}"${style}>
-      <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit, side)}</div>
-      <div class="unit-name"><span>${esc(unit.name)}</span><small class="unit-level" aria-hidden="true">LV ${unit.level ?? 1}</small>${notes ? ` <small>${notes}</small>` : ""}</div>
-      <div class="unit-stats"><span class="atk">攻 ${unit.atk}</span><span class="hp">耐 ${unit.hp}/${unit.maxHp}</span>${unit.shield ? `<span class="shield">盾 ${unit.shield}</span>` : ""}${unit.guard ? `<span class="guard">拦截 ${unit.guard}</span>` : ""}</div>
+  const previous = $(`${side}-row`).querySelector(`[data-uid="${unit.uid}"]`);
+  const damaged = previous && unit.hp < Number(previous.dataset.hp);
+  const boosted = previous && unit.atk > Number(previous.dataset.atk);
+  return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}${unit.hp < unit.maxHp ? " is-damaged" : ""}${damaged ? " just-damaged" : ""}${boosted ? " just-boosted" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" data-hp="${unit.hp}" data-atk="${unit.atk}" tabindex="0" aria-label="${esc(label)}"${style}>
+      <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit)}</div>
+      <section class="unit-dossier" aria-label="机偶档案">
+        <div class="unit-profile">
+          <span class="unit-atk">攻 ${unit.atk}</span>
+          <span class="unit-heading"><span class="unit-name">${esc(unit.name)}</span><small class="unit-level">LV.${String(unit.level ?? 1).padStart(2, "0")}</small></span>
+          <span class="unit-durability">耐 ${unit.hp}/${unit.maxHp}</span>
+        </div>
+        <div class="unit-mechanic">${esc(notes)}</div>
+        <div class="unit-status"><span>UNIT ID · ${String(unit.uid).padStart(3, "0")}</span><span>${unit.hp > 0 ? "ONLINE" : "OFFLINE"}</span></div>
+      </section>
     </div>`;
 }
 
@@ -769,19 +834,17 @@ const CARD_ART = {
   striker: "neon-mech", heavy: "sci-robot", guard: "guard-mech", flyer: "sci-fighter",
   twin_rail: "twin-rail-rover", arc_drone: "arc-drone", double_claw: "crab",
   phase_flyer: "phase-shuttle", burst_beetle: "beetle", shield_moth: "butterfly",
-  rail_guard: "sci-turret", generator: "sci-generator"
-};
-const PIXEL_ALIASES = {
-  small_sentry: "scout", defender: "shell", assault_sentry: "striker", fork_sentry: "twin_rail",
-  wide_bulwark: "heavy", double_striker: "striker", reach_turret: "rail_guard",
-  phase_hunter: "phase_flyer", mine_beetle: "burst_beetle", signal_jammer: "generator",
-  drift_hunter: "flyer", null_anchor: "generator", siege_carrier: "flyer",
-  mirror_core: "heavy", mirror_drone: "arc_drone"
+  rail_guard: "sci-turret", generator: "sci-generator",
+  small_sentry: "enemy-small_sentry", defender: "enemy-defender", assault_sentry: "enemy-assault_sentry",
+  fork_sentry: "enemy-fork_sentry", wide_bulwark: "enemy-wide_bulwark", double_striker: "enemy-double_striker",
+  reach_turret: "enemy-reach_turret", phase_hunter: "enemy-phase_hunter", mine_beetle: "enemy-mine_beetle",
+  signal_jammer: "enemy-signal_jammer", drift_hunter: "enemy-drift_hunter", null_anchor: "enemy-null_anchor",
+  siege_carrier: "enemy-siege_carrier", mirror_core: "enemy-mirror_core", mirror_drone: "enemy-mirror_drone"
 };
 
-function pixelArtHtml(card, side = "") {
-  const art = CARD_ART[card.cardId] || CARD_ART[PIXEL_ALIASES[card.cardId]] || CARD_ART.bean;
-  return `<img class="pixel-art pixel-art-image sprite-${art}${side === "enemy" ? " enemy-pixel-art" : ""}" src="/assets/cards/${art}.png" alt="" aria-hidden="true" draggable="false">`;
+function pixelArtHtml(card) {
+  const art = CARD_ART[card.cardId] || CARD_ART.bean;
+  return `<img class="pixel-art pixel-art-image sprite-${art}" src="/assets/cards/${art}.png?v=20261116-mech-art" alt="" aria-hidden="true" draggable="false">`;
 }
 
 function cardFaceHtml(card) {
@@ -825,21 +888,23 @@ function cardHtml(card, selected, draggable = false) {
 
 function renderForecast() {
   const forecast = battle.forecast || [];
-  const cells = [1, 2, 3, 4].map((column) => {
-    const items = forecast.filter((item) => item.column === column);
-    const content = items.map((item) => {
-      const current = item.turn === battle.turn;
+  const cells = [0, 1, 2, 3].map((slot) => {
+    const item = forecast.find((entry) => entry.slots?.includes(slot + 1) || entry.slot === slot);
+    const lead = item && item.slot === slot;
+    const occupied = item && !lead;
+    const content = item ? (() => {
       const width = item.width || 1;
       const range = width > 1 ? `${item.column}-${item.column + width - 1} 列` : `${item.column} 列`;
       const trait = traitText(item, true);
-      return `<div class="forecast-item ${current ? "current" : "next"}${width > 1 ? " wide" : ""}">
-          <span class="forecast-when">${current ? "本回合" : "下回合"} · ${range}</span>
+      if (!lead) return "";
+      return `<div class="forecast-item next${width > 1 ? " wide" : ""}">
+          <span class="forecast-when">候补 · ${range}</span>
           <span class="forecast-name">${esc(item.name)}</span>
           <span class="forecast-stats">攻 ${item.atk} · 耐 ${item.hp}${trait ? ` · ${trait}` : ""}</span>
         </div>`;
-    }).join("");
-    return `<div class="forecast-cell${items.length ? "" : " empty"}" data-column="${column}">
-      <span class="forecast-col">${column} 列</span>${content || "<span class='forecast-empty'>—</span>"}
+    })() : "";
+    return `<div class="forecast-cell${item ? " occupied" : " empty"}" data-slot="${slot}" data-column="${slot + 1}">
+      <span class="forecast-col">候补位 ${slot + 1}</span>${content || (occupied ? "<span class='forecast-empty'>同卡占位</span>" : "<span class='forecast-empty'>—</span>")}
       </div>`;
   }).join("");
   $("forecast-row").innerHTML = cells;
@@ -855,7 +920,7 @@ function renderTutorial() {
   $("tutorial-text").textContent = step.text;
   $("tutorial-progress").textContent = `${step.index + 1} / ${step.total}`;
   $("tutorial-next").hidden = step.action !== "continue";
-  $("tutorial-next").textContent = step.index === step.total - 1 ? "交给我吧" : "看清了，开始部署";
+  $("tutorial-next").textContent = step.button || "继续";
   $("end-turn").disabled = step.action !== "end";
   $("recycle-btn").disabled = step.action !== "recycle";
   if (step.action !== "recycle") recycleMode = false;
@@ -876,6 +941,7 @@ function renderTutorial() {
   }
   if (step.action === "end") $("end-turn").classList.add("tutorial-target");
   if (step.action === "recycle") $("recycle-btn").classList.add("tutorial-target");
+  for (const id of step.uiTargets || []) $(id)?.classList.add("tutorial-target");
 }
 
 function renderBattle() {
@@ -893,6 +959,19 @@ function renderBattle() {
 
   $("enemy-hp").textContent = battle.hp.enemy;
   $("player-hp").textContent = battle.hp.player;
+  for (const side of ["enemy", "player"]) {
+    const leader = $(`${side}-hp`).parentElement;
+    const hp = battle.hp[side];
+    const maxHp = state.node?.leaderMaxHp?.[side] ?? Number(leader.dataset.maxHp);
+    const damaged = leader.dataset.hp !== undefined && hp < Number(leader.dataset.hp);
+    leader.dataset.hp = hp;
+    leader.dataset.maxHp = maxHp;
+    leader.classList.toggle("is-critical", hp <= maxHp / 3);
+    leader.classList.toggle("just-damaged", damaged);
+    leader.setAttribute("aria-label", `${side === "enemy" ? "敌方" : "己方"}领袖，生命 ${hp} / ${maxHp}`);
+    leader.querySelector(".leader-max").textContent = `/ ${maxHp}`;
+    leader.querySelector(".leader-cells").innerHTML = Array.from({length: maxHp}, (_, i) => `<i${i < hp ? ' class="filled"' : ""}></i>`).join("");
+  }
   $("turn").textContent = battle.turn;
   $("energy").textContent = battle.energy;
   $("deck-count").textContent = battle.deckCount;
@@ -1344,6 +1423,7 @@ function renderAdventure(kind) {
     missingPayload();
     return;
   }
+  $("adventure-view").dataset.kind = kind;
   $("adventure-view").hidden = false;
   $("adventure-title").textContent = kind === "calibration"
     ? "校准平台"
@@ -1465,10 +1545,22 @@ function renderShop() {
     const meta = offer.kind === "new"
       ? "新单位"
       : offer.kind === "upgrade" ? "升级已有单位" : esc(offer.effectText);
-    const card = offerCardView(offer);
+    const targets = offer.targets || [];
+    const target = targets.find((item) => item.uid === shopTarget) || targets[0] || null;
+    const owned = target ? state.deck.find((item) => item.uid === target.uid) : null;
+    const card = { ...offerCardView(offer), ...(owned || {}), ...(target || {}) };
+    const targetPicker = targets.length > 1 ? `
+        <div class="shop-targets">${targets.map((item, index) => `
+          <button class="target-action shop-target${item.uid === target.uid ? " selected" : ""}"
+              data-uid="${esc(item.uid)}" aria-pressed="${item.uid === target.uid}"
+              title="卡牌实体 ${esc(item.uid)}">
+            Lv.${item.level}<small>第 ${index + 1} 张</small>
+          </button>`).join("")}
+        </div>` : "";
     return `<div class="offer card-offer">
         ${cardFaceHtml(card)}
         <div class="offer-meta">${meta}</div>
+        ${targetPicker}
         <div class="offer-price">${offer.price} 金币</div>
         <button class="buy-btn" data-id="${esc(offer.id)}" ${offer.buyable ? "" : "disabled"}>
           ${shop.purchased ? "已购买" : offer.buyable ? "购买" : esc(offer.reason)}
@@ -1521,6 +1613,93 @@ function renderTrial() {
     ? "试炼成功：选择一张奖励。"
     : "试炼成功，但当前没有可用的奖励卡，可以直接离开。";
   else $("trial-note").textContent = "试炼失败：可以领取补偿金币，或直接离开。";
+}
+
+/* ---------- 机偶补给站 ---------- */
+
+function renderSupply() {
+  const supply = state.supply;
+  if (!supply) {
+    missingPayload();
+    return;
+  }
+  $("supply-view").hidden = false;
+  const option = supply.stage === "option";
+  const swapping = option && supply.variant === "swap";
+  const challenging = option && supply.variant === "challenge";
+  $("supply-hint").textContent = swapping
+    ? "免费两轮已结束。可以支付金币或移除一张牌，交换一张额外卡牌；每个补给站限一次。"
+    : challenging
+      ? "免费两轮已结束。可以接受一项挑战压力，下一场战斗获胜后获得额外三选一；战败则压力与奖励一起消失。"
+      : "免费进行两轮三选一。每轮可以领取一张加入永久牌组，也可以放弃本轮；已领取的卡不会因放弃下一轮而撤销。";
+
+  $("supply-offers").hidden = challenging;
+  $("supply-offers").innerHTML = challenging ? "" : supply.candidates.map((card) => `
+    <div class="offer card-offer${supplyPick === card.cardId ? " selected" : ""}" data-id="${esc(card.cardId)}">
+      ${cardFaceHtml(card)}
+      <button class="buy-btn" data-id="${esc(card.cardId)}">${option ? "选择" : "带走"}</button>
+    </div>`).join("");
+
+  const challenge = supply.challenge;
+  $("supply-option-list").hidden = !challenging;
+  $("supply-option-list").innerHTML = challenging
+    ? (challenge.options.length
+      ? challenge.options.map((item) => `
+        <div class="target${supplyPick === item.id ? " selected" : ""}"
+            data-challenge="${esc(item.id)}" role="button" tabindex="0">
+          <div class="target-name">${esc(item.name)} <small>${item.reward ? `奖励 ${item.reward} 金币` : "额外三选一"}</small></div>
+          <div class="target-meta">${esc(item.description)}</div>
+        </div>`).join("")
+      : "<p class='hint'>已有未结算的挑战，本次无法接受新的挑战。</p>")
+    : "";
+
+  $("supply-payment").hidden = !swapping;
+  if (swapping) {
+    const price = supply.swap.price;
+    $("supply-pay-gold").textContent = `支付 ${price} 金币（持有 ${state.gold}）`;
+    $("supply-pay-gold").disabled = state.gold < price;
+    $("supply-pay-gold").classList.toggle("selected", supplyPayment === "gold");
+    $("supply-pay-card").classList.toggle("selected", supplyPayment === "card");
+  }
+  const showRemoval = swapping && supplyPayment === "card";
+  $("supply-remove-targets").hidden = !showRemoval;
+  $("supply-remove-targets").innerHTML = showRemoval
+    ? supply.swap.targets.map((card) => `
+        <div class="target card-target${supplyRemoveUid === card.uid ? " selected" : ""}${card.removable ? "" : " disabled"}"
+            data-uid="${esc(card.uid)}" ${card.removable ? 'role="button" tabindex="0"' : ""}>
+          ${cardFaceHtml(card)}
+          <div class="card-target-note">${card.removable ? "可移除" : "不可移除 · 起手保底"}</div>
+        </div>`).join("")
+    : "";
+
+  let preview = "";
+  if (challenging && challenge.targets.length) {
+    preview = challenge.targets.map((target) => {
+      const plan = target.plan.map((step) => `T${step.turn} ${step.column + 1}列 ${step.name}(${step.atk ?? "?"}/${step.hp ?? "?"})`).join("；");
+      return `${target.name} · 敌方领袖 ${target.enemyHp ?? "?"}${plan ? ` · ${plan}` : ""}`;
+    }).join(" / ");
+  }
+  $("supply-preview").hidden = !preview;
+  $("supply-preview").textContent = preview;
+
+  const claims = supply.claimed.filter(Boolean);
+  $("supply-skip").hidden = option;
+  $("supply-option-skip").hidden = !option;
+  $("supply-option-skip").textContent = swapping ? "不交换" : "不接受挑战";
+  $("supply-confirm").hidden = !option;
+  $("supply-confirm").disabled = swapping
+    ? !supplyPick || !supplyPayment || (supplyPayment === "card" && !supplyRemoveUid)
+    : !supplyPick;
+  $("supply-confirm").textContent = swapping ? "确认交换" : "接受挑战";
+
+  if (option) {
+    $("supply-note").textContent =
+      `两轮免费补给已结束${claims.length ? ` · 已领取：${claims.join("、")}` : ""}。`;
+  } else {
+    $("supply-note").textContent =
+      `第 ${supply.round} / ${supply.rounds} 轮${claims.length ? ` · 已领取：${claims.join("、")}` : ""}。` +
+      "领取的卡为独立 1 级实体；放弃本轮不会撤销已领取的卡。";
+  }
 }
 
 /* ---------- 爱的中继站 ---------- */
@@ -1969,9 +2148,20 @@ function bindEvents() {
   $("recycle-leave").addEventListener("click", () => act("/api/recycle/leave", {}));
 
   $("shop-offers").addEventListener("click", (event) => {
+    const target = event.target.closest(".shop-target");
+    if (target && !target.disabled) {
+      shopTarget = target.dataset.uid;
+      renderShop();
+      return;
+    }
     const button = event.target.closest(".buy-btn");
     if (!button || button.disabled) return;
-    act("/api/shop/buy", { offerId: button.dataset.id });
+    const offer = state.shop.offers.find((item) => item.id === button.dataset.id);
+    const targetId = (offer?.targets || []).find((item) => item.uid === shopTarget)?.uid
+      ?? offer?.targets?.[0]?.uid;
+    act("/api/shop/buy", targetId == null
+      ? { offerId: button.dataset.id }
+      : { offerId: button.dataset.id, cardUid: targetId });
   });
   $("shop-leave").addEventListener("click", () => act("/api/shop/leave", {}));
 
@@ -1998,6 +2188,60 @@ function bindEvents() {
   });
   $("trial-claim").addEventListener("click", () => act("/api/trial/claim", {}));
   $("trial-leave").addEventListener("click", () => act("/api/trial/leave", {}));
+
+  $("supply-offers").addEventListener("click", (event) => {
+    const offer = event.target.closest(".card-offer");
+    if (!offer || !state.supply) return;
+    if (state.supply.stage === "option") {
+      supplyPick = offer.dataset.id;
+      renderSupply();
+      return;
+    }
+    act("/api/supply/choose", { round: state.supply.round - 1, cardId: offer.dataset.id });
+  });
+  $("supply-skip").addEventListener("click", () => {
+    if (!state.supply) return;
+    act("/api/supply/skip", { round: state.supply.round - 1 });
+  });
+  $("supply-option-list").addEventListener("click", (event) => {
+    const target = event.target.closest(".target");
+    if (!target || !state.supply) return;
+    supplyPick = target.dataset.challenge;
+    renderSupply();
+  });
+  $("supply-pay-gold").addEventListener("click", () => {
+    supplyPayment = "gold";
+    supplyRemoveUid = null;
+    renderSupply();
+  });
+  $("supply-pay-card").addEventListener("click", () => {
+    supplyPayment = "card";
+    supplyRemoveUid = null;
+    renderSupply();
+  });
+  $("supply-remove-targets").addEventListener("click", (event) => {
+    const target = event.target.closest(".target");
+    if (!target || target.classList.contains("disabled")) return;
+    supplyRemoveUid = target.dataset.uid;
+    renderSupply();
+  });
+  $("supply-confirm").addEventListener("click", () => {
+    if (!state.supply || !supplyPick) return;
+    if (state.supply.stage !== "option") return;
+    if (state.supply.variant === "swap") {
+      act("/api/supply/swap", {
+        cardId: supplyPick,
+        payment: supplyPayment,
+        removeUid: supplyPayment === "card" ? supplyRemoveUid : null,
+      });
+    } else {
+      act("/api/supply/challenge", { challengeId: supplyPick });
+    }
+  });
+  $("supply-option-skip").addEventListener("click", () => {
+    if (!state.supply) return;
+    act(state.supply.variant === "swap" ? "/api/supply/swap/skip" : "/api/supply/challenge/skip", {});
+  });
 
   const chooseRelay = (event) => {
     const button = event.target.closest(".signal-action");

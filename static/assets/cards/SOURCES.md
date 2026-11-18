@@ -1,15 +1,9 @@
-Card art assets are from the Pixor Library. Each listed asset is marked CC0 1.0.
+The 15 player unit sprites and 15 `enemy-*.png` sprites were supplied by the user
+from `D:/独游/美术/机偶形象/` on 2026-11-16, copied without image transformations.
+The preview `_预览_游戏内效果.png` is excluded. Facing and enemy colors are baked in.
 
-- `sci-robot-small.png`: Service robot
-- `companion-robot.png`: Companion robot
-- `sci-robot.png`: Robot
-- `neon-mech.png`: Neon mech
-- `sci-drone.png`: Drone
-- `sci-turret.png`: Turret
-- `sci-fighter.png`: Fighter
-- `beetle.png`: Beetle
-- `butterfly.png`: Butterfly
-- `crab.png`: Crab
+The following unchanged assets are from the Pixor Library, marked CC0 1.0:
+
 - `sci-medkit.png`: Medkit
 - `lightning-bolt-pickup.png`: Energy bolt
 - `sci-generator.png`: Generator

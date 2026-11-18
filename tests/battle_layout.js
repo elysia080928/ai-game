@@ -98,6 +98,29 @@ async function main() {
     await resize(1440, 900);
     await command('Page.navigate', { url:base });
     await wait(`typeof renderBattle === 'function' && document.readyState === 'complete'`);
+    const content = JSON.parse(fs.readFileSync(path.join(__dirname, '../content/game.json'), 'utf8'));
+    const unitIds = Object.keys(content.cards).filter(id => content.cards[id].type === 'unit');
+    const enemyIds = Object.keys(content.enemies);
+    const artCheck = await evaluate(`(async () => {
+      const root = document.createElement('div');
+      root.className = 'card-offer';
+      root.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none';
+      document.body.append(root);
+      try {
+        const ids = ${JSON.stringify(unitIds.concat(enemyIds))};
+        root.innerHTML = ids.map(cardId => cardFaceHtml({cardId, type:'unit'})).join('');
+        const images = [...root.querySelectorAll('img')];
+        await Promise.all(images.map(img => img.decode()));
+        return images.length === 30 && images.every((img, i) => {
+          const css = getComputedStyle(img);
+          const expected = ${JSON.stringify(enemyIds)}.includes(ids[i]) ? 'enemy-' + ids[i] : CARD_ART[ids[i]];
+          return expected && new URL(img.src).pathname === '/assets/cards/' + expected + '.png' &&
+            img.naturalWidth > 0 && css.transform === 'none' && !/sepia|hue-rotate|saturate/.test(css.filter);
+        }) && getComputedStyle(document.querySelector('.title-drone')).transform === 'none';
+      } finally { root.remove(); }
+    })()`);
+    assert(artCheck, 'All 30 unit sprites must load without rotation, mirroring or recoloring');
+    console.log('ok all 30 unit sprites load in shared battle/event card art');
     // Real API state in a fresh browser profile; never overwrite an existing account/save.
     await evaluate(`(async () => {
       const account = 'layout_' + Date.now().toString(36);
@@ -164,7 +187,30 @@ async function main() {
             hudData:document.getElementById('hud-user').textContent===username && !/undefined|NaN/.test(document.querySelector('.hud').textContent),
             overflow:document.documentElement.scrollWidth>innerWidth+1 || document.documentElement.scrollHeight>innerHeight+1,
             artLoaded:[...document.querySelectorAll('#battle-view img')].every(el=>el.complete && el.naturalWidth>0),
-            unitData:['enemy','player'].every(side=>battle.board[side].every((u,i)=>!u||u.column!==i+1||document.querySelector('#'+side+'-row [data-column="'+u.column+'"]')?.dataset.uid===String(u.uid)))
+            unitData:['enemy','player'].every(side=>battle.board[side].every((u,i)=>!u||u.column!==i+1||document.querySelector('#'+side+'-row [data-column="'+u.column+'"]')?.dataset.uid===String(u.uid))),
+            leaderCells:['enemy','player'].every(side=>{
+              const el=document.querySelector('.leader.'+side),cells=[...el.querySelectorAll('.leader-cells i')];
+              const max=state.node.leaderMaxHp[side];
+              return cells.length===max && cells.filter(c=>c.classList.contains('filled')).length===battle.hp[side] &&
+                cells.every((c,i)=>c.classList.contains('filled')===(i<battle.hp[side])) && el.querySelector('.leader-max').textContent==='/ '+max;
+            }),
+            leaderGauge:['enemy','player'].every(side=>{
+              const el=document.querySelector('.leader.'+side),r=el.getBoundingClientRect(),g=el.querySelector('.leader-cells').getBoundingClientRect();
+              const value=el.querySelector('b').textContent,max=el.querySelector('.leader-max').textContent;
+              return [...el.querySelectorAll(':scope > span,:scope > b,.leader-max')].every(label=>getComputedStyle(label).visibility==='hidden') &&
+                value===String(battle.hp[side]) && max.trim()==='/ '+state.node.leaderMaxHp[side] && g.width>=24 && g.height>=72 && g.height>g.width &&
+                Math.abs(g.x+g.width/2-r.x-r.width/2)<2 && Math.abs(g.y+g.height/2-r.y-r.height/2)<2;
+            }),
+            terminalClear:[...document.querySelectorAll('.slot.unit')].every(el=>{
+              const dossier=el.querySelector('.unit-dossier').getBoundingClientRect(),mechanic=el.querySelector('.unit-mechanic').getBoundingClientRect(),status=el.querySelector('.unit-status').getBoundingClientRect(),r=el.getBoundingClientRect();
+              return dossier.top>=r.top && dossier.bottom<=r.bottom && mechanic.top>=dossier.top && mechanic.bottom<=status.top+1 && status.bottom<=dossier.bottom && el.querySelector('.unit-atk') && el.querySelector('.unit-durability') && el.querySelector('.unit-level') && el.textContent.includes('UNIT ID') && el.textContent.includes('ONLINE');
+            }),
+            forecastData:battle.forecast.every(item=>{
+              const cell=document.querySelector('#forecast-row [data-slot="'+item.slot+'"]');
+              return [...cell.querySelectorAll('.forecast-item')].some(el=>{
+                return el.classList.contains('next') && el.textContent.includes('候补') && !el.textContent.includes('已部署') && !el.textContent.includes('部署受阻') && el.textContent.includes(item.name) && el.textContent.includes('攻 '+item.atk) && el.textContent.includes('耐 '+item.hp) && el.textContent.includes(traitText(item,true));
+              });
+            })
           };
         })()`);
         if (!open) globalThis.closedTable = result.table;
@@ -200,6 +246,27 @@ async function main() {
     assert.equal(await evaluate(`Number(document.getElementById('turn').textContent)===battle.turn && Number(document.getElementById('energy').textContent)===battle.energy && Number(document.getElementById('deck-count').textContent)===battle.deckCount && Number(document.getElementById('player-hp').textContent)===battle.hp.player && Number(document.getElementById('enemy-hp').textContent)===battle.hp.enemy`),true,'Live battle data did not update');
     await capture('after-wide');
     console.log('ok real mouse drag, two-column deployment, recycle confirmation and end-turn live data');
+
+    const skinStates=await evaluate(`(() => {
+      const unit=battle.board.player.find(Boolean),hp=unit.hp,atk=unit.atk;
+      unit.hp=Math.max(0,hp-1);unit.atk=atk+1;renderBattle();
+      const el=document.querySelector('#player-row [data-uid="'+unit.uid+'"]');
+      const flashed=el.classList.contains('just-damaged') && el.classList.contains('just-boosted') && el.classList.contains('is-damaged');
+      const enemyHp=battle.hp.enemy;
+      const counts=[0,1,state.node.leaderMaxHp.enemy].every(value=>{battle.hp.enemy=value;renderBattle();return document.querySelectorAll('.leader.enemy .filled').length===value && document.querySelector('.leader.enemy').classList.contains('is-critical')===(value<=state.node.leaderMaxHp.enemy/3);});
+      unit.hp=hp;unit.atk=atk;battle.hp.enemy=enemyHp;renderBattle();
+      return flashed && counts && !document.querySelector('.slot.just-damaged,.slot.just-boosted');
+    })()`);
+    assert(skinStates,'Damage/boost or zero/full/critical leader states failed');
+    await command('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.slot.unit'),'::before').animationName`),'none');
+    const saved=await evaluate('JSON.stringify([battle.hp,battle.board,state.node.leaderMaxHp])');
+    await command('Page.reload');
+    await wait('document.readyState === "complete" && document.getElementById("menu-view") && !document.getElementById("menu-view").hidden');
+    await click('#continue-btn');
+    await wait('battle && !document.getElementById("battle-view").hidden');
+    assert.equal(await evaluate('JSON.stringify([battle.hp,battle.board,state.node.leaderMaxHp])'),saved,'Refresh changed battle or leader capacity');
+    console.log('ok terminal/forecast content, health cells, damage/boost, reduced motion and refresh restoration');
 
     const fallback=await evaluate(`(() => { const original=state; state={...state,node:{},progress:undefined,runLength:undefined,gold:undefined}; render(); const text=document.querySelector('.hud').textContent; state=original; render(); return !/undefined|NaN/.test(text) && text.includes('当前节点') && text.includes('—'); })()`);
     assert(fallback,'Missing HUD fields leak undefined');

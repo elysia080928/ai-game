@@ -15,13 +15,21 @@ from app import game as G  # noqa: E402
 def initial_cards():
     return [
         {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
-        for card_id in G.INITIAL_DECK
+        for card_id in G.LEGACY_INITIAL_DECK
     ]
 
 
 def make(seed=0, encounter_id="battle1"):
+    deck = G.INITIAL_DECK if G.ENCOUNTERS[encounter_id].get("tutorial") else G.LEGACY_INITIAL_DECK
     return B.make_battle(
-        initial_cards(), G.ENCOUNTERS[encounter_id], G.CARDS, G.ENEMIES, rng=random.Random(seed)
+        [
+            {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
+            for card_id in deck
+        ],
+        G.ENCOUNTERS[encounter_id],
+        G.CARDS,
+        G.ENEMIES,
+        rng=random.Random(seed),
     )
 
 
@@ -50,8 +58,8 @@ def put_enemy(b, name, column, atk, hp, side="enemy", **extra):
     return unit
 
 
-def state_at(node_id, phase, completed=None, route=None, flags=None):
-    state = G.new_state()
+def state_at(node_id, phase, completed=None, route=None, flags=None, version=1):
+    state = G.new_state(version=version)
     state.pop("mapData", None)  # 旧路线固定地图，用于既有规则测试
     state["nodeId"] = node_id
     state["phase"] = phase
@@ -85,7 +93,7 @@ def test_opening_hand():
 
     short_deck = [
         {"cardId": card_id, "level": 1, "atkBonus": 0, "hpBonus": 0}
-        for card_id in G.INITIAL_DECK
+        for card_id in G.LEGACY_INITIAL_DECK
         if card_id != "repair"
     ]
     b = B.make_battle(
@@ -537,8 +545,8 @@ def clear_story(state):
     raise AssertionError("剧情未结束")
 
 
-def elite_state(seed=0, map_type="map1"):
-    state = G.new_state(seed, map_type)
+def elite_state(seed=0, map_type="map1", version=1):
+    state = G.new_state(seed, map_type, version=version)
     state["nodeId"] = state["mapData"]["elite"]
     state["phase"] = "node"
     state["storyLine"] = 0
@@ -870,7 +878,7 @@ def test_second_map_route_persistence_and_completion_transition():
             elif state["phase"] in ("map_story", "before_story", "after_story"):
                 clear_story(state)
         assert state["phase"] == "complete"
-        assert len(state["completed"]) == 12
+        assert len(state["completed"]) == state["mapData"]["runLength"] == 15
         assert G.current_map_type(state) == "map3"
         assert G.can_start_map2(state) is False
         assert G.can_start_map3(state) is False
@@ -1026,7 +1034,8 @@ def test_second_map_boss_reuses_existing_enemies():
         initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(2)
     )
     forecast = B.view(b)["forecast"]
-    assert forecast and any(item["name"] == "镜像核心" for item in forecast)
+    assert any(unit["name"] == "镜像核心" for unit in B._side_units(b, "enemy"))
+    assert forecast and all(item["turn"] == b["turn"] + 1 for item in forecast)
 
 
 def test_elite_reward_and_deck_limit():
@@ -1077,6 +1086,19 @@ def test_duplicate_cards_target_by_uid():
     assert state["phase"] == "after_story"
 
 
+def test_leader_capacity_display_metadata():
+    state = G.new_state()
+    node = state["mapData"]["nodes"][0]
+    state["nodeId"] = node["id"]
+    for encounter_id, encounter in G.ENCOUNTERS.items():
+        node["encounter"] = encounter_id
+        original = copy.deepcopy(state)
+        assert G.public_state(state)["node"]["leaderMaxHp"] == {
+            "player": encounter["playerHp"], "enemy": encounter["enemyHp"]
+        }
+        assert state == original, "显示血量上限不能修改存档"
+
+
 def test_battle_hp_bonus_and_forecast():
     deck = [{"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 2} for _ in range(8)]
     b = B.make_battle(
@@ -1086,15 +1108,15 @@ def test_battle_hp_bonus_and_forecast():
     assert b["board"]["player"][0]["maxHp"] == G.CARDS["bean"]["levels"][0]["hp"] + 2
 
     b = make(1, "battle2")
+    assert all(unit is not None for unit in (b["board"]["enemy"][1], b["board"]["enemy"][3]))
     forecast = B.view(b)["forecast"]
     keys = {(item["turn"], item["column"]) for item in forecast}
-    assert (1, 2) in keys and (1, 4) in keys and (2, 3) in keys
-    assert all(item["turn"] in (1, 2) for item in forecast)
+    assert keys == {(2, 3)}
+    assert forecast[0]["slot"] == 2 and forecast[0]["column"] == 3
     assert all(item["atk"] >= 0 and item["hp"] > 0 for item in forecast)
     B.end_turn(b, random.Random(2))
-    keys = {(item["turn"], item["column"]) for item in B.view(b)["forecast"]}
-    assert (2, 3) in keys and (3, 1) in keys
-    assert all(item["turn"] in (2, 3) for item in B.view(b)["forecast"])
+    forecast = B.view(b)["forecast"]
+    assert [(item["turn"], item["column"], item["slot"]) for item in forecast] == [(3, 1, 0)]
 
     encounter = {
         "playerHp": 15,
@@ -1105,12 +1127,91 @@ def test_battle_hp_bonus_and_forecast():
         ],
     }
     b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
-    same_column = [item for item in B.view(b)["forecast"] if item["column"] == 2]
-    assert len(same_column) == 2
+    assert b["board"]["enemy"][1] is not None, "开场部署的首个单位应在场上"
+    assert B.view(b)["forecast"] == [], "同回合重复列计划不应提前出现在候补区"
     B.end_turn(b, random.Random(2))
-    assert B.view(b)["forecast"] == [], "计划结束后不应继续预告"
+    assert B.view(b)["forecast"] == [], "部署完候补后不应继续预告"
+    assert b["board"]["enemy"][1] is not None, "同列后续部署应因已占位而跳过"
     assert any("跳过" in line for line in b["log"]), "占列时应跳过且不换列"
-    assert len([unit for unit in b["board"]["enemy"] if unit]) == 1
+    assert len(list(B._side_units(b, "enemy"))) == 1
+
+
+def test_encounter_plans_include_later_waves():
+    for encounter_id, encounter in G.ENCOUNTERS.items():
+        if encounter.get("tutorial"):
+            continue
+        turns = [item["turn"] for item in encounter["plan"]]
+        assert len(turns) >= 4
+        assert max(turns) >= len(turns) // 2
+        assert any(turn > 3 for turn in turns), encounter_id
+
+
+def test_enemy_attacks_only_on_end_turn_and_only_from_board():
+    encounter = {
+        "playerHp": 15,
+        "enemyHp": 15,
+        "plan": [{"turn": 2, "column": 1, "enemy": "small_sentry"}],
+    }
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
+    assert b["hp"]["player"] == 15 and not list(B._side_units(b, "enemy"))
+    assert B.view(b)["forecast"][0]["turn"] == b["turn"] + 1
+    B.end_turn(b, random.Random(2))
+    assert b["hp"]["player"] == 15, "候补单位不能攻击部署所在回合"
+    assert b["board"]["enemy"][0] is not None
+    B.end_turn(b, random.Random(3))
+    assert b["hp"]["player"] == 14, "场上敌人只在点击结束回合后攻击"
+    assert B.view(b)["forecast"] == [], "部署后的候补档案应释放候补位"
+
+
+def test_enemy_reserve_stays_fixed_and_full_reserve_stops_scheduling():
+    encounter = {
+        "playerHp": 100,
+        "enemyHp": 100,
+        "plan": [
+            {"turn": 2, "column": column, "enemy": "small_sentry"}
+            for column in (1, 2, 3, 4, 1)
+        ],
+    }
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
+    assert len(B.view(b)["forecast"]) == B.MAX_ENEMY_RESERVE
+    B.end_turn(b, random.Random(2))
+    forecast = B.view(b)["forecast"]
+    assert len(forecast) == 1 and forecast[0]["column"] in range(1, 5)
+    assert len(list(B._side_units(b, "enemy"))) == 4, "候补位满时先部署四张，剩余牌后台等待"
+
+
+def test_enemy_reserve_waits_for_blocked_lane_and_reroutes_new_cards():
+    encounter = {
+        "playerHp": 100,
+        "enemyHp": 100,
+        "plan": [
+            {"turn": 1, "column": 1, "enemy": "small_sentry"},
+            {"turn": 2, "column": 1, "enemy": "small_sentry"},
+            {"turn": 2, "column": 1, "enemy": "defender"},
+        ],
+    }
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(7))
+    assert len(B.view(b)["forecast"]) == 2
+    assert len({item["column"] for item in B.view(b)["forecast"]}) == 2, "同列新牌应改派到其他空候补列"
+    B.end_turn(b, random.Random(8))
+    assert len(B.view(b)["forecast"]) == 1, "被占列的候补应继续占位等待"
+    B._damage_unit(b, next(B._side_units(b, "enemy")), 99)
+    B.end_turn(b, random.Random(9))
+    assert B.view(b)["forecast"] == []
+    assert b["board"]["enemy"][0]["name"] == G.ENEMIES["small_sentry"]["name"]
+
+
+def test_enemy_reserve_migrates_old_status_records():
+    b = make(1, "battle2")
+    b["enemyReserve"] = [
+        {"planIndex": 2, "status": "pending"},
+        {"planIndex": 3, "status": "deployed"},
+    ]
+    b.pop("enemyQueue", None)
+    assert B.repair_forecast_timing(b)
+    assert len(B.view(b)["forecast"]) == 1
+    assert B.view(b)["forecast"][0]["column"] == 3
+    assert b["enemyQueue"] == []
 
 
 def test_calibration_effects():
@@ -1367,7 +1468,8 @@ def test_challenge_battle_modifiers():
     assert len(b["hand"]) == 7 and len(b["deck"]) == len(initial_cards()) - 7
     assert any(item["column"] == 1 and item["enemy"] == "assault_sentry" for item in b["plan"])
     forecast = B.view(b)["forecast"]
-    assert any(item["column"] == 1 and item["turn"] == 1 for item in forecast)
+    assert b["board"]["enemy"][0]["cardId"] == "assault_sentry"
+    assert not any(item["column"] == 1 for item in forecast)
 
     normal = B.make_battle(
         initial_cards(), G.ENCOUNTERS["battle2"], G.CARDS, G.ENEMIES, rng=random.Random(0)
@@ -1385,8 +1487,7 @@ def test_challenge_battle_modifiers():
     )
     assert extra_item["column"] == 2, "挑战增援应避开遭遇已占用的首回合列"
     B.end_turn(crowded, rng=random.Random(1))
-    deployed = crowded["board"]["enemy"][1]
-    assert deployed is not None and deployed["name"] == G.ENEMIES["assault_sentry"]["name"]
+    assert crowded["board"]["enemy"][1]["cardId"] == "assault_sentry"
 
 
 def test_wide_unit_placement():
@@ -1441,6 +1542,7 @@ def test_wide_unit_placement():
 def test_split_attack():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "arc_drone", 1)
     put_enemy(b, "左侧", 1, 1, 5)
     put_enemy(b, "右侧", 2, 1, 5)
@@ -1449,6 +1551,7 @@ def test_split_attack():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "arc_drone", 1)
     put_enemy(b, "左侧", 1, 1, 5)
     hp = b["hp"]["enemy"]
@@ -1458,6 +1561,7 @@ def test_split_attack():
 
     b = make(2)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "arc_drone", 1)
     hp = b["hp"]["enemy"]
     B._player_attack(b)
@@ -1465,6 +1569,7 @@ def test_split_attack():
 
     b = make(3)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "arc_drone", 4)
     hp = b["hp"]["enemy"]
     B._player_attack(b)
@@ -1472,6 +1577,7 @@ def test_split_attack():
 
     b = make(4)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "twin_rail", 2)
     put_enemy(b, "左列", 2, 1, 5)
     put_enemy(b, "右列", 3, 1, 5)
@@ -1482,6 +1588,7 @@ def test_split_attack():
 def test_double_strike():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "double_claw", 2)
     hp = b["hp"]["enemy"]
     B._player_attack(b)
@@ -1489,6 +1596,7 @@ def test_double_strike():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "double_claw", 2)
     victim = put_enemy(b, "脆皮", 2, 1, 3)
     hp = b["hp"]["enemy"]
@@ -1500,6 +1608,7 @@ def test_double_strike():
 def test_flying_and_reach():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "phase_flyer", 1)
     ground = put_enemy(b, "地面单位", 1, 1, 5)
     hp = b["hp"]["enemy"]
@@ -1508,6 +1617,7 @@ def test_flying_and_reach():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "bean", 1)
     flyer = put_enemy(b, "飞行单位", 1, 1, 2, abilities=["flying"])
     hp = b["hp"]["enemy"]
@@ -1516,6 +1626,7 @@ def test_flying_and_reach():
 
     b = make(2)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_enemy(b, "拦截机", 1, 2, 3, side="player", abilities=["reach"])
     flyer = put_enemy(b, "飞行单位", 1, 1, 2, abilities=["flying"])
     B._player_attack(b)
@@ -1523,6 +1634,7 @@ def test_flying_and_reach():
 
     b = make(3)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     ground = put_unit(b, "player", "shell", 1)
     put_enemy(b, "飞行单位", 1, 2, 2, abilities=["flying"])
     hp = b["hp"]["player"]
@@ -1531,6 +1643,7 @@ def test_flying_and_reach():
 
     b = make(4)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     flyer = put_unit(b, "player", "phase_flyer", 1)
     put_enemy(b, "牵引炮塔", 1, 1, 4, abilities=["reach"])
     B._enemy_phase(b)
@@ -1545,7 +1658,11 @@ def test_enemy_wide_deployment_and_forecast():
     }
     b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
     forecast = B.view(b)["forecast"]
-    assert forecast[0]["width"] == 2 and forecast[0]["column"] == 3
+    assert forecast == []
+    assert b["board"]["enemy"][2]["width"] == 2
+    encounter["plan"] = [{"turn": 2, "column": 3, "enemy": "wide_bulwark"}]
+    b = B.make_battle(initial_cards(), encounter, G.CARDS, G.ENEMIES, rng=random.Random(1))
+    assert B.view(b)["forecast"][0]["width"] == 2 and B.view(b)["forecast"][0]["column"] == 3
     B.end_turn(b, random.Random(2))
     unit = b["board"]["enemy"][2]
     assert unit is b["board"]["enemy"][3] and unit["width"] == 2
@@ -1564,6 +1681,7 @@ def test_enemy_wide_deployment_and_forecast():
 def test_shield_moth():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     moth = put_unit(b, "player", "shield_moth", 1)
     put_enemy(b, "重击", 1, 3, 5)
     assert B.view(b)["board"]["player"][0]["shield"] == 1
@@ -1578,6 +1696,7 @@ def test_shield_moth():
 def test_burst_beetle_on_destroy():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     beetle = put_unit(b, "player", "burst_beetle", 2)
     left = put_enemy(b, "左侧", 1, 1, 5)
     right = put_enemy(b, "右侧", 3, 1, 5)
@@ -1593,6 +1712,7 @@ def test_burst_beetle_on_destroy():
 def test_mine_beetle_on_destroy():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     mine = put_enemy(b, "雷壳虫", 2, 1, 2, onDestroy="hit_opposite")
     striker = put_unit(b, "player", "striker", 2)
     hp = b["hp"]["player"]
@@ -1602,6 +1722,7 @@ def test_mine_beetle_on_destroy():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     mine = put_enemy(b, "雷壳虫", 4, 1, 2, onDestroy="hit_opposite")
     B._damage_unit(b, mine, 2)
     assert not any("爆炸" in line for line in b["log"]), "对位列没有单位时不应触发"
@@ -1610,6 +1731,7 @@ def test_mine_beetle_on_destroy():
 def test_rail_guard_interception():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     guard = put_unit(b, "player", "rail_guard", 1)
     bean = put_unit(b, "player", "bean", 2)
     put_enemy(b, "突击", 2, 2, 5)
@@ -1622,6 +1744,7 @@ def test_rail_guard_interception():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     guard = put_unit(b, "player", "rail_guard", 1)
     bean = put_unit(b, "player", "bean", 3)
     put_enemy(b, "突击", 3, 1, 5)
@@ -1633,6 +1756,7 @@ def test_rail_guard_interception():
 def test_shift_movement():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     hunter = put_enemy(b, "漂移猎手", 2, 2, 3, shift=1)
     B._enemy_phase(b)
     assert hunter["column"] == 3
@@ -1641,6 +1765,7 @@ def test_shift_movement():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     hunter = put_enemy(b, "漂移猎手", 2, 2, 3, shift=1)
     blocker = put_enemy(b, "阻挡", 3, 1, 4)
     B._enemy_phase(b)
@@ -1649,6 +1774,7 @@ def test_shift_movement():
 
     b = make(2)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     hunter = put_enemy(b, "漂移猎手", 4, 2, 3, shift=1)
     B._enemy_phase(b)
     assert hunter["column"] == 4
@@ -1656,6 +1782,7 @@ def test_shift_movement():
 
     b = make(3)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     wide = put_enemy(b, "宽体漂移", 1, 2, 5, shift=1, width=2)
     B._enemy_phase(b)
     assert wide["column"] == 2, "宽体单位不应被自己占据的列挡住"
@@ -1666,6 +1793,7 @@ def test_shift_movement():
 def test_null_anchor_blocks_guard():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     guard = put_unit(b, "player", "rail_guard", 1)
     bean = put_unit(b, "player", "bean", 2)
     put_enemy(b, "突击", 2, 2, 5)
@@ -1677,6 +1805,7 @@ def test_null_anchor_blocks_guard():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     guard = put_unit(b, "player", "rail_guard", 1)
     bean = put_unit(b, "player", "bean", 2)
     put_enemy(b, "突击", 2, 2, 5)
@@ -1693,16 +1822,18 @@ def test_elite_encounter():
         initial_cards(), G.ENCOUNTERS["elite"], G.CARDS, G.ENEMIES, rng=random.Random(1)
     )
     forecast = B.view(b)["forecast"]
-    assert any(item["name"] == "漂移猎手" and item["shift"] == 1 for item in forecast)
-    assert any(item["name"] == "重装运载机" and item["width"] == 2 for item in forecast)
+    assert not any(item["name"] == "漂移猎手" for item in forecast)
+    assert any(unit["name"] == "漂移猎手" and unit["shift"] == 1 for unit in B._side_units(b, "enemy"))
     B.end_turn(b, random.Random(2))
     hunter = next(unit for unit in B._side_units(b, "enemy") if unit["name"] == "漂移猎手")
     assert hunter["column"] == 4, "漂移猎手应在敌方阶段结束后右移一格"
+    assert any(unit["name"] == "重装运载机" and unit["width"] == 2 for unit in B._side_units(b, "enemy"))
 
 
 def test_sweep_attack():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     shell = put_unit(b, "player", "shell", 1)
     worker = put_unit(b, "player", "worker", 3)
     put_enemy(b, "镜像核心", 2, 2, 16, attackPattern="sweep", shield=2)
@@ -1712,6 +1843,7 @@ def test_sweep_attack():
 
     b = make(1)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     wide = put_unit(b, "player", "twin_rail", 1)
     put_enemy(b, "镜像核心", 2, 2, 16, attackPattern="sweep", shield=2)
     B._enemy_phase(b)
@@ -1723,6 +1855,7 @@ def test_sweep_attack():
 def test_mirror_drone_copy():
     b = make(0)
     b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
     put_unit(b, "player", "arc_drone", 2)
     drone = put_enemy(b, "镜像无人机", 2, 2, 3, onDeploy="copy_opposite")
     B._resolve_on_deploy(b, drone)
@@ -1745,12 +1878,9 @@ def test_boss_encounter():
         initial_cards(), G.ENCOUNTERS["boss"], G.CARDS, G.ENEMIES, rng=random.Random(1)
     )
     forecast = B.view(b)["forecast"]
-    assert any(
-        item["name"] == "镜像核心"
-        and item["attackPattern"] == "sweep"
-        and item["shield"] == 2
-        for item in forecast
-    )
+    core = next(unit for unit in B._side_units(b, "enemy") if unit["name"] == "镜像核心")
+    assert core["attackPattern"] == "sweep" and core["shield"] == 2
+    assert not any(item["name"] == "镜像核心" for item in forecast)
     assert any(
         item["name"] == "镜像无人机" and item["onDeploy"] == "copy_opposite"
         for item in forecast
@@ -1961,6 +2091,20 @@ def test_shop():
         raise AssertionError("未知商品不能购买")
 
 
+def test_v2_shop_targets_exact_duplicate():
+    state = state_at("shop", "node", version=2)
+    state["gold"] = 30
+    state["nodeData"] = {"purchased": False}
+    first, second = G._new_card("striker"), G._new_card("striker")
+    state["cards"] += [first, second]
+    offer = next(
+        item for item in G.public_state(state)["shop"]["offers"] if item["id"] == "ship_boost"
+    )
+    assert [item["uid"] for item in offer["targets"]].count(second["uid"]) == 1
+    G.shop_buy(state, "ship_boost", second["uid"])
+    assert second["atkBonus"] == 1 and first["atkBonus"] == 0
+
+
 def trial_state(seed, gold=0, cards=None):
     state = state_at(
         "trial", "node", completed=["battle1", "recruit", "adventure", "drift_capsule"],
@@ -2105,27 +2249,12 @@ def test_guided_first_battle():
     spark = next(c for c in b["hand"] if c["cardId"] == "spark")
     B.play_command(b, spark["uid"], b["board"]["enemy"][1]["uid"])
     assert b["board"]["enemy"][1] is None
-    worker = next(c for c in b["hand"] if c["cardId"] == "worker")
-    B.deploy(b, worker["uid"], 3)
-    B.end_turn(b)
-    assert b["turn"] == 3 and b["energy"] == 2
-    B.recycle(b, 2)
-    assert b["energy"] == 3 and b["board"]["player"][1] is None
-    assert not any(c["uid"] == shell["uid"] for c in b["hand"] + b["deck"])
-    twin = next(c for c in b["hand"] if c["cardId"] == "twin_rail")
-    B.deploy(b, twin["uid"], 1)
-    assert b["energy"] == 0 and b["board"]["player"][1]["cardId"] == "twin_rail"
-    enemy_hp = b["hp"]["enemy"]
-    B.end_turn(b)
-    assert b["hp"]["enemy"] == enemy_hp - 4 and b["turn"] == 4
     assert B.view(b)["tutorial"]["action"] == "continue"
     B.tutorial_continue(b)
     assert B.view(b)["tutorial"] is None
-    for _ in range(10):
-        if b["phase"] == "over":
-            break
-        B.end_turn(b)
-    assert b["result"] == "win", "不依赖豆丁 99 攻也能完成教学首战"
+    worker = next(c for c in b["hand"] if c["cardId"] == "worker")
+    B.deploy(b, worker["uid"], 3)
+    assert b["board"]["player"][2]["cardId"] == "worker", "教学结束后应能自由部署"
 
 
 def test_tutorial_skip_and_old_save_compatibility():
@@ -2145,6 +2274,552 @@ def test_tutorial_skip_and_old_save_compatibility():
         data = G.generate_map(7, map_type)
         start = next(n for n in data["nodes"] if n["role"] == "start")
         assert start["encounter"] in G.BATTLE_POOLS["early"]
+
+
+def set_chapter_wins(state, count):
+    nodes = sorted(state["mapData"]["nodes"], key=lambda node: (node["column"], node["row"]))
+    battle_ids = []
+    seen = set()
+    for node in nodes:
+        if node.get("role") in ("start", "battle", "late") and node["column"] not in seen:
+            seen.add(node["column"])
+            battle_ids.append(node["id"])
+    state["completed"] = battle_ids[:count]
+
+
+def test_v2_initial_deck_and_unlocks():
+    state = G.new_state(7, "map1")
+    assert state["rulesVersion"] == 2
+    assert [card["cardId"] for card in state["cards"]] == G.INITIAL_DECK
+    assert len({card["uid"] for card in state["cards"]}) == 8
+    base = set(G.CARD_UNLOCKS["map1"][0]["cards"])
+    assert G.unlocked_card_ids(state) == base
+    set_chapter_wins(state, 2)
+    assert "shield_moth" in G.unlocked_card_ids(state)
+    assert "twin_rail" not in G.unlocked_card_ids(state)
+    set_chapter_wins(state, 4)
+    assert "twin_rail" in G.unlocked_card_ids(state)
+
+    second = G.new_state(7, "map2")
+    unlocked = G.unlocked_card_ids(second)
+    assert {"shield_moth", "twin_rail", "striker", "rail_guard"} <= unlocked
+    assert "flyer" not in unlocked
+    set_chapter_wins(second, 1)
+    assert {"flyer", "burst_beetle"} <= G.unlocked_card_ids(second)
+    set_chapter_wins(second, 3)
+    assert "phase_flyer" in G.unlocked_card_ids(second)
+
+    third = G.new_state(7, "map3")
+    assert G.unlocked_card_ids(third) == set(G.CARDS)
+
+
+def test_v2_elite_reward_unlocked_and_uncapped():
+    state = elite_state(5, "map2", version=2)
+    view = G.public_state(state)["eliteReward"]
+    unlocked = G.unlocked_card_ids(state)
+    assert all(card["cardId"] in unlocked for card in view["candidates"])
+    assert any(card["cardId"] in G.chapter_new_cards(state) for card in view["candidates"])
+    while len(state["cards"]) < 30:
+        state["cards"].append(dict(state["cards"][0], uid=f"big_{len(state['cards'])}"))
+    view = G.public_state(state)["eliteReward"]
+    assert view["deckFull"] is False
+    pick = view["candidates"][0]["cardId"]
+    G.elite_reward_choose(state, pick)
+    assert len(state["cards"]) == 31
+
+
+def test_v2_duplicate_card_sources():
+    recruit = state_at("recruit", "node", version=2)
+    recruit["gold"] = 20
+    offers = G.public_state(recruit)["recruit"]["offers"]
+    assert "flyer" not in [offer["cardId"] for offer in offers], "未开放卡不能出现在招募"
+    before = len(recruit["cards"])
+    G.recruit_buy(recruit, "bean")
+    assert len(recruit["cards"]) == before + 1
+    assert recruit["cards"][-1]["level"] == 1
+
+    drift = state_at("drift_capsule", "node", version=2)
+    drift["nodeData"] = {"seed": 3, "rerolls": 0}
+    candidate = G._drift_candidates(drift)[0]
+    before = len(drift["cards"])
+    G.drift_choose(drift, candidate)
+    assert len(drift["cards"]) == before + 1
+
+    trial = state_at("trial", "node", version=2)
+    trial["nodeData"] = {"seed": 3, "status": "choose", "trialId": None, "candidates": []}
+    for seed in range(20):
+        trial["nodeData"]["seed"] = seed
+        if "light" in [item["id"] for item in G._trial_offered(trial)]:
+            break
+    else:
+        raise AssertionError("试炼候选应包含轻量编队")
+    G.trial_choose(trial, "light")
+    assert trial["nodeData"]["status"] == "success"
+    candidate = trial["nodeData"]["candidates"][0]
+    before = len(trial["cards"])
+    G.trial_choose_card(trial, candidate)
+    assert len(trial["cards"]) == before + 1
+
+
+def test_v2_recycle_keeps_opening_floor():
+    state = state_at("recycle_station", "node", version=2)
+    state["cards"] = [
+        {"uid": f"bean_{i}", "cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 0}
+        for i in range(4)
+    ] + [
+        {"uid": f"shell_{i}", "cardId": "shell", "level": 1, "atkBonus": 0, "hpBonus": 0}
+        for i in range(2)
+    ] + [
+        {"uid": f"heavy_{i}", "cardId": "heavy", "level": 1, "atkBonus": 0, "hpBonus": 0}
+        for i in range(2)
+    ]
+    assert G._recycle_removable(state, state["cards"][0]) is False
+    assert G._recycle_removable(state, state["cards"][-1]) is True
+
+
+def test_v2_chapter_keeps_growth():
+    state = G.new_state(7, "map1")
+    state["gold"] = 12
+    state["flags"] = {"relay_kept": True}
+    uids = [card["uid"] for card in state["cards"]]
+    state["phase"] = "transition"
+    state["transitionTarget"] = "map2"
+    G.finish_transition(state)
+    assert G.current_map_type(state) == "map2"
+    assert [card["uid"] for card in state["cards"]] == uids
+    assert state["gold"] == 12 and state["flags"] == {"relay_kept": True}
+    assert state["completed"] == [] and state["rulesVersion"] == 2
+
+
+def test_v2_opening_hand_uses_unique_entities():
+    deck = [
+        {"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 0} for _ in range(20)
+    ] + [
+        {"cardId": "heavy", "level": 1, "atkBonus": 0, "hpBonus": 0} for _ in range(10)
+    ]
+    b = B.make_battle(
+        deck, G.ENCOUNTERS["battle1"], G.CARDS, G.ENEMIES, rng=random.Random(3)
+    )
+    assert len(b["hand"]) == 6
+    assert len({card["uid"] for card in b["hand"]}) == 6
+
+
+def test_v2_rules_version_migration():
+    state = state_at("battle1", "after_story", completed=["battle1"])
+    raw = json.loads(json.dumps(state))
+    raw.pop("rulesVersion", None)
+    migrated, _ = G.migrate_state(raw)
+    assert migrated["rulesVersion"] == 1
+    future = dict(json.loads(json.dumps(state)), rulesVersion=99)
+    try:
+        G.migrate_state(future)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("未知规则版本应被拒绝")
+
+
+def test_v2_chapter_battle_progression():
+    expected = {
+        "map1": {
+            "start": ["tutorial"],
+            "positions": [
+                ["m1_basic_a", "m1_basic_b", "m1_basic_c"],
+                ["m1_split_a", "m1_split_b", "m1_split_c"],
+                ["m1_wide_a", "m1_wide_b", "m1_wide_c"],
+            ],
+            "normalHp": 15,
+            "eliteHp": 18,
+            "bossHp": 18,
+        },
+        "map2": {
+            "start": ["m2_double_a", "m2_double_b", "m2_double_c"],
+            "positions": [
+                ["m2_double_a", "m2_double_b", "m2_double_c"],
+                ["m2_mine_a", "m2_mine_b", "m2_mine_c"],
+                ["m2_phase_a", "m2_phase_b", "m2_phase_c"],
+                ["m2_combo_a", "m2_combo_b", "m2_combo_c"],
+                ["m2_duo_a", "m2_duo_b", "m2_duo_c"],
+                ["m2_airwide_a", "m2_airwide_b", "m2_airwide_c"],
+            ],
+            "normalHp": 18,
+            "eliteHp": 22,
+            "bossHp": 24,
+        },
+        "map3": {
+            "start": ["m3_drift_a", "m3_drift_b", "m3_drift_c"],
+            "positions": [
+                ["m3_drift_a", "m3_drift_b", "m3_drift_c"],
+                ["m3_signal_a", "m3_signal_b", "m3_signal_c"],
+                ["m3_anchor_a", "m3_anchor_b", "m3_anchor_c"],
+                ["m3_mirror_a", "m3_mirror_b", "m3_mirror_c"],
+                ["m3_movejam_a", "m3_movejam_b", "m3_movejam_c"],
+                ["m3_driftwide_a", "m3_driftwide_b", "m3_driftwide_c"],
+            ],
+            "normalHp": 20,
+            "eliteHp": 26,
+            "bossHp": 30,
+        },
+    }
+    for map_type, spec in expected.items():
+        config = G.MAPS[map_type]["growthBattlePools"]
+        for seed in range(12):
+            data = G.generate_map(seed, map_type, version=2)
+            by_id = {node["id"]: node for node in data["nodes"]}
+            paths = []
+
+            def walk(node_id, route):
+                route = [*route, by_id[node_id]]
+                if node_id == data["boss"]:
+                    paths.append(route)
+                    return
+                for child in by_id[node_id]["next"]:
+                    walk(child, route)
+
+            elite_column = next(
+                node["column"] for node in data["nodes"] if node["role"] == "elite"
+            )
+            walk(data["start"], [])
+            for path in paths:
+                battles = [node for node in path if node["type"] == "battle"]
+                start = battles[0]
+                assert start["role"] == "start"
+                assert start["encounter"] in spec["start"]
+                if map_type != "map1":
+                    assert start["encounter"] in spec["positions"][0]
+                normal = [
+                    node for node in battles
+                    if node["role"] == "battle" and node["column"] != elite_column
+                ]
+                offset = 0 if map_type == "map1" else 1
+                for index, node in enumerate(normal):
+                    assert node["encounter"] in spec["positions"][index + offset]
+                    assert G.ENCOUNTERS[node["encounter"]]["enemyHp"] == spec["normalHp"]
+                elite = next((node for node in battles if node["role"] == "elite"), None)
+                if elite:
+                    assert elite["encounter"] == config["eliteEncounter"]
+                    assert G.ENCOUNTERS[elite["encounter"]]["enemyHp"] == spec["eliteHp"]
+                boss = battles[-1]
+                assert boss["role"] == "boss"
+                assert boss["encounter"] == config["bossEncounter"]
+                assert G.ENCOUNTERS[boss["encounter"]]["enemyHp"] == spec["bossHp"]
+
+            elite_layer = next(
+                layer for layer in
+                (sorted(
+                    (node for node in data["nodes"] if node["column"] == column),
+                    key=lambda node: node["row"],
+                ) for column in sorted({node["column"] for node in data["nodes"]}))
+                if any(node["role"] == "elite" for node in layer)
+            )
+            normal_node = next(node for node in elite_layer if node["role"] == "battle")
+            assert normal_node["encounter"] in config["eliteNormalPool"]
+            assert G.ENCOUNTERS[normal_node["encounter"]]["enemyHp"] == spec["normalHp"]
+
+
+def test_v2_elite_route_choice():
+    state = G.new_state(3, "map1", version=2)
+    elite = next(node for node in state["mapData"]["nodes"] if node["role"] == "elite")
+    normal = next(
+        node for node in state["mapData"]["nodes"]
+        if node["role"] == "battle" and node["column"] == elite["column"]
+    )
+    state["nodeId"] = normal["id"]
+    state["phase"] = "before_story"
+    state["storyLine"] = 0
+    state["nodeData"] = {}
+    G._normalize(state)
+    clear_story(state)
+    assert state["phase"] == "node"
+    gold = state["gold"]
+    G.confirm_battle_result(state)
+    assert normal["id"] in state["completed"]
+    assert state["phase"] != "elite_reward"
+    assert state["gold"] == gold + G.ENCOUNTERS[normal["encounter"]]["reward"]["gold"]
+
+    state = G.new_state(3, "map1", version=2)
+    state["nodeId"] = elite["id"]
+    state["phase"] = "before_story"
+    state["storyLine"] = 0
+    state["nodeData"] = {}
+    G._normalize(state)
+    clear_story(state)
+    G.confirm_battle_result(state)
+    assert state["phase"] == "elite_reward"
+    assert G.public_state(state)["eliteReward"]["source"] == "elite"
+
+
+def growth_supply_state(map_type="map1", seed=7, variant=None):
+    state = G.new_state(seed, map_type, version=2)
+    supply = next(
+        node for node in state["mapData"]["nodes"]
+        if node["role"] == "supply" and (variant is None or node.get("variant") == variant)
+    )
+    state["nodeId"] = supply["id"]
+    state["phase"] = "before_story"
+    state["storyLine"] = 0
+    state["nodeData"] = {}
+    G._normalize(state)
+    assert state["phase"] == "node"
+    return state
+
+
+def test_v2_growth_map_layout():
+    expected = {
+        "map1": (10, (2, 8), 4),
+        "map2": (15, (1, 4, 13), 6),
+        "map3": (15, (1, 4, 13), 6),
+    }
+    for map_type, (run_length, supply_columns, normal_battles) in expected.items():
+        for seed in range(20):
+            data = G.generate_map(seed, map_type, version=2)
+            assert data["layout"] == "growth"
+            assert data["runLength"] == run_length
+            columns = {}
+            for node in data["nodes"]:
+                columns.setdefault(node["column"], []).append(node)
+            supplies = [
+                node for node in data["nodes"] if node["role"] == "supply"
+            ]
+            assert sorted(node["column"] for node in supplies) == list(supply_columns)
+            assert all(len(columns[column]) == 1 for column in supply_columns)
+            assert any(node["role"] == "event" and node["type"] == "adventure" for node in data["nodes"])
+            battle_layers = sum(
+                1 for layer in columns.values()
+                if any(node["role"] == "battle" for node in layer)
+                and not any(node["role"] == "elite" for node in layer)
+            )
+            assert 2 + battle_layers == normal_battles
+            elite_layer = next(
+                layer for layer in columns.values()
+                if any(node["role"] == "elite" for node in layer)
+            )
+            assert len(elite_layer) == 2
+            assert {node["role"] for node in elite_layer} == {"battle", "elite"}
+
+            paths = []
+
+            def walk(node_id, route):
+                route = [*route, node_id]
+                if node_id == data["boss"]:
+                    paths.append(route)
+                    return
+                for child in next(node for node in data["nodes"] if node["id"] == node_id)["next"]:
+                    walk(child, route)
+
+            walk(data["start"], [])
+            assert paths
+            supply_ids = {node["id"] for node in supplies}
+            assert all(supply_ids <= set(path) for path in paths)
+
+
+def test_v2_supply_node_rounds():
+    state = growth_supply_state("map1")
+    view = G.public_state(state)["supply"]
+    assert view["round"] == 1 and view["rounds"] == 2 and view["claimed"] == []
+    assert len(view["candidates"]) == 3
+    assert len({card["cardId"] for card in view["candidates"]}) == 3
+    first = view["candidates"][0]["cardId"]
+    try:
+        G.supply_choose(state, 1, first)
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("错误轮次应被拒绝")
+    try:
+        G.supply_choose(state, 0, "not_a_card")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("非法候选应被拒绝")
+
+    before = len(state["cards"])
+    G.supply_choose(state, 0, first)
+    assert state["phase"] == "node"
+    assert len(state["cards"]) == before + 1
+    assert state["cards"][-1]["level"] == 1
+    assert len({card["uid"] for card in state["cards"]}) == len(state["cards"])
+
+    saved = json.loads(json.dumps(state, ensure_ascii=False))
+    restored, _ = G.migrate_state(saved)
+    second = G.public_state(restored)["supply"]
+    assert second["round"] == 2
+    assert second["claimed"] == [G.CARDS[first]["name"]]
+    G.supply_choose(restored, 1, second["candidates"][0]["cardId"])
+    assert restored["phase"] == "map"
+    assert len(restored["cards"]) == before + 2
+
+    try:
+        G.supply_skip(restored, 1)
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("重复补给请求应被拒绝")
+
+
+def test_v2_supply_skip_keeps_claimed_card():
+    state = growth_supply_state("map2")
+    before = len(state["cards"])
+    first = G.public_state(state)["supply"]["candidates"][0]["cardId"]
+    G.supply_choose(state, 0, first)
+    G.supply_skip(state, 1)
+    assert len(state["cards"]) == before + 1
+    assert state["phase"] == "map"
+    assert state["completed"].count(next(
+        node["id"] for node in state["mapData"]["nodes"] if node["role"] == "supply"
+    )) == 1
+
+
+def test_v2_supply_swap_option():
+    state = growth_supply_state("map1", variant="swap")
+    G.supply_skip(state, 0)
+    G.supply_skip(state, 1)
+    assert state["phase"] == "node"
+    view = G.public_state(state)["supply"]
+    assert view["stage"] == "option" and view["variant"] == "swap"
+    assert view["swap"]["price"] == 10
+    assert len(view["candidates"]) == 3
+    assert view["swap"]["targets"]
+    card_id = view["candidates"][0]["cardId"]
+
+    restored, _ = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+    assert G.public_state(restored)["supply"]["stage"] == "option"
+
+    snapshot = json.dumps(state, sort_keys=True, ensure_ascii=False)
+    for payment, remove_uid in (("gold", None), ("card", None), ("bad", None)):
+        try:
+            G.supply_swap_choose(state, card_id, payment, remove_uid)
+        except B.GameError:
+            pass
+        else:
+            raise AssertionError("非法交换应被拒绝")
+        assert json.dumps(state, sort_keys=True, ensure_ascii=False) == snapshot
+
+    state["gold"] = 100
+    before = len(state["cards"])
+    G.supply_swap_choose(state, card_id, "gold")
+    assert state["gold"] == 90
+    assert len(state["cards"]) == before + 1
+    assert state["cards"][-1]["cardId"] == card_id and state["cards"][-1]["level"] == 1
+    assert state["phase"] == "map"
+    try:
+        G.supply_swap_choose(state, card_id, "gold")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("补给交换只能使用一次")
+
+    state = growth_supply_state("map1", variant="swap")
+    G.supply_skip(state, 0)
+    G.supply_skip(state, 1)
+    view = G.public_state(state)["supply"]
+    card_id = view["candidates"][0]["cardId"]
+    removable = next(card for card in view["swap"]["targets"] if card["removable"])
+    before_uids = {card["uid"] for card in state["cards"]}
+    G.supply_swap_choose(state, card_id, "card", removable["uid"])
+    after_uids = {card["uid"] for card in state["cards"]}
+    assert removable["uid"] not in after_uids
+    assert after_uids - before_uids
+    assert state["gold"] == 0
+    assert state["phase"] == "map"
+
+    state = growth_supply_state("map1", variant="swap")
+    G.supply_skip(state, 0)
+    G.supply_skip(state, 1)
+    card_id = G.public_state(state)["supply"]["candidates"][0]["cardId"]
+    state["cards"] = [state["cards"][0]]
+    snapshot = json.dumps(state, sort_keys=True, ensure_ascii=False)
+    try:
+        G.supply_swap_choose(state, card_id, "card", state["cards"][0]["uid"])
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("移除后无法满足起手保底时应被拒绝")
+    assert json.dumps(state, sort_keys=True, ensure_ascii=False) == snapshot
+
+
+def test_v2_supply_challenge_option():
+    state = growth_supply_state("map2", variant="challenge")
+    G.supply_skip(state, 0)
+    G.supply_skip(state, 1)
+    view = G.public_state(state)["supply"]
+    assert view["stage"] == "option" and view["variant"] == "challenge"
+    assert view["challenge"]["blocked"] is False
+    assert {item["id"] for item in view["challenge"]["options"]} == {
+        item["id"] for item in G.SUPPLY_CHALLENGES
+    }
+    assert view["challenge"]["targets"]
+    target = view["challenge"]["targets"][0]
+    assert target["plan"]
+
+    restored, _ = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+    assert G.public_state(restored)["supply"]["challenge"]["options"]
+    try:
+        G.supply_challenge_accept(state, "not_a_challenge")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("非法补给挑战应被拒绝")
+
+    G.supply_challenge_accept(state, "supply_energy")
+    assert state["phase"] == "map"
+    assert len(state["pendingChallenges"]) == 1
+    assert state["pendingChallenges"][0]["id"] == "supply_energy"
+    assert isinstance(state["pendingChallenges"][0]["rewardSeed"], int)
+    assert G.battle_challenge(state)["energyPenalty"] == 1
+
+    battle_id = G.available_nodes(state)[0]
+    assert battle_id == target["id"]
+    G.select_node(state, battle_id)
+    clear_story(state)
+    assert state["phase"] == "node"
+    assert G.current_node(state)["type"] == "battle"
+
+    restored, _ = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+    restored_view = G.public_state(restored)
+    assert restored_view["pendingChallenge"]["id"] == "supply_energy"
+
+    G.confirm_battle_result(state)
+    assert state["phase"] == "elite_reward"
+    assert state["pendingChallenges"] == []
+    assert state["nodeData"]["source"] == "challenge"
+    reward = G.public_state(state)["eliteReward"]
+    assert reward["source"] == "challenge" and len(reward["candidates"]) == 3
+    assert G.public_state(state)["supply"] is None
+
+    restored, changed = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+    assert not changed
+    assert G.public_state(restored)["eliteReward"]["source"] == "challenge"
+
+    card_id = reward["candidates"][0]["cardId"]
+    before = len(state["cards"])
+    G.elite_reward_choose(state, card_id)
+    assert len(state["cards"]) == before + 1
+    assert state["cards"][-1]["cardId"] == card_id
+    assert state["completed"].count(battle_id) == 1
+    try:
+        G.elite_reward_choose(state, card_id)
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("挑战奖励不能重复领取")
+
+    state = growth_supply_state("map2", variant="challenge")
+    state["pendingChallenges"] = [{"id": "supply_energy", "rewardSeed": 5}]
+    G.supply_skip(state, 0)
+    G.supply_skip(state, 1)
+    view = G.public_state(state)["supply"]
+    assert view["challenge"]["blocked"] is True
+    assert view["challenge"]["options"] == []
+    try:
+        G.supply_challenge_accept(state, "supply_sentry")
+    except B.GameError:
+        pass
+    else:
+        raise AssertionError("已有未结算挑战时应拒绝新挑战")
+    G.abandon_failed_challenge(state)
+    assert state["pendingChallenges"] == []
+    assert state["pendingChallengeReward"] is None
 
 
 if __name__ == "__main__":

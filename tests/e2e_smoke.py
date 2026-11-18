@@ -307,7 +307,7 @@ def complete_event(client, node_type):
     elif node_type == "drift" and data.get("candidates"):
         client.ok("/api/drift/choose", {"cardId": data["candidates"][0]["cardId"]})
     elif node_type == "recycle":
-        # 端到端路线依赖豆丁机器人速通，回收会把它拆掉；结算分支由规则测试覆盖。
+        # 端到端路线保持固定牌组，回收会移除初始单位；结算分支由规则测试覆盖。
         client.ok("/api/recycle/leave", {})
     elif node_type == "shop":
         offer = next((item for item in data.get("offers", []) if item.get("buyable")), None)

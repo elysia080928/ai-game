@@ -6,6 +6,7 @@ MAX_HAND = 10
 HIGH_COST = 6
 HIGH_COST_UNLOCK_TURN = 3
 COLUMNS = 4
+MAX_ENEMY_RESERVE = 4
 LOG_LIMIT = 60
 FIRST_TURN_ENERGY = 4
 OPENING_DRAW = 6
@@ -14,16 +15,11 @@ KNOWN_ABILITIES = ("wide_2", "flying", "reach")
 ON_DEPLOY_TRIGGERS = ("energy_penalty", "copy_opposite")
 ON_DESTROY_TRIGGERS = ("burst_adjacent", "hit_opposite")
 TUTORIAL_STEPS = (
-    {"action": "continue", "title": "爱：先看第 2 列", "text": "把敌方领袖生命降到 0 就能获胜。预告中，第 2 列的哨兵将在本回合结束后出现。我们先守住这里。", "side": "forecast", "column": 2},
-    {"action": "deploy", "cardId": "shell", "side": "player", "column": 2, "title": "拖出盾壳机器人", "text": "把高亮手牌拖到己方第 2 列。它花费 2 能量，能挡住这一列的攻击。"},
-    {"action": "end", "title": "让这一回合结算", "text": "点击结束回合。己方先攻击，随后敌人按预告部署并反击；空列的攻击会命中领袖。"},
-    {"action": "command", "cardId": "spark", "side": "enemy", "column": 2, "title": "清除面前的哨兵", "text": "能量每回合增加 2，剩余能量会保留。把闪电脉冲拖到敌方第 2 列，造成 2 点伤害。用过的牌本场不会再抽到。"},
-    {"action": "deploy", "cardId": "worker", "side": "player", "column": 3, "title": "读预告，再布防", "text": "下一名敌人会出现在第 3 列。把维修工偶拖到己方第 3 列，保护领袖。"},
-    {"action": "end", "title": "观察攻防交换", "text": "结束回合，看看两列单位如何分别攻击。盾壳面前没有敌人，它会直接攻击敌方领袖。"},
-    {"action": "recycle", "side": "player", "column": 2, "title": "回收，为下一张牌腾出空间", "text": "现在只有 2 能量。开启回收模式，选择己方第 2 列的盾壳并确认：花费过 2 能量，回收返还 1。它不会回到手牌。"},
-    {"action": "deploy", "cardId": "twin_rail", "side": "player", "column": 1, "width": 2, "title": "把两列连起来", "text": "现在有 3 能量。把双轨机偶拖到己方第 1 列；它占据第 1、2 列，需要连续空位，攻击时会分别攻击这两列。"},
-    {"action": "end", "title": "试一次双列攻击", "text": "结束回合，观察双轨机偶的两次攻击。之后由你自由决定站位、指令和回收，击败敌方领袖。"},
-    {"action": "continue", "title": "爱：接下来交给你", "text": "你已经学会了预告、部署、回合结算、指令和回收。第 4 列仍有敌人，记得保护领袖。获胜后领取金币，听完对话就能选择下一条路线。"},
+    {"action": "continue", "title": "先看目标和资源", "text": "把敌方领袖生命打空就能赢。自己的生命归零就会输。顶部显示回合和能量；每回合增加 2 点，没花完的会留下。点底部“手牌”展开卡牌。", "button": "开始", "uiTargets": ["enemy-hp", "player-hp", "energy", "hand-toggle"]},
+    {"action": "deploy", "cardId": "shell", "side": "player", "column": 2, "title": "部署单位", "text": "把高亮的盾壳拖到己方第 2 列。部署要花能量，单位会挡住同列敌人。", "uiTargets": ["energy"]},
+    {"action": "end", "title": "点这里结束回合", "text": "攻击都在你点击“结束回合”后结算：己方和场上的敌人都会攻击。候补区的敌人还没上场，不会攻击。"},
+    {"action": "command", "cardId": "spark", "side": "enemy", "column": 2, "title": "用指令牌", "text": "把闪电脉冲拖到敌方第 2 列，花费能量并造成伤害。用过的牌会离开本场牌组。", "uiTargets": ["energy"]},
+    {"action": "continue", "title": "接下来由你来打", "text": "看好双方领袖生命，留意顶部能量。点底部“结束回合”才会交锋；“手牌”和“回收模式”也在下方。上方候补是之后要来的敌人。", "button": "开始战斗", "uiTargets": ["end-turn", "recycle-btn", "forecast-row"]},
 )
 
 
@@ -131,6 +127,10 @@ def make_battle(
         "used": [],
         "discarded": [],
         "plan": _fit_extra_plan(encounter["plan"], extra_plan, enemies),
+        "deployedPlanTurns": [],
+        "deployedPlanIndexes": [],
+        "enemyReserve": [],
+        "enemyQueue": [],
         "phase": "player",
         "result": None,
         "next_uid": 1,
@@ -163,6 +163,8 @@ def make_battle(
     else:
         rng.shuffle(b["deck"])
     _start_turn(b, rng)
+    _deploy_plan_turn(b, b["turn"])
+    _fill_enemy_reserve(b, rng, include_next_turn=True)
     return b
 
 
@@ -197,24 +199,23 @@ def _draw_opening(b, rng):
     count = min(b["openingDraw"], len(eligible))
     if count < 1:
         raise GameError("牌组中没有可抽的牌，无法开始战斗")
-    b["openingDraw"] = count
-    picks = None
-    for _ in range(2000):
-        candidate = rng.sample(eligible, count)
-        low = [c for c in candidate if _card_cost(b, c) <= 2]
-        low_units = [
-            c
-            for c in low
-            if card_stats(
-                b["cards"], c["cardId"], c["level"], c.get("atkBonus", 0), c.get("hpBonus", 0)
-            )["type"]
-            == "unit"
-        ]
-        if len(low) >= 4 and low_units:
-            picks = candidate
-            break
-    if picks is None:
+    low = [c for c in eligible if _card_cost(b, c) <= 2]
+    low_units = [
+        c
+        for c in low
+        if card_stats(
+            b["cards"], c["cardId"], c["level"], c.get("atkBonus", 0), c.get("hpBonus", 0)
+        )["type"]
+        == "unit"
+    ]
+    if count < 4 or len(low) < 4 or not low_units:
         raise GameError("牌组无法满足起手条件（至少 4 张费用≤2、至少 1 张低费单位）")
+    b["openingDraw"] = count
+    unit = rng.choice(low_units)
+    picks = [unit, *rng.sample([c for c in low if c is not unit], 3)]
+    rest = [c for c in eligible if all(c["uid"] != pick["uid"] for pick in picks)]
+    picks += rng.sample(rest, count - 4)
+    rng.shuffle(picks)
     uids = {c["uid"] for c in picks}
     b["deck"] = [c for c in b["deck"] if c["uid"] not in uids]
     b["hand"].extend(picks)
@@ -559,10 +560,11 @@ def end_turn(b, rng=None):
     _player_attack(b)
     if b["phase"] == "over":
         return
-    _enemy_phase(b)
+    _enemy_phase(b, rng)
     if b["phase"] == "over":
         return
     _start_turn(b, rng)
+    _fill_enemy_reserve(b, rng, include_next_turn=True)
     _advance_tutorial(b)
 
 
@@ -657,43 +659,153 @@ def _shift_enemies(b):
         _log(b, f"{unit['name']} 向右移动到 {target} 列")
 
 
-def _enemy_phase(b):
-    for item in b["plan"]:
-        if item["turn"] != b["turn"]:
-            continue
-        enemy = b["enemies"][item["enemy"]]
-        width = enemy.get("width", 1)
-        start = item["column"]
-        columns = range(start, start + width)
-        if any(b["board"]["enemy"][column - 1] is not None for column in columns):
-            span = f"{start}-{start + width - 1}" if width > 1 else f"{start}"
-            _log(b, f"敌方计划在 {span} 列部署，但范围已被占用，跳过")
-            continue
-        stats = {
-            "name": enemy["name"],
-            "atk": enemy["atk"],
-            "hp": enemy["hp"],
-            "maxHp": enemy["hp"],
-            "width": width,
-            "attackPattern": enemy.get("attackPattern", "forward"),
-            "abilities": list(enemy.get("abilities", [])),
-            "shield": enemy.get("shield", 0),
-            "guard": enemy.get("guard", 0),
-            "shift": enemy.get("shift", 0),
-            "anchor": enemy.get("anchor", 0),
-            "onDeploy": enemy.get("onDeploy"),
-            "onDestroy": enemy.get("onDestroy"),
-        }
-        unit = _make_unit(b, "enemy", item["enemy"], stats, 0, start, 1)
-        for column in columns:
-            b["board"]["enemy"][column - 1] = unit
-        span = f"{start}-{start + width - 1} 列" if width > 1 else f"{start} 列"
-        _log(b, f"敌方在 {span}部署 {unit['name']}")
-        _resolve_on_deploy(b, unit)
-
+def _enemy_phase(b, rng=None):
+    rng = rng or random.Random()
     for unit in _side_units(b, "enemy"):
         _attack_columns(b, unit)
+        if b["phase"] == "over":
+            return
     _shift_enemies(b)
+    _deploy_reserved_turn(b, b["turn"] + 1, rng)
+
+
+def _candidate_starts(b, width):
+    occupied = set()
+    for entry in b.setdefault("enemyReserve", []):
+        occupied.update(entry.get("slots", range(entry["column"], entry["column"] + entry.get("width", 1))))
+    return [
+        start for start in range(1, COLUMNS - width + 2)
+        if not any(column in occupied for column in range(start, start + width))
+    ]
+
+
+def _fill_enemy_reserve(b, rng=None, include_next_turn=False):
+    rng = rng or random.Random()
+    reserve = b.setdefault("enemyReserve", [])
+    for entry in reserve:
+        item = b["plan"][entry["planIndex"]]
+        entry.setdefault("column", item["column"])
+        width = b["enemies"][item["enemy"]].get("width", 1)
+        entry.setdefault("width", width)
+        entry.setdefault("slots", list(range(entry["column"], entry["column"] + width)))
+    queue = b.setdefault("enemyQueue", [])
+    next_turn = b["turn"] + 1
+    known = {entry["planIndex"] for entry in reserve} | set(queue) | set(b.setdefault("deployedPlanIndexes", []))
+    if include_next_turn:
+        queue.extend(
+            index for index, item in enumerate(b["plan"])
+            if item["turn"] == next_turn and index not in known
+        )
+    queue.sort(key=lambda index: (b["plan"][index]["turn"], index))
+    while queue:
+        index = queue[0]
+        item = b["plan"][index]
+        width = b["enemies"][item["enemy"]].get("width", 1)
+        starts = _candidate_starts(b, width)
+        if not starts:
+            break
+        column = item["column"] if item["column"] in starts else rng.choice(starts)
+        reserve.append({"planIndex": index, "column": column, "width": width,
+                        "slots": list(range(column, column + width))})
+        queue.pop(0)
+
+
+def _deploy_reserved_turn(b, turn, rng=None):
+    rng = rng or random.Random()
+    remaining = []
+    for entry in b.setdefault("enemyReserve", []):
+        if entry["planIndex"] >= len(b["plan"]):
+            continue
+        item = b["plan"][entry["planIndex"]]
+        if item["turn"] > turn or not _deploy_plan_item(b, {**item, "column": entry["column"]}):
+            remaining.append(entry)
+        else:
+            b.setdefault("deployedPlanIndexes", []).append(entry["planIndex"])
+    b["enemyReserve"] = remaining
+    _fill_enemy_reserve(b, rng, include_next_turn=True)
+
+
+def _deploy_plan_turn(b, turn):
+    deployed_turns = b.setdefault("deployedPlanTurns", [])
+    if turn in deployed_turns:
+        return
+    deployed_turns.append(turn)
+    for index, item in enumerate(b["plan"]):
+        if item["turn"] != turn or index in b.setdefault("deployedPlanIndexes", []):
+            continue
+        _deploy_plan_item(b, item)
+        b["deployedPlanIndexes"].append(index)
+
+
+def _deploy_plan_item(b, item):
+    enemy = b["enemies"][item["enemy"]]
+    width = enemy.get("width", 1)
+    start = item["column"]
+    columns = range(start, start + width)
+    if any(b["board"]["enemy"][column - 1] is not None for column in columns):
+        span = f"{start}-{start + width - 1}" if width > 1 else f"{start}"
+        _log(b, f"敌方计划在 {span} 列部署，但范围已被占用，跳过")
+        return False
+    stats = {
+        "name": enemy["name"],
+        "atk": enemy["atk"],
+        "hp": enemy["hp"],
+        "maxHp": enemy["hp"],
+        "width": width,
+        "attackPattern": enemy.get("attackPattern", "forward"),
+        "abilities": list(enemy.get("abilities", [])),
+        "shield": enemy.get("shield", 0),
+        "guard": enemy.get("guard", 0),
+        "shift": enemy.get("shift", 0),
+        "anchor": enemy.get("anchor", 0),
+        "onDeploy": enemy.get("onDeploy"),
+        "onDestroy": enemy.get("onDestroy"),
+    }
+    unit = _make_unit(b, "enemy", item["enemy"], stats, 0, start, 1)
+    for column in columns:
+        b["board"]["enemy"][column - 1] = unit
+    span = f"{start}-{start + width - 1} 列" if width > 1 else f"{start} 列"
+    _log(b, f"敌方在 {span}部署 {unit['name']}")
+    _resolve_on_deploy(b, unit)
+    return True
+
+
+def repair_forecast_timing(b):
+    """旧战斗档案把当前回合计划留到回合末；将其补入场上一次。"""
+    changed = False
+    if "deployedPlanTurns" not in b:
+        b["deployedPlanTurns"] = []
+        _deploy_plan_turn(b, b["turn"])
+        changed = True
+    if "deployedPlanIndexes" not in b:
+        b["deployedPlanIndexes"] = [
+            index for index, item in enumerate(b["plan"])
+            if item["turn"] <= b["turn"]
+        ]
+        changed = True
+    if "enemyReserve" not in b:
+        b["enemyReserve"] = []
+        changed = True
+    normalized = []
+    for entry in b["enemyReserve"]:
+        if entry.get("status") == "deployed":
+            b.setdefault("deployedPlanIndexes", []).append(entry["planIndex"])
+            changed = True
+            continue
+        if entry.get("planIndex", -1) >= len(b["plan"]):
+            changed = True
+            continue
+        normalized.append(entry)
+    if normalized != b["enemyReserve"]:
+        b["enemyReserve"] = normalized
+        changed = True
+    if "enemyQueue" not in b:
+        b["enemyQueue"] = []
+        changed = True
+    before = len(b["enemyReserve"])
+    before_queue = len(b["enemyQueue"])
+    _fill_enemy_reserve(b, include_next_turn=True)
+    return changed or before != len(b["enemyReserve"]) or before_queue != len(b["enemyQueue"])
 
 
 def _win(b):
@@ -781,8 +893,10 @@ def view(b):
         "nextTurnEnergyPenalty": b["nextTurnEnergyPenalty"],
         "forecast": [
             {
+                "slot": entry["slots"][0] - 1,
+                "slots": list(entry["slots"]),
                 "turn": item["turn"],
-                "column": item["column"],
+                "column": entry["column"],
                 "width": b["enemies"][item["enemy"]].get("width", 1),
                 "attackPattern": b["enemies"][item["enemy"]].get("attackPattern", "forward"),
                 "abilities": list(b["enemies"][item["enemy"]].get("abilities", [])),
@@ -796,8 +910,9 @@ def view(b):
                 "atk": b["enemies"][item["enemy"]]["atk"],
                 "hp": b["enemies"][item["enemy"]]["hp"],
             }
-            for item in b["plan"]
-            if item["turn"] in (b["turn"], b["turn"] + 1)
+            for entry in b.get("enemyReserve", [])
+            if entry["planIndex"] < len(b["plan"])
+            for item in (b["plan"][entry["planIndex"]],)
         ],
         "log": list(b["log"][-12:]),
     }

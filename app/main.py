@@ -103,10 +103,30 @@ class EliteRewardBody(BaseModel):
 
 class ShopBuyBody(BaseModel):
     offerId: str
+    cardUid: str | None = None
 
 
 class TrialChooseBody(BaseModel):
     trialId: str
+
+
+class SupplyChooseBody(BaseModel):
+    round: StrictInt
+    cardId: str
+
+
+class SupplySkipBody(BaseModel):
+    round: StrictInt
+
+
+class SupplySwapBody(BaseModel):
+    cardId: str
+    payment: str
+    removeUid: str | None = None
+
+
+class SupplyChallengeBody(BaseModel):
+    challengeId: str
 
 
 class TrainingChooseBody(BaseModel):
@@ -222,7 +242,9 @@ def _load_battle(user_id, slot_id):
     except (ValueError, TypeError, AttributeError):
         _clear_battle(user_id, slot_id)
         return None
-    if B.repair_board(battle_state):
+    repaired = B.repair_board(battle_state)
+    migrated = B.repair_forecast_timing(battle_state)
+    if repaired or migrated:
         _store_battle(user_id, battle_state, slot_id)
     return battle_state
 
@@ -659,6 +681,14 @@ def battle_end(user=Depends(current_user)):
 def battle_retry(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
+        previous = _load_battle(user["id"], user["slot"])
+        if (
+            previous is not None
+            and previous.get("phase") == "over"
+            and previous.get("result") != "win"
+            and game.abandon_failed_challenge(state)
+        ):
+            _save_state(user["id"], state, user["slot"])
         battle_state = _make_battle(user["id"], state, user["slot"])
         return _battle_response(state, battle_state)
 
@@ -698,6 +728,60 @@ def elite_reward_leave(user=Depends(current_user)):
         game.elite_reward_leave(state)
         _save_state(user["id"], state, user["slot"])
         _clear_battle(user["id"], user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/supply/choose")
+def supply_choose(body: SupplyChooseBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        game.supply_choose(state, body.round, body.cardId)
+        _save_state(user["id"], state, user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/supply/skip")
+def supply_skip(body: SupplySkipBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        game.supply_skip(state, body.round)
+        _save_state(user["id"], state, user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/supply/swap")
+def supply_swap(body: SupplySwapBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        game.supply_swap_choose(state, body.cardId, body.payment, body.removeUid)
+        _save_state(user["id"], state, user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/supply/swap/skip")
+def supply_swap_skip(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        game.supply_swap_skip(state)
+        _save_state(user["id"], state, user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/supply/challenge")
+def supply_challenge(body: SupplyChallengeBody, user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        game.supply_challenge_accept(state, body.challengeId)
+        _save_state(user["id"], state, user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
+@app.post("/api/supply/challenge/skip")
+def supply_challenge_skip(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        game.supply_challenge_skip(state)
+        _save_state(user["id"], state, user["slot"])
     return {"state": game.public_state(state), "battle": None}
 
 
@@ -833,7 +917,7 @@ def drift_leave(user=Depends(current_user)):
 def shop_buy(body: ShopBuyBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
-        game.shop_buy(state, body.offerId)
+        game.shop_buy(state, body.offerId, body.cardUid)
         _save_state(user["id"], state, user["slot"])
         _clear_battle(user["id"], user["slot"])
     return {"state": game.public_state(state), "battle": None}

@@ -4,8 +4,8 @@
       "name": "豆丁机器人",
       "type": "unit",
       "levels": [
-        {"cost": 1, "atk": 99, "hp": 2},
-        {"cost": 1, "atk": 99, "hp": 3}
+        {"cost": 1, "atk": 1, "hp": 2},
+        {"cost": 1, "atk": 1, "hp": 3}
       ]
     },
     "shell": {
@@ -146,7 +146,46 @@
       "guard": 1
     }
   },
-  "initialDeck": ["bean", "shell", "twin_rail", "repair", "spark", "worker", "striker", "heavy"],
+  "initialDeck": ["bean", "bean", "shell", "scout", "worker", "guard", "repair", "spark"],
+  "legacyInitialDeck": ["bean", "shell", "twin_rail", "repair", "spark", "worker", "striker", "heavy"],
+  "growth": {
+    "rulesVersion": 2,
+    "unlocks": {
+      "map1": [
+        {"at": 0, "cards": ["bean", "shell", "scout", "worker", "guard", "repair", "spark"]},
+        {"at": 2, "cards": ["shield_moth"]},
+        {"at": 4, "cards": ["twin_rail"]}
+      ],
+      "map2": [
+        {"at": 0, "cards": ["striker", "rail_guard"]},
+        {"at": 1, "cards": ["flyer", "burst_beetle"]},
+        {"at": 3, "cards": ["phase_flyer"]}
+      ],
+      "map3": [
+        {"at": 0, "cards": ["heavy", "arc_drone", "double_claw"]}
+      ]
+    }
+  },
+  "supply": {
+    "swapPrices": {"map1": 10, "map2": 15, "map3": 20},
+    "challenges": [
+      {
+        "id": "supply_energy",
+        "name": "低功率挑战",
+        "description": "下一场战斗首回合能量 -1；胜利后额外三选一。",
+        "energyPenalty": 1,
+        "reward": 0
+      },
+      {
+        "id": "supply_sentry",
+        "name": "援军挑战",
+        "description": "下一场战斗首回合 1 列出现突击哨兵；胜利后额外三选一及 10 金币。",
+        "extraEnemy": "assault_sentry",
+        "column": 1,
+        "reward": 10
+      }
+    ]
+  },
   "enemies": {
     "small_sentry": {"name": "小型哨兵", "atk": 1, "hp": 2},
     "defender": {"name": "防守机偶", "atk": 1, "hp": 4},
@@ -168,7 +207,7 @@
     "tutorial": {
       "name": "初次协作",
       "tutorial": true,
-      "openingHand": ["worker", "shell", "repair", "spark", "twin_rail", "striker"],
+      "openingHand": ["bean", "shell", "scout", "worker", "repair", "spark"],
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -185,7 +224,9 @@
       "plan": [
         {"turn": 1, "column": 1, "enemy": "small_sentry"},
         {"turn": 2, "column": 3, "enemy": "small_sentry"},
-        {"turn": 3, "column": 2, "enemy": "small_sentry"}
+        {"turn": 3, "column": 2, "enemy": "small_sentry"},
+        {"turn": 4, "column": 1, "enemy": "small_sentry"},
+        {"turn": 5, "column": 3, "enemy": "small_sentry"}
       ],
       "reward": {"gold": 20}
     },
@@ -197,7 +238,9 @@
         {"turn": 1, "column": 2, "enemy": "defender"},
         {"turn": 1, "column": 4, "enemy": "small_sentry"},
         {"turn": 2, "column": 3, "enemy": "fork_sentry"},
-        {"turn": 3, "column": 1, "enemy": "wide_bulwark"}
+        {"turn": 3, "column": 1, "enemy": "wide_bulwark"},
+        {"turn": 4, "column": 2, "enemy": "defender"},
+        {"turn": 5, "column": 4, "enemy": "small_sentry"}
       ],
       "reward": {"gold": 0}
     },
@@ -210,7 +253,10 @@
         {"turn": 2, "column": 1, "enemy": "siege_carrier"},
         {"turn": 3, "column": 3, "enemy": "null_anchor"},
         {"turn": 4, "column": 4, "enemy": "signal_jammer"},
-        {"turn": 5, "column": 3, "enemy": "phase_hunter"}
+        {"turn": 5, "column": 3, "enemy": "phase_hunter"},
+        {"turn": 6, "column": 3, "enemy": "drift_hunter"},
+        {"turn": 7, "column": 1, "enemy": "siege_carrier"},
+        {"turn": 8, "column": 3, "enemy": "null_anchor"}
       ],
       "reward": {"gold": 30}
     },
@@ -227,7 +273,12 @@
         {"turn": 4, "column": 1, "enemy": "phase_hunter"},
         {"turn": 4, "column": 3, "enemy": "drift_hunter"},
         {"turn": 5, "column": 3, "enemy": "wide_bulwark"},
-        {"turn": 5, "column": 1, "enemy": "double_striker"}
+        {"turn": 5, "column": 1, "enemy": "double_striker"},
+        {"turn": 6, "column": 2, "enemy": "mirror_core"},
+        {"turn": 7, "column": 1, "enemy": "defender"},
+        {"turn": 8, "column": 4, "enemy": "mirror_drone"},
+        {"turn": 9, "column": 3, "enemy": "signal_jammer"},
+        {"turn": 10, "column": 4, "enemy": "mine_beetle"}
       ],
       "reward": {"gold": 0}
     },
@@ -246,7 +297,13 @@
         {"turn": 5, "column": 1, "enemy": "drift_hunter"},
         {"turn": 5, "column": 3, "enemy": "null_anchor"},
         {"turn": 6, "column": 3, "enemy": "wide_bulwark"},
-        {"turn": 6, "column": 1, "enemy": "double_striker"}
+        {"turn": 6, "column": 1, "enemy": "double_striker"},
+        {"turn": 7, "column": 2, "enemy": "mirror_core"},
+        {"turn": 8, "column": 1, "enemy": "defender"},
+        {"turn": 9, "column": 4, "enemy": "phase_hunter"},
+        {"turn": 10, "column": 3, "enemy": "signal_jammer"},
+        {"turn": 11, "column": 1, "enemy": "mine_beetle"},
+        {"turn": 12, "column": 2, "enemy": "siege_carrier"}
       ],
       "reward": {"gold": 0}
     },
@@ -258,7 +315,9 @@
         {"turn": 1, "column": 1, "enemy": "small_sentry"},
         {"turn": 1, "column": 4, "enemy": "small_sentry"},
         {"turn": 2, "column": 3, "enemy": "assault_sentry"},
-        {"turn": 3, "column": 2, "enemy": "defender"}
+        {"turn": 3, "column": 2, "enemy": "defender"},
+        {"turn": 4, "column": 1, "enemy": "small_sentry"},
+        {"turn": 5, "column": 4, "enemy": "small_sentry"}
       ],
       "reward": {"gold": 20}
     },
@@ -270,7 +329,9 @@
         {"turn": 1, "column": 1, "enemy": "small_sentry"},
         {"turn": 1, "column": 3, "enemy": "small_sentry"},
         {"turn": 2, "column": 2, "enemy": "defender"},
-        {"turn": 3, "column": 4, "enemy": "fork_sentry"}
+        {"turn": 3, "column": 4, "enemy": "fork_sentry"},
+        {"turn": 4, "column": 1, "enemy": "small_sentry"},
+        {"turn": 5, "column": 3, "enemy": "small_sentry"}
       ],
       "reward": {"gold": 20}
     },
@@ -283,7 +344,10 @@
         {"turn": 1, "column": 4, "enemy": "small_sentry"},
         {"turn": 2, "column": 2, "enemy": "wide_bulwark"},
         {"turn": 3, "column": 3, "enemy": "fork_sentry"},
-        {"turn": 4, "column": 1, "enemy": "double_striker"}
+        {"turn": 4, "column": 1, "enemy": "double_striker"},
+        {"turn": 5, "column": 1, "enemy": "assault_sentry"},
+        {"turn": 6, "column": 4, "enemy": "small_sentry"},
+        {"turn": 7, "column": 2, "enemy": "wide_bulwark"}
       ],
       "reward": {"gold": 0}
     },
@@ -297,10 +361,73 @@
         {"turn": 2, "column": 1, "enemy": "double_striker"},
         {"turn": 2, "column": 3, "enemy": "assault_sentry"},
         {"turn": 3, "column": 3, "enemy": "wide_bulwark"},
-        {"turn": 4, "column": 1, "enemy": "drift_hunter"}
+        {"turn": 4, "column": 1, "enemy": "drift_hunter"},
+        {"turn": 5, "column": 2, "enemy": "defender"},
+        {"turn": 6, "column": 4, "enemy": "mine_beetle"},
+        {"turn": 7, "column": 1, "enemy": "double_striker"}
       ],
       "reward": {"gold": 0}
-    }
+    },
+    "m1_basic_a": {"name": "边境试探", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
+    "m1_basic_b": {"name": "边境试探·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_basic_c": {"name": "边境试探·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 3, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m1_split_a": {"name": "分叉巡逻", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "fork_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "fork_sentry"}, {"turn": 6, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
+    "m1_split_b": {"name": "分叉巡逻·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 3, "enemy": "fork_sentry"}], "reward": {"gold": 20}},
+    "m1_split_c": {"name": "分叉巡逻·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 4, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "fork_sentry"}, {"turn": 4, "column": 1, "enemy": "assault_sentry"}, {"turn": 5, "column": 4, "enemy": "fork_sentry"}, {"turn": 6, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_wide_a": {"name": "宽幅拦截", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "wide_bulwark"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_wide_b": {"name": "宽幅拦截·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}], "reward": {"gold": 20}},
+    "m1_wide_c": {"name": "宽幅拦截·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_elite_normal_a": {"name": "边境混编", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "fork_sentry"}], "reward": {"gold": 0}},
+    "m1_elite_normal_b": {"name": "边境混编·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "fork_sentry"}, {"turn": 5, "column": 2, "enemy": "defender"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}], "reward": {"gold": 0}},
+    "m1_elite_normal_c": {"name": "边境混编·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 2, "enemy": "wide_bulwark"}, {"turn": 5, "column": 4, "enemy": "assault_sentry"}, {"turn": 6, "column": 3, "enemy": "fork_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "elite1": {"name": "边境精英", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "fork_sentry"}, {"turn": 3, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "assault_sentry"}, {"turn": 4, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 30}},
+    "boss1": {"name": "镜像核心", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "fork_sentry"}, {"turn": 3, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "assault_sentry"}, {"turn": 4, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}, {"turn": 6, "column": 3, "enemy": "fork_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 0}},
+    "m2_double_a": {"name": "双击试探", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "double_striker"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 2, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_double_b": {"name": "双击试探·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_double_c": {"name": "双击试探·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
+    "m2_mine_a": {"name": "雷壳伏击", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "mine_beetle"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_mine_b": {"name": "雷壳伏击·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "mine_beetle"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mine_beetle"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_mine_c": {"name": "雷壳伏击·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "mine_beetle"}, {"turn": 4, "column": 2, "enemy": "defender"}, {"turn": 5, "column": 3, "enemy": "mine_beetle"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_phase_a": {"name": "相位突入", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "phase_hunter"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_phase_b": {"name": "相位突入·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 3, "enemy": "double_striker"}, {"turn": 5, "column": 4, "enemy": "phase_hunter"}, {"turn": 6, "column": 2, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_phase_c": {"name": "相位突入·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_combo_a": {"name": "回路合击", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 3, "column": 3, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m2_combo_b": {"name": "回路合击·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 4, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "assault_sentry"}, {"turn": 7, "column": 3, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m2_combo_c": {"name": "回路合击·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "small_sentry"}, {"turn": 4, "column": 2, "enemy": "double_striker"}, {"turn": 5, "column": 4, "enemy": "defender"}, {"turn": 6, "column": 3, "enemy": "assault_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m2_duo_a": {"name": "双击雷壳", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_duo_b": {"name": "双击雷壳·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 2, "enemy": "double_striker"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_duo_c": {"name": "双击雷壳·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_airwide_a": {"name": "飞行宽壁", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "phase_hunter"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "phase_hunter"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_airwide_b": {"name": "飞行宽壁·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "wide_bulwark"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 3, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "defender"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_airwide_c": {"name": "飞行宽壁·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "phase_hunter"}, {"turn": 2, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_elite_normal_a": {"name": "回路混编", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "wide_bulwark"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "m2_elite_normal_b": {"name": "回路混编·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "mine_beetle"}, {"turn": 3, "column": 2, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "phase_hunter"}, {"turn": 5, "column": 1, "enemy": "mine_beetle"}, {"turn": 6, "column": 4, "enemy": "double_striker"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "m2_elite_normal_c": {"name": "回路混编·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "wide_bulwark"}, {"turn": 3, "column": 3, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "double_striker"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 1, "enemy": "mine_beetle"}, {"turn": 7, "column": 3, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "elite2": {"name": "深层精英", "playerHp": 15, "enemyHp": 22, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 3, "column": 3, "enemy": "phase_hunter"}, {"turn": 4, "column": 2, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "mine_beetle"}], "reward": {"gold": 30}},
+    "boss2_growth": {"name": "深层核心", "playerHp": 15, "enemyHp": 24, "plan": [{"turn": 1, "column": 2, "enemy": "mirror_drone"}, {"turn": 1, "column": 4, "enemy": "double_striker"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "mirror_drone"}, {"turn": 4, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 1, "enemy": "defender"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mirror_drone"}, {"turn": 5, "column": 4, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "mirror_drone"}, {"turn": 7, "column": 2, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "m3_drift_a": {"name": "漂移追踪", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "drift_hunter"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "defender"}, {"turn": 9, "column": 1, "enemy": "assault_sentry"}, {"turn": 10, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_drift_b": {"name": "漂移追踪·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "drift_hunter"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}, {"turn": 9, "column": 4, "enemy": "assault_sentry"}, {"turn": 10, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_drift_c": {"name": "漂移追踪·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 4, "enemy": "drift_hunter"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "assault_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "defender"}, {"turn": 9, "column": 2, "enemy": "assault_sentry"}, {"turn": 10, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_signal_a": {"name": "干扰回廊", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "signal_jammer"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "defender"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_signal_b": {"name": "干扰回廊·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "signal_jammer"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_signal_c": {"name": "干扰回廊·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "signal_jammer"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_anchor_a": {"name": "空间锚点", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "null_anchor"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "null_anchor"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 2, "enemy": "assault_sentry"}, {"turn": 9, "column": 4, "enemy": "defender"}, {"turn": 10, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_anchor_b": {"name": "空间锚点·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "null_anchor"}, {"turn": 4, "column": 1, "enemy": "small_sentry"}, {"turn": 5, "column": 4, "enemy": "null_anchor"}, {"turn": 6, "column": 2, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "assault_sentry"}, {"turn": 9, "column": 3, "enemy": "defender"}, {"turn": 10, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_anchor_c": {"name": "空间锚点·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "null_anchor"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "null_anchor"}, {"turn": 6, "column": 4, "enemy": "assault_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 2, "enemy": "defender"}, {"turn": 10, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_mirror_a": {"name": "镜像复写", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "mirror_drone"}, {"turn": 3, "column": 1, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mirror_drone"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_mirror_b": {"name": "镜像复写·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "mirror_drone"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 4, "enemy": "mirror_drone"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_mirror_c": {"name": "镜像复写·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "mirror_drone"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "mirror_drone"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 1, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_movejam_a": {"name": "移动干扰", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "signal_jammer"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "signal_jammer"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_movejam_b": {"name": "移动干扰·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "signal_jammer"}, {"turn": 3, "column": 4, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "signal_jammer"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_movejam_c": {"name": "移动干扰·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "small_sentry"}, {"turn": 6, "column": 1, "enemy": "signal_jammer"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_driftwide_a": {"name": "漂移宽壁", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "drift_hunter"}, {"turn": 3, "column": 3, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "drift_hunter"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_driftwide_b": {"name": "漂移宽壁·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "drift_hunter"}, {"turn": 4, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 3, "enemy": "small_sentry"}, {"turn": 6, "column": 1, "enemy": "drift_hunter"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 2, "enemy": "defender"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_driftwide_c": {"name": "漂移宽壁·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "drift_hunter"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "drift_hunter"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_elite_normal_a": {"name": "静海混编", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "drift_hunter"}, {"turn": 3, "column": 1, "enemy": "signal_jammer"}, {"turn": 4, "column": 3, "enemy": "null_anchor"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 4, "enemy": "signal_jammer"}, {"turn": 7, "column": 1, "enemy": "null_anchor"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}], "reward": {"gold": 0}},
+    "m3_elite_normal_b": {"name": "静海混编·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "signal_jammer"}, {"turn": 3, "column": 2, "enemy": "null_anchor"}, {"turn": 4, "column": 4, "enemy": "drift_hunter"}, {"turn": 5, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 3, "enemy": "null_anchor"}, {"turn": 7, "column": 2, "enemy": "drift_hunter"}, {"turn": 8, "column": 4, "enemy": "defender"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "defender"}], "reward": {"gold": 0}},
+    "m3_elite_normal_c": {"name": "静海混编·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "null_anchor"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "signal_jammer"}, {"turn": 5, "column": 1, "enemy": "null_anchor"}, {"turn": 6, "column": 3, "enemy": "drift_hunter"}, {"turn": 7, "column": 2, "enemy": "signal_jammer"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}], "reward": {"gold": 0}},
+    "elite3": {"name": "静海精英", "playerHp": 15, "enemyHp": 26, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 1, "column": 4, "enemy": "drift_hunter"}, {"turn": 2, "column": 1, "enemy": "signal_jammer"}, {"turn": 2, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 1, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "double_striker"}, {"turn": 7, "column": 3, "enemy": "drift_hunter"}, {"turn": 8, "column": 2, "enemy": "double_striker"}, {"turn": 9, "column": 1, "enemy": "drift_hunter"}], "reward": {"gold": 30}},
+    "boss3": {"name": "海渊中枢", "playerHp": 15, "enemyHp": 30, "plan": [{"turn": 1, "column": 2, "enemy": "signal_jammer"}, {"turn": 1, "column": 4, "enemy": "drift_hunter"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "mirror_core"}, {"turn": 4, "column": 1, "enemy": "drift_hunter"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 7, "column": 3, "enemy": "signal_jammer"}, {"turn": 8, "column": 1, "enemy": "drift_hunter"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 3, "enemy": "drift_hunter"}], "reward": {"gold": 0}}
   },
   "recruit": {
     "offers": [
@@ -389,6 +516,16 @@
       "early": ["battle1", "early_patrol", "early_pincer"],
       "late": ["battle2", "late_bulwark", "late_pressure"]
     },
+    "growthBattlePools": {
+      "positions": [
+        ["m1_basic_a", "m1_basic_b", "m1_basic_c"],
+        ["m1_split_a", "m1_split_b", "m1_split_c"],
+        ["m1_wide_a", "m1_wide_b", "m1_wide_c"]
+      ],
+      "eliteNormalPool": ["m1_elite_normal_a", "m1_elite_normal_b", "m1_elite_normal_c"],
+      "eliteEncounter": "elite1",
+      "bossEncounter": "boss1"
+    },
     "templates": {
       "tutorial_start": {
         "type": "battle",
@@ -431,6 +568,19 @@
     "extraEventNodes": 4,
     "bossEncounter": "boss2",
     "bossTemplate": "boss2",
+    "growthBattlePools": {
+      "positions": [
+        ["m2_double_a", "m2_double_b", "m2_double_c"],
+        ["m2_mine_a", "m2_mine_b", "m2_mine_c"],
+        ["m2_phase_a", "m2_phase_b", "m2_phase_c"],
+        ["m2_combo_a", "m2_combo_b", "m2_combo_c"],
+        ["m2_duo_a", "m2_duo_b", "m2_duo_c"],
+        ["m2_airwide_a", "m2_airwide_b", "m2_airwide_c"]
+      ],
+      "eliteNormalPool": ["m2_elite_normal_a", "m2_elite_normal_b", "m2_elite_normal_c"],
+      "eliteEncounter": "elite2",
+      "bossEncounter": "boss2_growth"
+    },
     "chapter": "第二章",
     "title": "深层回路",
     "subtitle": "THE DEEP CIRCUIT",
@@ -461,6 +611,19 @@
     "extraEventNodes": 4,
     "bossEncounter": "boss2",
     "bossTemplate": "boss3",
+    "growthBattlePools": {
+      "positions": [
+        ["m3_drift_a", "m3_drift_b", "m3_drift_c"],
+        ["m3_signal_a", "m3_signal_b", "m3_signal_c"],
+        ["m3_anchor_a", "m3_anchor_b", "m3_anchor_c"],
+        ["m3_mirror_a", "m3_mirror_b", "m3_mirror_c"],
+        ["m3_movejam_a", "m3_movejam_b", "m3_movejam_c"],
+        ["m3_driftwide_a", "m3_driftwide_b", "m3_driftwide_c"]
+      ],
+      "eliteNormalPool": ["m3_elite_normal_a", "m3_elite_normal_b", "m3_elite_normal_c"],
+      "eliteEncounter": "elite3",
+      "bossEncounter": "boss3"
+    },
     "chapter": "第三章",
     "title": "静海档案",
     "subtitle": "THE ABYSSAL ARCHIVE",
@@ -757,6 +920,33 @@
       "after": [
         {"speaker": "爱", "text": "演算已经载入。我会和你一起面对它，不会替你做决定。"}
       ]
+    },
+    {
+      "id": "supply_pure",
+      "type": "supply",
+      "name": "机偶补给站",
+      "variant": "pure",
+      "next": [],
+      "before": [],
+      "after": []
+    },
+    {
+      "id": "supply_swap",
+      "type": "supply",
+      "name": "机偶交换站",
+      "variant": "swap",
+      "next": [],
+      "before": [],
+      "after": []
+    },
+    {
+      "id": "supply_challenge",
+      "type": "supply",
+      "name": "机偶挑战站",
+      "variant": "challenge",
+      "next": [],
+      "before": [],
+      "after": []
     },
     {
       "id": "elite",
