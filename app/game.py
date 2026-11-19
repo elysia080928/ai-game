@@ -2663,6 +2663,30 @@ def abandon_failed_challenge(state):
     return False
 
 
+def return_failed_battle_to_map(state):
+    node = current_node(state)
+    if state.get("phase") != "node" or node is None or node.get("type") != "battle":
+        raise GameError("当前不是战斗节点")
+    nodes = _map_nodes(state)
+    parent = next(
+        (
+            item
+            for item in nodes.values()
+            if node["id"] in item.get("next", []) and item["id"] in state["completed"]
+        ),
+        None,
+    )
+    map_data = state.get("mapData")
+    is_start = node["id"] == (map_data.get("start") if isinstance(map_data, dict) else FIRST_NODE)
+    if parent is None and not is_start:
+        raise GameError("当前战斗节点没有地图入口")
+    if parent is not None:
+        state["nodeId"] = parent["id"]
+    state["phase"] = "map"
+    state["storyLine"] = 0
+    state["nodeData"] = {}
+
+
 def settle_challenges(state):
     """战斗胜利后结算并清空挂载的挑战；返回待处理的额外卡牌奖励。"""
     pending = state.get("pendingChallenges") or []

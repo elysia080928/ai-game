@@ -600,6 +600,35 @@ def test_generated_map_structure():
         assert len(pool) >= 3
 
 
+def test_return_failed_battle_to_map_keeps_node_retryable():
+    state = G.new_state(seed=42, version=2)
+    start = state["mapData"]["start"]
+    state["nodeId"] = start
+    state["phase"] = "node"
+    state["completed"] = []
+
+    G.return_failed_battle_to_map(state)
+
+    assert state["phase"] == "map"
+    assert state["nodeId"] == start
+    assert G.available_nodes(state) == [start]
+    assert state["completed"] == []
+
+    state = G.new_state(seed=0, version=2)
+    nodes = G._map_nodes(state)
+    next_node = nodes["battle_late_6_0"]
+    parents = [node for node in nodes.values() if next_node["id"] in node["next"]]
+    assert len(parents) == 2
+    parent = parents[1]
+    state["completed"] = [parent["id"]]
+    state["nodeId"] = next_node["id"]
+    state["phase"] = "node"
+    G.return_failed_battle_to_map(state)
+    assert state["phase"] == "map"
+    assert state["nodeId"] == parent["id"]
+    assert next_node["id"] in G.available_nodes(state)
+
+
 def test_generated_map_route_persistence_and_closed_branches():
     for seed in range(12):
         state = G.new_state(seed)

@@ -368,6 +368,26 @@ def main():
             "SELECT state FROM save_slots WHERE user_id = ? AND slot_id = 1", (reset_user_id,)
         ).fetchone()[0])
         assert stored["pendingChallenges"] == []
+        lost = json.loads(conn.execute(
+            "SELECT state FROM battle_slots WHERE user_id = ? AND slot_id = 1", (reset_user_id,)
+        ).fetchone()[0])
+        lost["phase"] = "over"
+        lost["result"] = "lose"
+        conn.execute(
+            "UPDATE battle_slots SET state = ? WHERE user_id = ? AND slot_id = 1",
+            (json.dumps(lost, ensure_ascii=False), reset_user_id),
+        )
+        conn.commit()
+        returned = reset_client.post("/api/battle/return")
+        assert returned.status_code == 200, returned.text
+        assert returned.json()["state"]["phase"] == "map"
+        assert returned.json()["state"]["completed"] == []
+        assert returned.json()["state"]["gold"] == 0
+        assert returned.json()["state"]["map"]["available"] == [returned.json()["state"]["node"]["id"]]
+        assert returned.json()["battle"] is None
+        assert reset_client.get("/api/state").json()["state"]["phase"] == "map"
+        assert reset_client.post("/api/battle/return").status_code == 400
+        assert reset_client.post("/api/battle/start").status_code == 400
         reset_client.close()
 
         # 过期会话不能再读取存档。

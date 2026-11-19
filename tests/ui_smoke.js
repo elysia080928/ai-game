@@ -1296,6 +1296,35 @@ async function main() {
     )) {
       throw new Error(`战斗结束后不应允许拖放：${JSON.stringify(overDrag)}`);
     }
+    const resultLayout = await evaluate(`(() => {
+      const panel = document.getElementById('result-panel');
+      const image = document.getElementById('result-image');
+      const read = () => {
+        const bounds = image.getBoundingClientRect();
+        const buttons = ['result-action', 'result-return'].map((id) => {
+          const rect = document.getElementById(id).getBoundingClientRect();
+          return { x: (rect.left + rect.width / 2 - bounds.left) / bounds.width, y: (rect.top + rect.height / 2 - bounds.top) / bounds.height, name: document.getElementById(id).getAttribute('aria-label') };
+        });
+        return { src: new URL(image.src).pathname, ratio: image.naturalWidth / image.naturalHeight, bounds: [bounds.width, bounds.height], buttons };
+      };
+      const victory = read();
+      battle.result = 'lose'; renderResult();
+      const defeat = read();
+      battle.result = 'win'; renderResult();
+      return { victory, defeat, visible: !panel.hidden };
+    })()`);
+    for (const [result, suffix] of [[resultLayout.victory, "victory"], [resultLayout.defeat, "defeat"]]) {
+      if (!result.src.endsWith(`/battle-result-${suffix}.png`) || result.ratio !== 16 / 9 ||
+          result.bounds[0] > innerWidth || result.bounds[1] > innerHeight || result.buttons.some((button) => !button.name)) {
+        throw new Error(`战斗${suffix}结算图布局或无障碍名称异常：${JSON.stringify(result)}`);
+      }
+    }
+    if (Math.abs(resultLayout.victory.buttons[0].x - 0.39) > 0.03 ||
+        Math.abs(resultLayout.defeat.buttons[0].x - 0.375) > 0.04 ||
+        Math.abs(resultLayout.victory.buttons[0].y - 0.725) > 0.025 ||
+        Math.abs(resultLayout.defeat.buttons[0].y - 0.70) > 0.03) {
+      throw new Error(`结算按钮热区未对齐原图：${JSON.stringify(resultLayout)}`);
+    }
     await screenshot("ai-game-result.png");
     console.log("ok 战斗 1 胜利，结束后拖放被禁用");
 

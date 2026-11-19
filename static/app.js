@@ -733,6 +733,10 @@ async function act(path, body) {
     }
     apply(data);
   } catch (error) {
+    if (["/api/battle/confirm", "/api/battle/retry", "/api/battle/return"].includes(path)) {
+      $("result-action").disabled = false;
+      $("result-return").disabled = false;
+    }
     showToast(error.message);
   } finally {
     busy = false;
@@ -1050,17 +1054,25 @@ function renderResult() {
     return;
   }
   const action = $("result-action");
+  const returnButton = $("result-return");
+  const dialog = panel.querySelector(".result-dialog");
+  action.disabled = false;
+  returnButton.disabled = false;
   if (battle.result === "win") {
-    $("result-title").textContent = "战斗胜利";
-    $("result-text").textContent = "确认结果后会结算本节点的奖励并继续。";
-    action.textContent = "确认结果";
+    $("result-image").src = "/assets/ui/battle-result-victory.png";
+    $("result-image").alt = "VICTORY，BATTLE WON";
+    dialog.dataset.result = "win";
+    dialog.setAttribute("aria-label", "战斗胜利结算");
     action.dataset.action = "confirm";
   } else {
-    $("result-title").textContent = "战斗失败";
-    $("result-text").textContent = "重试会从这场战斗的开头开始，保留进入战斗前的牌组与金币。";
-    action.textContent = "重试";
+    $("result-image").src = "/assets/ui/battle-result-defeat.png";
+    $("result-image").alt = "GAME OVER，BATTLE FAILED";
+    dialog.dataset.result = "lose";
+    dialog.setAttribute("aria-label", "战斗失败结算");
     action.dataset.action = "retry";
   }
+  action.setAttribute("aria-label", battle.result === "win" ? "继续并结算战斗奖励" : "重试当前战斗");
+  returnButton.hidden = battle.result !== "win" && battle.result !== "lose";
   showDialog(panel, action);
 }
 
@@ -1925,7 +1937,7 @@ function bindEvents() {
     if (event.key === "Escape" && !$("settings-panel").hidden) hideDialog($("settings-panel"));
   });
   $("discard-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
-  $("result-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
+  $("result-panel").querySelector(".result-dialog").addEventListener("keydown", trapDialogFocus);
 
   $("story-panel").addEventListener("click", (event) => {
     if (event.target.closest("#story-skip, .story-option")) return;
@@ -2035,8 +2047,15 @@ function bindEvents() {
 
   $("result-action").addEventListener("click", () => {
     const action = $("result-action").dataset.action;
+    $("result-action").disabled = true;
+    $("result-return").disabled = true;
     if (action === "confirm") act("/api/battle/confirm", {});
     else if (action === "retry") act("/api/battle/retry", {});
+  });
+  $("result-return").addEventListener("click", () => {
+    $("result-action").disabled = true;
+    $("result-return").disabled = true;
+    act(battle?.result === "win" ? "/api/battle/confirm" : "/api/battle/return", {});
   });
 
   $("tutorial-next").addEventListener("click", () => act("/api/battle/tutorial", {}));

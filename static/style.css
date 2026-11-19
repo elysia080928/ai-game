@@ -346,6 +346,19 @@ button.small { padding: 6px 12px; font-size: 12px; }
 }
 .modal h2 { margin: 0 0 8px; }
 .modal p { color: var(--muted); }
+.result-dialog { position: relative; width: min(calc(100vw - 32px), calc((100dvh - 32px) * 16 / 9)); aspect-ratio: 16 / 9; }
+.result-dialog img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.result-hit { position: absolute; top: 0; width: 19.2%; height: 15%; min-height: 0!important; padding: 0!important; border: 0!important; border-radius: 0!important; background: transparent!important; box-shadow: none!important; transform: none!important; cursor: pointer; }
+.result-hit-left { left: 29.2%; }
+.result-hit-right { left: 52.1%; }
+.result-hit:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.result-hit:hover:not(:disabled) { background: transparent!important; box-shadow: none!important; transform: none!important; }
+.result-dialog[data-result="win"] .result-hit { top: 65.5%; height: 14%; }
+.result-dialog[data-result="win"] .result-hit-left { left: 29.2%; width: 19.3%; }
+.result-dialog[data-result="win"] .result-hit-right { left: 52.1%; width: 19.1%; }
+.result-dialog[data-result="lose"] .result-hit { top: 62.5%; height: 15%; }
+.result-dialog[data-result="lose"] .result-hit-left { left: 26.2%; width: 22.7%; }
+.result-dialog[data-result="lose"] .result-hit-right { left: 51.9%; width: 21.8%; }
 .discard-hand { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
 .discard-hand .card { width: 104px; }
 .discard-hand .card.selected { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }

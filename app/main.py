@@ -698,6 +698,20 @@ def battle_retry(user=Depends(current_user)):
         return _battle_response(state, battle_state)
 
 
+@app.post("/api/battle/return")
+def battle_return(user=Depends(current_user)):
+    with db.LOCK:
+        state = _load_state(user["id"], user["slot"])
+        battle_state = _current_battle(user["id"], state, user["slot"])
+        if battle_state.get("phase") != "over" or battle_state.get("result") != "lose":
+            raise B.GameError("只有战败后可以返回地图")
+        _abandon_lost_challenge(state, user["id"], user["slot"])
+        game.return_failed_battle_to_map(state)
+        _save_state(user["id"], state, user["slot"])
+        _clear_battle(user["id"], user["slot"])
+    return {"state": game.public_state(state), "battle": None}
+
+
 @app.post("/api/battle/confirm")
 def battle_confirm(user=Depends(current_user)):
     with db.LOCK:
