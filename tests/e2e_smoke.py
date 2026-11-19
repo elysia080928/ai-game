@@ -22,6 +22,8 @@ class Client:
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
 
     def request(self, path, payload=None):
+        if payload is not None:
+            time.sleep(0.11)
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             BASE + path,
@@ -131,12 +133,11 @@ def expected_forecast(encounter_id):
     plan = CONTENT["encounters"][encounter_id]["plan"]
     expected = set()
     for item in plan:
-        if item["turn"] not in (1, 2):
+        if item["turn"] != 2:
             continue
         enemy = CONTENT["enemies"][item["enemy"]]
         expected.add((
             item["turn"],
-            item["column"],
             enemy["name"],
             enemy["atk"],
             enemy["hp"],
@@ -157,7 +158,6 @@ def battle_forecast(battle):
     return {
         (
             item["turn"],
-            item["column"],
             item["name"],
             item["atk"],
             item["hp"],
@@ -180,7 +180,8 @@ def play_loop(client, battle):
         if battle["phase"] == "over":
             return battle
         if battle["phase"] == "discard":
-            uids = [card["uid"] for card in battle["hand"][: battle["discardRequired"]]]
+            ordered = sorted(battle["hand"], key=lambda card: card["cost"], reverse=True)
+            uids = [card["uid"] for card in ordered[: battle["discardRequired"]]]
             battle = client.ok("/api/battle/discard", {"uids": uids})["battle"]
             continue
 
@@ -190,7 +191,7 @@ def play_loop(client, battle):
             (c for c in battle["hand"] if c.get("damage") is not None and c["cost"] <= energy), None
         )
         if spark and enemy_units:
-            _, target = enemy_units[0]
+            _, target = min(enemy_units, key=lambda item: (item[1]["hp"], -item[1]["atk"]))
             battle = client.ok(
                 "/api/battle/command", {"uid": spark["uid"], "targetUid": target["uid"]}
             )["battle"]
@@ -211,12 +212,12 @@ def play_loop(client, battle):
 
         units = sorted(
             (c for c in battle["hand"] if c["type"] == "unit" and c["cost"] <= energy),
-            key=lambda c: c["cost"],
+            key=lambda c: (c["cost"], -c["atk"]),
         )
         placed = False
         for card in units:
             width = card.get("width", 1)
-            for column in range(5 - width, 0, -1):
+            for column in range(1, 6 - width):
                 if all(
                     battle["board"]["player"][column - 1 + offset] is None
                     for offset in range(width)
@@ -275,6 +276,7 @@ def plan_elite_route(state):
     assert len(route) == state["runLength"] - 1, (route, state["runLength"])
     roles = [nodes[node_id]["role"] for node_id in route]
     assert "elite" in roles and "late" in roles and "boss" in roles, roles
+    assert roles.count("supply") == (2 if state["mapType"] == "map1" else 3), roles
     expected = 2 if state["mapType"] == "map1" else 4
     assert sum(1 for role in roles if role == "battle") == expected, roles
     assert sum(1 for role in roles if role == "event") == expected, roles
@@ -287,7 +289,19 @@ def complete_event(client, node_type):
     """尽量走一次结算分支，避免端到端只验证“离开”。"""
     state = client.state()
     data = state.get(node_type) or {}
-    if node_type == "signal" and data.get("targets"):
+    if node_type == "supply":
+        deck_before = len(state["deck"])
+        for round_index in range(2):
+            data = client.state()["supply"]
+            assert data["stage"] == "round" and len(data["candidates"]) == 3, data
+            pick = data["candidates"][0]["cardId"]
+            client.ok("/api/supply/choose", {"round": round_index, "cardId": pick})
+            client.fail("/api/supply/choose", {"round": round_index, "cardId": pick})
+        state = client.state()
+        assert len(state["deck"]) == deck_before + 2
+        if state["phase"] == "node":
+            client.ok(f"/api/supply/{state['supply']['variant']}/skip", {})
+    elif node_type == "signal" and data.get("targets"):
         target = data["targets"][0]
         client.ok(
             "/api/signal/apply",
@@ -338,7 +352,9 @@ def complete_event(client, node_type):
             client.ok("/api/trial/leave", {})
     else:
         client.ok(f"/api/{node_type}/leave", {})
-    assert client.state()["phase"] == "after_story"
+    finished = client.state()
+    assert finished["node"]["id"] in finished["completed"], (node_type, finished)
+    assert finished["phase"] == ("map" if node_type == "supply" else "after_story"), (node_type, finished)
 
 
 def test_route(client):
@@ -362,7 +378,7 @@ def test_route(client):
     assert client.state()["gold"] == early_reward, "重复确认不能重复发奖"
 
     state = advance_state(client)
-    assert state["phase"] == "map" and state["map"]["runLength"] == 8, state
+    assert state["phase"] == "map" and state["map"]["runLength"] == 10, state
     map_before = state["map"]
     route = plan_elite_route(state)
     statuses = set(map_status(state).values())
@@ -434,6 +450,7 @@ def test_route(client):
             assert CONTENT["encounters"][node["encounter"]]["reward"]["gold"] == 0, "终点战不应配置金币奖励"
     transition = advance_until_transition(client)
     assert transition["phase"] == "transition" and transition["transitionTarget"] == "map2", transition
+    growth = (transition["gold"], transition["deck"])
     client.ok("/api/story/advance", {"transition": True})
     state = client.state()
     assert state["phase"] == "map_story" and state["mapType"] == "map2", state
@@ -443,7 +460,7 @@ def test_route(client):
     assert client.ok("/api/state")["state"]["phase"] == "map"
     client.fail("/api/battle/start", {})
     assert state["canStartMap2"] is False
-    assert state["gold"] == 0 and len(state["deck"]) == 8, state
+    assert (state["gold"], state["deck"]) == growth, "跨章节不应清空成长"
     return state
 
 
@@ -451,26 +468,25 @@ def test_second_map(client):
     state = client.state()
     assert state["phase"] == "map" and state["mapType"] == "map2", state
     assert state["canStartMap2"] is False
-    assert state["gold"] == 0, state
-    assert len(state["deck"]) == 8 and state["map"] is not None
+    assert len(state["deck"]) > 8 and state["map"] is not None
 
     state = advance_to_node(client)
     assert state["node"]["role"] == "start", state["node"]
     win_battle(client, state["node"]["encounter"])
     state = advance_state(client)
     assert state["phase"] == "map" and state["mapType"] == "map2", state
-    assert state["runLength"] == 12, state
-    assert sorted({node["column"] for node in state["map"]["nodes"]}) == list(range(12)), state
+    assert state["runLength"] == 15, state
+    assert sorted({node["column"] for node in state["map"]["nodes"]}) == list(range(15)), state
     boss_node = next(node for node in state["map"]["nodes"] if node["role"] == "boss")
-    assert boss_node["column"] == 11, boss_node
-    assert boss_node["encounter"] == "boss2" and boss_node["name"] == "深层核心", boss_node
+    assert boss_node["column"] == 14, boss_node
+    assert boss_node["encounter"] == "boss2_growth" and boss_node["name"] == "深层核心", boss_node
 
     map_before = state["map"]
     client.ok("/api/logout", {})
     client.ok("/api/login", {"username": client.username, "password": client.password})
     restored = client.state()
     assert restored["phase"] == "map" and restored["map"] == map_before, "第二张地图刷新后变化"
-    assert restored["mapType"] == "map2" and restored["runLength"] == 12
+    assert restored["mapType"] == "map2" and restored["runLength"] == 15
 
     route = plan_elite_route(restored)
     while route:
@@ -496,6 +512,7 @@ def test_second_map(client):
             complete_event(client, node["type"])
     transition = advance_until_transition(client)
     assert transition["phase"] == "transition" and transition["transitionTarget"] == "map3", transition
+    growth = (transition["gold"], transition["deck"])
     client.ok("/api/story/advance", {"transition": True})
     state = client.state()
     assert state["phase"] == "map_story" and state["mapType"] == "map3", state
@@ -504,6 +521,7 @@ def test_second_map(client):
     assert state["phase"] == "map" and state["map"]["available"] == [state["node"]["id"]]
     assert len(state["completed"]) == 0
     assert state["canStartMap3"] is False
+    assert (state["gold"], state["deck"]) == growth, "跨章节不应清空成长"
     client.fail("/api/game/map3", {})
     return state
 
@@ -511,14 +529,14 @@ def test_second_map(client):
 def test_third_map(client):
     state = client.state()
     assert state["phase"] == "map" and state["mapType"] == "map3", state
-    assert len(state["deck"]) == 8 and state["gold"] == 0
+    assert len(state["deck"]) > 8
     state = advance_to_node(client)
     win_battle(client, state["node"]["encounter"])
     state = advance_state(client)
     assert state["phase"] == "map" and state["mapType"] == "map3", state
-    assert state["runLength"] == 12
+    assert state["runLength"] == 15
     boss = next(node for node in state["map"]["nodes"] if node["role"] == "boss")
-    assert boss["encounter"] == "boss2" and boss["name"] == "海渊中枢"
+    assert boss["encounter"] == "boss3" and boss["name"] == "海渊中枢"
     route = plan_elite_route(state)
     while route:
         expected = route.pop(0)
@@ -540,7 +558,7 @@ def test_third_map(client):
     client.ok("/api/story/advance", {"transition": True})
     state = client.state()
     assert state["complete"] and state["mapType"] == "map3", state
-    assert len(state["completed"]) == 12
+    assert len(state["completed"]) == 15
     client.fail("/api/game/map3", {})
     return state
 
@@ -565,7 +583,7 @@ def main():
     assert state["node"]["role"] == "start" and "mapData" not in state
     assert len(state["deck"]) == 8 and len({card["uid"] for card in state["deck"]}) == 8
     assert state["map"] is None
-    assert state["runLength"] == 8
+    assert state["runLength"] == 10
 
     other = Client()
     other_name = "u" + "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10))
@@ -589,7 +607,7 @@ def main():
     state = client.state()
     assert state["phase"] == "map_story" and state["gold"] == 0
     assert state["node"]["role"] == "start"
-    assert state["runLength"] == 8
+    assert state["runLength"] == 10
     assert state["mapType"] == "map1" and state["canStartMap2"] is False
     assert other.state() == other_initial, "新游戏不应影响其他账号"
 

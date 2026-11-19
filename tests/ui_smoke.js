@@ -1,6 +1,7 @@
 /**
  * 浏览器冒烟测试：node tests/ui_smoke.js（需要先启动服务，以及本机 Edge）。
  * MAP_UI_ONLY=1 仅检查三章地图的四种窗口尺寸和地图菜单操作。
+ * MOBILE_UI_ONLY=1 使用触摸输入检查手机旋转、教学、部署、弃牌与存档恢复。
  * 通过 CDP 驱动无头 Edge：注册 → 标题/存档/设置 → 拖放/技能/宽体部署 → 随机地图与刷新持久化 →
  * 精英路线与三选一奖励；并检查桌面、窄窗与手机布局。
  */
@@ -86,7 +87,7 @@ async function main() {
       }
     };
 
-    function command(method, params = {}) {
+    function command(method, params = {}, timeout = 15000) {
       return new Promise((resolve, reject) => {
         const id = ++nextId;
         pending.set(id, { resolve, reject });
@@ -96,16 +97,16 @@ async function main() {
             pending.delete(id);
             reject(new Error(`${method} 超时`));
           }
-        }, 15000);
+        }, timeout);
       });
     }
 
-    async function evaluate(expression) {
+    async function evaluate(expression, timeout = 15000) {
       const result = await command("Runtime.evaluate", {
         expression,
         returnByValue: true,
         awaitPromise: true,
-      });
+      }, timeout);
       if (result.exceptionDetails) {
         throw new Error(result.exceptionDetails.text || "页面脚本异常");
       }
@@ -240,14 +241,17 @@ async function main() {
                 finish(null, { messages, duration: frame.contentWindow.seaGate?.duration, clip: frame.contentWindow.seaGate?.clip });
               }
             };
-            const timer = setTimeout(() => finish(new Error('动画结束通知超时')), 12000);
+            const timer = setTimeout(() => finish(new Error('动画结束通知超时：' + JSON.stringify({
+              filename: ${JSON.stringify(filename)}, messages, time: frame.contentWindow.seaGate?.time,
+              visibility: frame.contentDocument?.visibilityState,
+            }))), 60000);
             window.addEventListener('message', onMessage);
             frame.src = '/assets/transitions/seagate/' + ${JSON.stringify(filename)} + '.html?gameTransition=' + encodeURIComponent(token);
           });
         } finally {
           frame.remove();
         }
-      })()`);
+      })()`, 65000);
     }
 
     async function reloadAndContinue(viewId, label) {
@@ -257,7 +261,71 @@ async function main() {
       await waitFor(() => visible(viewId), label);
     }
 
+    async function checkResultLayout(outcome, size) {
+      const asset = outcome === "win" ? "victory" : "defeat";
+      const centers = outcome === "win" ? [[.389, .725], [.617, .725]] : [[.376, .70], [.628, .70]];
+      const details = await evaluate(`(async () => {
+        const panel = $('result-panel');
+        const image = $('result-image');
+        await image.decode();
+        const viewport = [innerWidth, innerHeight];
+        const box = panel.getBoundingClientRect();
+        const art = image.getBoundingClientRect();
+        const expectedWidth = Math.min(innerWidth, innerHeight * 16 / 9);
+        const near = (actual, expected) => Math.abs(actual - expected) < 1;
+        const buttons = ['result-action', 'result-return'].map((id, index) => {
+          const button = $(id);
+          const rect = button.getBoundingClientRect();
+          const [x, y] = ${JSON.stringify(centers)}[index];
+          return !!button.getAttribute('aria-label') &&
+            document.elementFromPoint(art.x + art.width * x, art.y + art.height * y) === button &&
+            near(rect.x + rect.width / 2, art.x + art.width * x) &&
+            near(rect.y + rect.height / 2, art.y + art.height * y);
+        });
+        return {
+          viewport,
+          shell: !panel.hidden && panel.parentElement === $('game') && box.x === 0 && box.y === 0 &&
+            near(box.width, innerWidth) && near(box.height, innerHeight) &&
+            getComputedStyle(panel).backgroundColor === 'rgb(6, 19, 46)' &&
+            [[0, 0], [innerWidth - 1, 0], [0, innerHeight - 1], [innerWidth - 1, innerHeight - 1]]
+              .every(([x, y]) => panel.contains(document.elementFromPoint(x, y))),
+          art: image.src.endsWith('/battle-result-${asset}.png') && image.naturalWidth / image.naturalHeight === 16 / 9 &&
+            near(art.width, expectedWidth) && near(art.height, expectedWidth * 9 / 16) &&
+            near(art.left, (innerWidth - art.width) / 2) && near(art.top, (innerHeight - art.height) / 2),
+          hidden: ['#game > .topbar', '#battle-view', '#hand-dock'].every((selector) =>
+            getComputedStyle(document.querySelector(selector)).visibility === 'hidden'),
+          overflow: document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight,
+          buttons,
+        };
+      })()`);
+      if ((size && size.some((value, index) => value !== details.viewport[index])) ||
+          !details.shell || !details.art || !details.hidden || details.overflow || !details.buttons.every(Boolean)) {
+        throw new Error(`全屏${asset}结算布局异常：${JSON.stringify(details)}`);
+      }
+    }
+
     async function click(selector) {
+      if (process.env.MOBILE_UI_ONLY === "1") {
+        await evaluate(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:'nearest',inline:'nearest'}); true;`);
+        await sleep(240);
+        const point = await evaluate(`(() => {
+          const element=document.querySelector(${JSON.stringify(selector)});
+          if (!element || element.disabled) return null;
+          const rect=element.getBoundingClientRect();
+          const x=(Math.max(0,rect.left)+Math.min(innerWidth,rect.right))/2;
+          const y=(Math.max(0,rect.top)+Math.min(innerHeight,rect.bottom))/2;
+          return element.contains(document.elementFromPoint(x,y)) ? {x,y} : null;
+        })()`);
+        if (!point) {
+          await screenshot("ai-game-mobile-blocked.png");
+          const details=await evaluate(`(() => {const element=document.querySelector(${JSON.stringify(selector)}),r=element?.getBoundingClientRect();return {rect:r?.toJSON(),hit:r && document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML.slice(0,400),selected:selectedUid,tutorial:battle?.tutorial}})()`);
+          throw new Error(`触摸目标被遮挡或不可用：${selector} ${JSON.stringify(details)}`);
+        }
+        await command("Input.dispatchTouchEvent", {type:"touchStart",touchPoints:[{...point,id:1}]});
+        await command("Input.dispatchTouchEvent", {type:"touchEnd",touchPoints:[]});
+        await sleep(120);
+        return;
+      }
       const ok = await evaluate(`(() => {
         const element = document.querySelector(${JSON.stringify(selector)});
         if (!element || element.disabled) return false;
@@ -283,6 +351,7 @@ async function main() {
 
     await command("Page.enable");
     await command("Runtime.enable");
+    await command("Emulation.setFocusEmulationEnabled", { enabled: true });
     await command("Emulation.setEmulatedMedia", {
       features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
     });
@@ -291,11 +360,236 @@ async function main() {
       async () => (await evaluate("document.readyState")) === "complete",
       "页面加载"
     );
+    const browserSelection = await evaluate(`(() => ({
+      game: getComputedStyle($('game')).userSelect,
+      image: getComputedStyle($('story-portrait-image')).webkitUserDrag,
+      draggableImages: [...$('game').querySelectorAll('img')].some(image => image.draggable),
+    }))()`);
+    if (browserSelection.game !== "none" || browserSelection.image !== "none" || browserSelection.draggableImages) {
+      throw new Error(`游戏界面仍可蓝框选字或拖动 PNG：${JSON.stringify(browserSelection)}`);
+    }
+    if (process.env.MOBILE_UI_ONLY === "1") {
+      await checkMobileUi();
+      ws.close();
+      return;
+    }
     if (process.env.MAP_UI_ONLY === "1") {
       await checkMapPreviews();
       ws.close();
       return;
     }
+    async function checkMobileUi() {
+      const sizes=[[667,375],[812,375],[844,390],[896,414],[932,430]];
+      const captureMobileLayouts=process.env.MOBILE_SKIP_LAYOUT_SCREENSHOTS!=='1';
+      const errors=[];
+      await command("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:1});
+      await command("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:3,mobile:true});
+      await evaluate(`document.getElementById('username').value='mobile_'+Date.now().toString(36);document.getElementById('password').value='mobile-test-123';true;`);
+      await click("#register-btn");
+      await waitFor(()=>visible("menu-view"),"手机注册与主菜单");
+      await command("Emulation.setDeviceMetricsOverride",{width:667,height:375,deviceScaleFactor:2,mobile:true});
+      await click("#continue-btn");
+      await waitFor(()=>visible("story-view"),"手机继续冒险");
+      for (const [width,height] of sizes) {
+        await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:2,mobile:true});
+        await sleep(250);
+        const layout=await evaluate(`({width:innerWidth,height:innerHeight,touch:navigator.maxTouchPoints,coarse:matchMedia('(pointer:coarse)').matches,guard:!document.getElementById('size-guard').hidden||!document.getElementById('orientation-guard').hidden,hidden:getComputedStyle(document.querySelector('.stage')).visibility==='hidden',overflow:document.documentElement.scrollWidth>innerWidth+1})`);
+        await screenshot(`ai-game-mobile-story-${width}.png`);
+        if (layout.guard||layout.hidden||layout.overflow||!layout.touch||!layout.coarse) errors.push(`${width}x${height}: ${JSON.stringify(layout)}`);
+      }
+      if(errors.length) throw new Error('手机横屏检查失败：'+errors.join('; '));
+      console.log("ok 五种手机横屏尺寸、DPR 2/3 与触屏输入环境");
+      await command("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:3,mobile:true});
+      await waitFor(()=>visible("orientation-guard"),"手机竖屏旋转提示");
+      await screenshot("ai-game-mobile-portrait.png");
+      await command("Emulation.setDeviceMetricsOverride",{width:667,height:375,deviceScaleFactor:2,mobile:true});
+      await waitFor(()=>evaluate("document.getElementById('orientation-guard').hidden && document.getElementById('size-guard').hidden"),"旋转后恢复游戏");
+      await storyUntil("map-view");
+      await click("#map-view .map-node:not(:disabled)");
+      await storyUntil("battle-view");
+      await click("#tutorial-next");
+      async function playCard(cardId,side,column) {
+        if (!await evaluate("document.getElementById('hand-dock').classList.contains('is-open')")) await click("#hand-toggle");
+        const uid=await evaluate(`battle.hand.find(card=>card.cardId===${JSON.stringify(cardId)})?.uid`);
+        if(uid==null) throw new Error(`手机手牌缺少 ${cardId}`);
+        await click(`#hand [data-uid="${uid}"]`);
+        await click(`#${side}-row [data-column="${column}"]`);
+        await waitFor(()=>evaluate("!busy"),"手机出牌结算");
+      }
+      await playCard("shell","player",2);
+      await waitFor(()=>evaluate("battle.tutorial?.index===2"),"触屏轻触部署教学单位");
+      await click("#end-turn");
+      await waitFor(()=>evaluate("battle.tutorial?.index===3 && !busy"),"手机结束回合");
+      await reloadAndContinue("battle-view","手机刷新恢复战斗");
+      if(!await evaluate("battle.tutorial?.index===3")) throw new Error("手机刷新丢失教学进度");
+      await playCard("spark","enemy",2);
+      await waitFor(()=>evaluate("battle.tutorial?.index===4 && !busy"),"触屏指令牌命中敌人");
+      await click("#tutorial-next");
+      await waitFor(()=>evaluate("!battle.tutorial && !busy"),"手机完成教学");
+      await playCard("worker","player",4);
+      if(!await evaluate("battle.board.player[3]?.cardId==='worker'")) throw new Error("手机自由部署失败");
+      console.log("ok 真实触摸点按完成剧情、选关、教学、单位/指令出牌及刷新恢复");
+      for(const [width,height] of sizes) {
+        await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:2,mobile:true});
+        await sleep(250);
+        const fit=await evaluate(`(() => {const elements=['battle-table','end-turn','hand-toggle'].map(id=>document.getElementById(id));return elements.every(el=>{const r=el.getBoundingClientRect();return getComputedStyle(el).visibility==='visible' && r.top>=0 && r.left>=0 && r.right<=innerWidth+1 && r.bottom<=innerHeight+1}) && document.documentElement.scrollWidth<=innerWidth+1})()`);
+        if(captureMobileLayouts) await screenshot(`ai-game-mobile-battle-${width}.png`);
+        if(!fit) throw new Error(`手机战斗 ${width}x${height} 被遮挡或越界`);
+      }
+      await evaluate(`globalThis.mobileDiscardOriginal={phase:battle.phase,required:battle.discardRequired,hand:battle.hand};battle.phase='discard';battle.discardRequired=1;battle.hand=Array.from({length:11},(_,index)=>({...mobileDiscardOriginal.hand[0],uid:30000+index}));renderBattle();true;`);
+      for(const [width,height] of sizes) {
+        await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:2,mobile:true});
+        await sleep(250);
+        await click('#discard-hand [data-uid="30000"]');
+        const fit=await evaluate(`(() => {const button=document.getElementById('discard-confirm'),r=button.getBoundingClientRect();return getComputedStyle(document.getElementById('discard-panel')).backgroundColor==='rgba(0, 0, 0, 0)' && !button.disabled && r.bottom<=innerHeight && r.top>=0 && document.getElementById('discard-hand').clientHeight>=176 && document.querySelector('#discard-hand .card').offsetHeight===176})()`);
+        if(!fit) throw new Error(`手机弃牌 ${width}x${height} 卡面或确认按钮异常`);
+        if(captureMobileLayouts) await screenshot(`ai-game-mobile-discard-${width}.png`);
+        await click('#discard-hand [data-uid="30000"]');
+      }
+      await command("Emulation.setDeviceMetricsOverride",{width:667,height:375,deviceScaleFactor:2,mobile:true});
+      await evaluate("battle.discardRequired=2;renderDiscard();true;");
+      for (const uid of [30000,30001,30002]) await click(`#discard-hand [data-uid="${uid}"]`);
+      if(!await evaluate("discardSelection.size===2 && !discardSelection.has(30000) && discardSelection.has(30001) && discardSelection.has(30002)")) throw new Error("弃牌选择未限制数量或未取消最早选择");
+      await click('#discard-hand [data-uid="30001"]');
+      await click('#discard-hand [data-uid="30002"]');
+      await evaluate("battle.discardRequired=1;renderDiscard();true;");
+      const swipe=await evaluate(`(() => {const hand=document.getElementById('discard-hand');hand.scrollTop=0;const r=hand.getBoundingClientRect();return {x:r.left+r.width/2,y:r.bottom-12,top:r.top+12}})()`);
+      await command("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[{x:swipe.x,y:swipe.y,id:1}]});
+      for(let step=1;step<=12;step+=1) {
+        await command("Input.dispatchTouchEvent",{type:"touchMove",touchPoints:[{x:swipe.x,y:swipe.y+(swipe.top-swipe.y)*step/12,id:1}]});
+        await sleep(20);
+      }
+      await command("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+      await sleep(300);
+      if(!await evaluate("document.getElementById('discard-hand').scrollTop>20")) throw new Error("手机弃牌列表不能触摸滑动");
+      await click('#discard-hand [data-uid="30010"]');
+      if(!await evaluate("discardSelection.has(30010) && !document.getElementById('discard-confirm').disabled")) throw new Error("手机无法选择最后一张弃牌");
+      await evaluate("battle.phase=mobileDiscardOriginal.phase;battle.discardRequired=mobileDiscardOriginal.required;battle.hand=mobileDiscardOriginal.hand;discardSelection.clear();delete globalThis.mobileDiscardOriginal;renderBattle();true;");
+      console.log("ok 五种手机战斗/11 张弃牌布局、触摸选择与列表滑动");
+      await click("#menu-btn");
+      await waitFor(()=>visible("menu-view"),"手机返回菜单");
+      await click("#continue-btn");
+      await waitFor(()=>visible("battle-view"),"手机继续存档");
+      if(!await evaluate("battle.board.player[3]?.cardId==='worker'")) throw new Error("手机返回菜单丢失战斗");
+      async function checkResultViewports(outcome) {
+        for (const [width, height, mobile] of [[1920, 1080, false], [1280, 800, false], [2560, 1080, false], [667, 375, true], [844, 390, true]]) {
+          await command("Emulation.setTouchEmulationEnabled", { enabled: mobile });
+          await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: mobile ? 3 : 1, mobile });
+          await waitFor(() => evaluate("$('orientation-guard').hidden && $('size-guard').hidden"), "结算视口切换");
+          await checkResultLayout(outcome, [width, height]);
+        }
+        console.log(`ok ${outcome} 结算覆盖三种桌面与两种手机横屏视口`);
+      }
+
+      async function winMobileBattle(useReturn=false) {
+        for(let turn=0;turn<30;turn+=1) {
+          if(await evaluate("battle.phase==='over'")) break;
+          if(await evaluate("battle.phase==='discard'")) {
+            const uids=await evaluate("battle.hand.slice(0,battle.discardRequired).map(card=>card.uid)");
+            for(const uid of uids) await click(`#discard-hand [data-uid="${uid}"]`);
+            await click("#discard-confirm");
+            await waitFor(()=>evaluate("!busy && battle.phase!=='discard'"),"手机实际弃牌结算");
+          }
+          for(let deployment=0;deployment<4;deployment+=1) {
+            const move=await evaluate(`(() => {for(const card of battle.hand.filter(card=>card.type==='unit'&&card.cost<=battle.energy).sort((first,second)=>first.cost-second.cost||second.atk-first.atk)){for(let column=1;column<=5-(card.width||1);column+=1){if(Array.from({length:card.width||1},(_,offset)=>!battle.board.player[column-1+offset]).every(Boolean))return {cardId:card.cardId,column}}}return null})()`);
+            if(!move) break;
+            await playCard(move.cardId,"player",move.column);
+          }
+          await click("#end-turn");
+          await waitFor(()=>evaluate("!busy"),"手机回合结算");
+        }
+        if(!await evaluate("battle.result==='win'")) throw new Error("手机触屏战斗未获胜");
+        if (useReturn) {
+          await checkResultViewports("win");
+          await reloadAndContinue("result-panel", "刷新后恢复胜利结算");
+        }
+        await checkResultLayout("win");
+        if(captureMobileLayouts) await screenshot("ai-game-mobile-result-victory.png");
+        if (useReturn) {
+          await click("#result-return");
+        } else {
+          for (const id of ["result-return", "result-action"]) {
+            await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            if (await evaluate("document.activeElement.id") !== id) throw new Error("结算键盘焦点未在按钮间循环");
+          }
+          await command("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 });
+          await command("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 });
+        }
+        await storyUntil("map-view");
+        if (await visible("result-panel")) throw new Error("胜利后结算层未关闭");
+      }
+      async function loseMobileBattle() {
+        for(let turn=0;turn<40;turn+=1) {
+          if(await evaluate("battle.phase==='over'")) break;
+          if(await evaluate("battle.phase==='discard'")) {
+            const uids=await evaluate("battle.hand.slice(0,battle.discardRequired).map(card=>card.uid)");
+            for(const uid of uids) await click(`#discard-hand [data-uid="${uid}"]`);
+            await click("#discard-confirm");
+            await waitFor(()=>evaluate("!busy && battle.phase!=='discard'"),"手机弃牌后结束失败战斗");
+            continue;
+          }
+          const before=await evaluate("battle.turn");
+          await click("#end-turn");
+          await waitFor(()=>evaluate(`!busy && (battle.phase==='over' || battle.phase==='discard' || battle.turn!==${before})`),"手机推进失败战斗");
+        }
+        if(!await evaluate("battle.phase==='over' && battle.result==='lose'")) throw new Error("手机失败流程未触发战败");
+      }
+      await winMobileBattle(true);
+      for(const [width,height] of sizes) {
+        await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:2,mobile:true});
+        await sleep(250);
+        const fit=await evaluate(`(() => {const node=document.querySelector('#map-view .map-node:not(:disabled)'),r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)) && document.documentElement.scrollWidth<=innerWidth+1 && document.documentElement.scrollHeight<=innerHeight+1})()`);
+        if(!fit) throw new Error(`手机地图 ${width}x${height} 节点被遮挡或页面溢出`);
+        if(captureMobileLayouts) await screenshot(`ai-game-mobile-map-${width}.png`);
+      }
+      await command("Emulation.setDeviceMetricsOverride",{width:844,height:390,deviceScaleFactor:3,mobile:true});
+      await click("#map-view .map-node:not(:disabled)");
+      await storyUntil("battle-view");
+      await loseMobileBattle();
+      await checkResultViewports("lose");
+      await reloadAndContinue("result-panel", "刷新后恢复失败结算");
+      await checkResultLayout("lose");
+      const failedNode=await evaluate("state.node.id");
+      if(captureMobileLayouts) await screenshot("ai-game-mobile-result-defeat.png");
+      await evaluate(`$('result-action').addEventListener('click', () => {
+        const retry = $('result-action');
+        const returnButton = $('result-return');
+        window.resultClickLocked = retry.disabled && returnButton.disabled;
+        retry.click();
+        returnButton.click();
+      }, { once: true });`);
+      await click("#result-action");
+      await waitFor(()=>evaluate("!busy && battle.phase==='player' && battle.turn===1"),"手机失败结算重试");
+      if (await visible("result-panel") || !await evaluate("window.resultClickLocked")) throw new Error("结算重试没有关闭结算层或拦截连点");
+      if(await evaluate("battle.result!==null || battle.board.player.some(Boolean)")) throw new Error("失败重试沿用了上一场临时战斗状态");
+      await loseMobileBattle();
+      await click("#result-return");
+      await waitFor(()=>visible("map-view"),"手机失败结算返回地图");
+      if (await visible("result-panel")) throw new Error("失败返回地图后结算层未关闭");
+      if(!await evaluate(`state.map.available.includes(${JSON.stringify(failedNode)}) && !state.completed.includes(${JSON.stringify(failedNode)})`)) throw new Error("失败返回地图错误推进或关闭了当前节点");
+      await click(`#map-view .map-node[data-id="${failedNode}"]`);
+      await storyUntil("battle-view");
+      if(await evaluate("battle.tutorial")) await click("#tutorial-skip");
+      await waitFor(()=>evaluate("!battle.tutorial && !busy"),"失败返回后重选战斗节点");
+      await winMobileBattle();
+      await click("#map-view .map-node:not(:disabled)");
+      await storyUntil("supply-view");
+      const deckBefore=await evaluate("state.deck.length");
+      await reloadAndContinue("supply-view","手机刷新保留补给候选");
+      for(let round=1;round<=2;round+=1) {
+        if(!await evaluate("document.querySelectorAll('#supply-offers .offer').length===3")) throw new Error("手机补给不是三选一");
+        await click("#supply-offers .buy-btn");
+        await waitFor(()=>evaluate(`!busy && state.deck.length===${deckBefore+round}`),"手机领取补给");
+      }
+      if(await evaluate("state.phase==='node' && state.supply?.stage==='option'")) await click("#supply-option-skip");
+      await waitFor(()=>visible("map-view"),"手机补给结算回地图");
+      console.log("ok 触摸完成两场战斗、五尺寸地图、补给两轮三选一与刷新恢复");
+      await click("#logout-btn");
+      await waitFor(()=>visible("auth"),"手机退出登录");
+      console.log("手机触屏专项测试全部通过（浏览器模拟，非实体手机）");
+    }
+
     for (const [filename, index] of [["clip-01", 0], ["clip-02", 1], ["clip-04", 3], ["clip-03", 2]]) {
       const playback = await playClipToEnd(filename);
       if (playback.duration !== 4.5 || playback.clip !== index ||
@@ -1249,6 +1543,13 @@ async function main() {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         let resultShown = false;
         for (let index = 0; index < 25; index += 1) {
+          if (await evaluate("battle.phase === 'discard'")) {
+            const required = await evaluate("battle.discardRequired");
+            const uids = await evaluate(`battle.hand.slice().sort((a,b)=>b.cost-a.cost).slice(0,${required}).map(card=>card.uid)`);
+            for (const uid of uids) await click(`#discard-hand .card[data-uid="${uid}"]`);
+            await click("#discard-confirm");
+            await waitFor(() => evaluate("!busy && battle.phase !== 'discard'"), "确认弃牌");
+          }
           if (await evaluate("!document.getElementById('result-panel').hidden")) {
             resultShown = true;
             break;
@@ -1263,7 +1564,7 @@ async function main() {
           await waitFor(async () => {
             const resultOpen = await evaluate("!document.getElementById('result-panel').hidden");
             const turn = await evaluate("document.getElementById('turn').textContent");
-            return resultOpen || turn !== before;
+            return resultOpen || turn !== before || await evaluate("battle.phase === 'discard'");
           }, `第 ${index + 1} 次结束回合`);
         }
         if (!resultShown) throw new Error("战斗没有在预期回合内结束");
@@ -1296,35 +1597,7 @@ async function main() {
     )) {
       throw new Error(`战斗结束后不应允许拖放：${JSON.stringify(overDrag)}`);
     }
-    const resultLayout = await evaluate(`(() => {
-      const panel = document.getElementById('result-panel');
-      const image = document.getElementById('result-image');
-      const read = () => {
-        const bounds = image.getBoundingClientRect();
-        const buttons = ['result-action', 'result-return'].map((id) => {
-          const rect = document.getElementById(id).getBoundingClientRect();
-          return { x: (rect.left + rect.width / 2 - bounds.left) / bounds.width, y: (rect.top + rect.height / 2 - bounds.top) / bounds.height, name: document.getElementById(id).getAttribute('aria-label') };
-        });
-        return { src: new URL(image.src).pathname, ratio: image.naturalWidth / image.naturalHeight, bounds: [bounds.width, bounds.height], buttons };
-      };
-      const victory = read();
-      battle.result = 'lose'; renderResult();
-      const defeat = read();
-      battle.result = 'win'; renderResult();
-      return { victory, defeat, visible: !panel.hidden };
-    })()`);
-    for (const [result, suffix] of [[resultLayout.victory, "victory"], [resultLayout.defeat, "defeat"]]) {
-      if (!result.src.endsWith(`/battle-result-${suffix}.png`) || result.ratio !== 16 / 9 ||
-          result.bounds[0] > innerWidth || result.bounds[1] > innerHeight || result.buttons.some((button) => !button.name)) {
-        throw new Error(`战斗${suffix}结算图布局或无障碍名称异常：${JSON.stringify(result)}`);
-      }
-    }
-    if (Math.abs(resultLayout.victory.buttons[0].x - 0.39) > 0.03 ||
-        Math.abs(resultLayout.defeat.buttons[0].x - 0.375) > 0.04 ||
-        Math.abs(resultLayout.victory.buttons[0].y - 0.725) > 0.025 ||
-        Math.abs(resultLayout.defeat.buttons[0].y - 0.70) > 0.03) {
-      throw new Error(`结算按钮热区未对齐原图：${JSON.stringify(resultLayout)}`);
-    }
+    await checkResultLayout("win");
     await screenshot("ai-game-result.png");
     console.log("ok 战斗 1 胜利，结束后拖放被禁用");
 
@@ -1334,6 +1607,7 @@ async function main() {
     console.log("ok 战斗胜利后进入随机地图");
 
     async function checkMapPreviews() {
+      const labelOverlaps = [];
       const fixtures = JSON.parse(execFileSync(process.env.PYTHON || "python", ["-c", `
 import json
 from app import game
@@ -1368,7 +1642,10 @@ print(json.dumps(states))
                 return p.right<=q.left || p.left>=q.right || p.bottom<=q.top || p.top>=q.bottom;
               });
             });
-          })()`)) throw Error('触屏节点名称被相邻图标遮挡');
+          })()`)) {
+            await screenshot(`ai-game-${fixture.mapType}-touch-overlap.png`);
+            labelOverlaps.push(fixture.mapType);
+          }
           await screenshot(`ai-game-${fixture.mapType}-${width}.png`);
         }
       }
@@ -1406,6 +1683,7 @@ print(json.dumps(states))
       await evaluate(`screen='game'; apply({state:${JSON.stringify(fixtures[0])}}); true;`);
       await click('#logout-btn');
       await waitFor(() => visible('auth'), '地图退出登录');
+      if (labelOverlaps.length) throw Error('触屏节点名称被相邻图标遮挡：' + labelOverlaps.join(', '));
       console.log('ok 三章全屏地图、四种窗口、资源更新、挑战提示与菜单操作');
     }
 
@@ -1704,8 +1982,8 @@ print(json.dumps(states))
             gold: state.gold, deck: state.deck.length, available: state.map.available,
             start: state.node.id, battleHidden: document.getElementById('battle-view').hidden,
           })`);
-          if (entered.mapType !== "map2" || entered.canStartMap2 || entered.gold !== 0 ||
-              entered.deck !== 8 || entered.phase !== "map" || entered.available.length !== 1 ||
+          if (entered.mapType !== "map2" || entered.canStartMap2 || entered.gold < 0 ||
+              entered.deck <= 8 || entered.phase !== "map" || entered.available.length !== 1 ||
               entered.available[0] !== entered.start || !entered.battleHidden) {
             throw new Error(`自动进入第二张地图状态异常：${JSON.stringify(entered)}`);
           }
@@ -1713,6 +1991,20 @@ print(json.dumps(states))
         } else {
           await storyUntil("map-view");
         }
+      } else if (node.type === "supply") {
+        await storyUntil("supply-view");
+        const deckBefore = await evaluate("state.deck.length");
+        for (let round = 1; round <= 2; round += 1) {
+          const offers = await evaluate("document.querySelectorAll('#supply-offers .offer').length");
+          if (offers !== 3) throw new Error(`补给候选数量异常：${offers}`);
+          await click("#supply-offers .buy-btn");
+          await waitFor(() => evaluate(`!busy && state.deck.length === ${deckBefore + round}`), "领取补给卡");
+        }
+        if (await evaluate("state.phase === 'node' && state.supply?.stage === 'option'")) {
+          await click("#supply-option-skip");
+        }
+        await waitFor(() => visible("map-view"), "补给结算回地图");
+        console.log("ok 补给站两轮三选一、永久加卡与附加事件离开");
       } else {
         const viewId = eventViews[node.type];
         if (!viewId || !leaveButtons[node.type]) throw new Error(`未知奇遇类型：${node.type}`);
@@ -1739,8 +2031,8 @@ print(json.dumps(states))
     await click("#result-action");
     await storyUntil("map-view");
     const map2Check = await checkMapLayout();
-    if (map2Check.mapType !== "map2" || map2Check.runLength !== 12 ||
-        map2Check.columns.length !== 12 || !map2Check.boardMap2 ||
+    if (map2Check.mapType !== "map2" || map2Check.runLength !== 15 ||
+        map2Check.columns.length !== 15 || !map2Check.boardMap2 ||
         !map2Check.eyebrow.includes("第二章") || !map2Check.cartouche.includes("深层回路") ||
         !map2Check.destination.includes("深层核心")) {
       throw new Error(`第二张地图界面异常：${JSON.stringify(map2Check)}`);

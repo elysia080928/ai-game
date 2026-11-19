@@ -239,6 +239,9 @@ function render() {
   const loggedIn = !!username;
   $("auth").hidden = loggedIn;
   $("game").hidden = !loggedIn;
+  if (!loggedIn || screen !== "game" || !battle || state?.complete || state?.phase !== "node" || state.node?.type !== "battle") {
+    hideDialog($("result-panel"));
+  }
   updateViewportGuard(loggedIn && screen === "game" && state?.phase !== "transition");
   if (!loggedIn) {
     $("auth-error").textContent = "";
@@ -362,7 +365,7 @@ function render() {
 }
 
 function updateViewportGuard(loggedIn = !!state) {
-  const mobile = window.matchMedia("(max-width: 760px)").matches;
+  const mobile = window.matchMedia("(max-width: 760px), (pointer: coarse)").matches;
   const portrait = mobile && window.innerHeight > window.innerWidth;
   const width = mobile ? 667 : 1024;
   const height = mobile ? 375 : 600;
@@ -1047,6 +1050,17 @@ function renderDiscard() {
   showDialog(panel, target);
 }
 
+function toggleDiscardSelection(uid) {
+  if (discardSelection.has(uid)) {
+    discardSelection.delete(uid);
+  } else {
+    if (discardSelection.size >= battle.discardRequired) {
+      discardSelection.delete(discardSelection.values().next().value);
+    }
+    discardSelection.add(uid);
+  }
+}
+
 function renderResult() {
   const panel = $("result-panel");
   if (!battle || battle.phase !== "over") {
@@ -1321,6 +1335,10 @@ function selectCard(uid) {
   }
   selectedUid = selectedUid === uid ? null : uid;
   if (selectedUid != null) recycleMode = false;
+  if (selectedUid != null && window.matchMedia("(pointer: coarse)").matches) {
+    $("hand-dock").classList.remove("is-open");
+    $("hand-toggle").setAttribute("aria-expanded", "false");
+  }
   renderBattle();
 }
 
@@ -2026,8 +2044,7 @@ function bindEvents() {
     const element = event.target.closest(".card");
     if (!element) return;
     const uid = Number(element.dataset.uid);
-    if (discardSelection.has(uid)) discardSelection.delete(uid);
-    else discardSelection.add(uid);
+    toggleDiscardSelection(uid);
     renderDiscard();
   });
   $("discard-hand").addEventListener("keydown", (event) => {
@@ -2036,8 +2053,7 @@ function bindEvents() {
     if (!element) return;
     event.preventDefault();
     const uid = Number(element.dataset.uid);
-    if (discardSelection.has(uid)) discardSelection.delete(uid);
-    else discardSelection.add(uid);
+    toggleDiscardSelection(uid);
     renderDiscard();
   });
   $("discard-confirm").addEventListener("click", () => {
@@ -2046,6 +2062,7 @@ function bindEvents() {
   });
 
   $("result-action").addEventListener("click", () => {
+    if (busy) return;
     const action = $("result-action").dataset.action;
     $("result-action").disabled = true;
     $("result-return").disabled = true;
@@ -2053,6 +2070,7 @@ function bindEvents() {
     else if (action === "retry") act("/api/battle/retry", {});
   });
   $("result-return").addEventListener("click", () => {
+    if (busy) return;
     $("result-action").disabled = true;
     $("result-return").disabled = true;
     act(battle?.result === "win" ? "/api/battle/confirm" : "/api/battle/return", {});

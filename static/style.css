@@ -114,6 +114,9 @@ button.small { padding: 6px 12px; font-size: 12px; }
   z-index: 5;
 }
 .brand { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
+#game { -webkit-user-select: none; user-select: none; }
+#game :is(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
+#game img { -webkit-user-drag: none; user-drag: none; }
 .tag {
   font-size: 11px;
   color: var(--pink);
@@ -346,7 +349,9 @@ button.small { padding: 6px 12px; font-size: 12px; }
 }
 .modal h2 { margin: 0 0 8px; }
 .modal p { color: var(--muted); }
-.result-dialog { position: relative; width: min(calc(100vw - 32px), calc((100dvh - 32px) * 16 / 9)); aspect-ratio: 16 / 9; }
+#result-panel { z-index: 30; padding: 0; overflow: hidden; background: #06132e; }
+#game:has(> #result-panel:not([hidden])) > :is(.topbar, .stage) { visibility: hidden; }
+.result-dialog { position: relative; width: min(100%, calc(100dvh * 16 / 9)); aspect-ratio: 16 / 9; }
 .result-dialog img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .result-hit { position: absolute; top: 0; width: 19.2%; height: 15%; min-height: 0!important; padding: 0!important; border: 0!important; border-radius: 0!important; background: transparent!important; box-shadow: none!important; transform: none!important; cursor: pointer; }
 .result-hit-left { left: 29.2%; }
@@ -1067,6 +1072,21 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #hand .card-metrics { min-height: 32px; padding-top: 1px; }
 #hand .card:hover,#hand .card.selected { transform: translateY(-4px); }
 .battle-log { display: none; }
+#discard-panel { overflow-y: auto; background: transparent; }
+#discard-panel .modal { display: grid; grid-template-rows: auto auto minmax(0,1fr) auto; width: min(1100px,100%); max-height: 100%; overflow-y: auto; }
+#discard-hand { display: grid; grid-template-columns: repeat(auto-fill,minmax(138px,1fr)); gap: 10px; min-height: 0; max-height: 60vh; overflow-y: auto; }
+#discard-hand .card { width: 100%; min-height: 0; height: 176px; padding: 3px; }
+#discard-hand .card-face { min-height: 0; height: 100%; padding: 4px; }
+#discard-hand .card-art { flex-basis: 44px; height: 44px; margin: 0; }
+#discard-hand .pixel-art { width: 40px; height: 40px; }
+#discard-hand .card-face .card-stats { min-height: 22px; margin: 0 1px 2px; font-size: 9px; line-height: 1.2; }
+@media (max-height: 500px) {
+  #discard-panel { padding: 8px; }
+  #discard-panel .modal { padding: 12px; }
+  #discard-title { margin: 0; font-size: 18px; line-height: 1.25; }
+  #discard-panel .modal p { margin: 4px 0; font-size: 12px; line-height: 1.4; }
+  #discard-hand { margin: 8px 0; }
+}
 
 /* Scene-backed node pages share a stable panel and action dock. */
 .node-panel,.complete-panel { position: relative; display: grid; grid-template-rows: auto auto minmax(0,1fr) auto auto; gap: 8px; width: min(100%,1400px); height: 100%; min-height: 0; margin: 0 auto; padding: clamp(14px,2.3vh,24px) clamp(16px,3vw,38px); overflow: hidden; border: 1px solid var(--ui-line); border-radius: 4px; background: linear-gradient(90deg,rgba(9,15,16,.97) 0 34%,rgba(9,15,16,.84) 72%,rgba(9,15,16,.66)),radial-gradient(ellipse at 83% 32%,rgba(131,201,191,.2),transparent 24%),linear-gradient(135deg,#253833,#141c1c 58%,#34382d); box-shadow: 0 18px 52px #0007,inset 0 0 40px #0007; }
@@ -1100,7 +1120,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 .guard-terminal p { margin:0; color:#b8c4ba; font-size:14px; }
 .guard-mark { display:inline-grid; min-width:72px; min-height:48px; place-items:center; color:var(--ui-mint); font-size:26px; }
 
-@media (max-width: 760px) and (orientation: landscape) {
+@media (max-width: 760px) and (orientation: landscape), (pointer: coarse) and (orientation: landscape) and (max-height: 599px) {
   .game-screen > .topbar { flex-basis:44px; min-height:44px; padding:4px 12px; }
   .game-screen .hud { gap:10px; font-size:11px; }
   .stage { padding:6px 10px; }
@@ -1182,7 +1202,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   .game-screen > :not(.viewport-guard):not(.toast) { visibility:hidden; }
 }
 
-@media (max-height: 599px) and (min-width: 761px) {
+@media (max-height: 599px) and (min-width: 761px) and (pointer: fine), (max-height: 599px) and (min-width: 761px) and (pointer: none) {
   .game-screen > :not(.viewport-guard):not(.toast) { visibility:hidden; }
 }
 
@@ -1196,6 +1216,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 }
 .game-screen:has(#elite-reward-view:not([hidden])) { --event-bg: url('/assets/events/01-elite-reward.png?v=20261116-event-bg'); }
 .game-screen:has(#recruit-view:not([hidden])) { --event-bg: url('/assets/events/02-supply-station.png?v=20261116-event-bg'); }
+.game-screen:has(#supply-view:not([hidden])) { --event-bg: url('/assets/events/02-supply-station.png?v=20261116-event-bg'); }
 .game-screen:has(#signal-view:not([hidden])) { --event-bg: url('/assets/events/03-old-signal.png?v=20261116-event-bg'); }
 .game-screen:has(#relay-view:not([hidden])) { --event-bg: url('/assets/events/04-love-relay.png?v=20261116-event-bg'); }
 .game-screen:has(#adventure-view[data-kind="adventure"]:not([hidden])) { --event-bg: url('/assets/events/05-abandoned-workshop.png?v=20261116-event-bg'); }
@@ -1611,7 +1632,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 #battle-view .slot.unit:is(:hover,:focus-visible,.drop-hover,.selected)::before { border-color: var(--panel-highlight); box-shadow: inset 0 0 0 1px #77cdbb55,inset 0 3px #77cdbb33; }
 #battle-view .slot.unit { display: block; }
 #battle-view .slot.unit::before { bottom: 0; height: 94px; }
-#battle-view .slot.unit .unit-core { position: absolute; top: auto; bottom: 100px; left: 50%; transform: translateX(-50%); }
+#battle-view .slot.unit .unit-core { position: absolute; top: auto; bottom: 100px; left: 50%; transform: translateX(-50%); pointer-events: none; }
 #battle-view .unit-dossier { position: absolute; z-index: 1; bottom: 0; left: 7%; width: 86%; min-width: 0; padding: 4px 6px 3px; border: 1px solid #75816a; background: repeating-linear-gradient(0deg,#d4dccb08 0 1px,transparent 1px 4px),linear-gradient(145deg,#26352cF2,#111a16F5); clip-path: polygon(5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px),0 5px); }
 #battle-view .unit-profile { display: grid; grid-template-columns: 1fr 1.35fr 1fr; align-items: center; min-height: 37px; text-align: center; }
 #battle-view .unit-atk, #battle-view .unit-durability { display: flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; font-size: clamp(9px,1vw,13px); font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -1670,7 +1691,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   #battle-view .leader b { font-size: 17px; }
   #battle-view .leader span { font-size: 9px; }
 }
-@media (max-width:760px) and (orientation:landscape) {
+@media (max-width:760px) and (orientation:landscape), (pointer:coarse) and (orientation:landscape) and (max-height:599px) {
   .game-screen:has(#battle-view:not([hidden])) > .topbar { gap: 8px; }
   .game-screen:has(#battle-view:not([hidden])) .brand { font-size: 12px; }
   .game-screen:has(#battle-view:not([hidden])) .hud { gap: 4px 8px; font-size: 10px; }
@@ -2184,7 +2205,7 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
 @media (max-width: 760px) and (orientation: landscape) and (hover: none) {
   /* shortcut: narrow touch labels truncate long names; use a detail panel if full names must remain visible. */
   #map-view .map-table .status-available .map-node-label {
-    top: calc(100% - 4px); width: 48px; max-width: 48px; padding: 0;
+    top: calc(100% + 4px); width: 48px; max-width: 48px; padding: 0;
   }
   #map-view .map-table .status-available .map-node-name {
     width: 48px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
@@ -2200,6 +2221,3 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   #map-view .map-table .map-node:active:not(:disabled) .map-node-icon,
   #map-view .map-table .map-node:focus-visible .map-node-icon { transform: none; }
 }
-#game { -webkit-user-select: none; user-select: none; }
-#game :is(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
-#game img { -webkit-user-drag: none; user-drag: none; }

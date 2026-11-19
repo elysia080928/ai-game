@@ -57,7 +57,7 @@ from app import db  # noqa: E402
 from app import main as api  # noqa: E402
 from app.main import app  # noqa: E402
 
-def main():
+def test_save_version():
     migrated = sqlite3.connect(DB_PATH)
     assert migrated.execute("PRAGMA user_version").fetchone()[0] == 2
     assert migrated.execute("SELECT state, revision, updated_at FROM save_slots WHERE user_id=900 AND slot_id=1").fetchone() == (legacy_state, 7, 11)
@@ -407,4 +407,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    test_save_version()

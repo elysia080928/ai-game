@@ -227,7 +227,32 @@ async function main() {
     await click(`#hand .card[data-uid="${selectable}"]`);
     await click('#hand-toggle');
     console.log('ok hand card selection');
-    // Recycle and wide deployment use the original event bindings and server rules.
+    await resize(1920,942);
+    const discardGeometry=await evaluate(`(() => {
+      const original={phase:battle.phase,required:battle.discardRequired,hand:battle.hand};
+      const template=battle.hand[0];
+      battle.phase='discard'; battle.discardRequired=1;
+      battle.hand=Array.from({length:11},(_,i)=>({...template,uid:20000+i})); renderBattle();
+      const panel=document.querySelector('#discard-panel .modal'),pr=panel.getBoundingClientRect();
+      const cards=[...document.querySelectorAll('#discard-hand .card')].map(el=>({r:el.getBoundingClientRect(),h:el.offsetHeight}));
+      const ok=!document.getElementById('discard-panel').hidden && cards.length===11 && pr.top>=0 && pr.bottom<=innerHeight && cards.every(c=>c.h<=180 && c.r.width>=130);
+      globalThis.discardTestOriginal=original;
+      return {ok,top:pr.top,bottom:pr.bottom,height:pr.height,cards:cards.length,cardHeight:cards[0]?.h};
+    })()`);
+    await capture('discard-dialog');
+    assert(discardGeometry.ok,`Discard dialog overflow or oversized cards: ${JSON.stringify(discardGeometry)}`);
+    console.log(`ok 11-card discard dialog fits viewport: ${JSON.stringify(discardGeometry)}`);
+    for (const [width, height] of [[1024,600],[667,375]]) {
+      await resize(width,height);
+      const geometry = await evaluate(`(() => { const modal=document.querySelector('#discard-panel .modal').getBoundingClientRect(),confirm=document.getElementById('discard-confirm').getBoundingClientRect(); return {top:modal.top,bottom:modal.bottom,left:modal.left,right:modal.right,confirmTop:confirm.top,confirmBottom:confirm.bottom,handHeight:document.getElementById('discard-hand').clientHeight,cards:document.querySelectorAll('#discard-hand .card').length}; })()`);
+      await capture(`discard-dialog-${width}`);
+      assert(geometry.top>=0 && geometry.bottom<=height+1 && geometry.left>=0 && geometry.right<=width+1 && geometry.cards===11, `Discard dialog overflows ${width}x${height}: ${JSON.stringify(geometry)}`);
+      assert(geometry.confirmTop>=geometry.top && geometry.confirmBottom<=geometry.bottom, `Discard confirmation is clipped at ${width}x${height}: ${JSON.stringify(geometry)}`);
+      assert(geometry.handHeight>=176, `Discard card viewport is too short at ${width}x${height}: ${JSON.stringify(geometry)}`);
+    }
+    await resize(1440,900);
+    await evaluate(`battle.phase=discardTestOriginal.phase; battle.discardRequired=discardTestOriginal.required; battle.hand=discardTestOriginal.hand; delete globalThis.discardTestOriginal; renderBattle(); true;`);
+    // Recycle and deployment use the original event bindings and server rules.
     await click('#recycle-btn');
     assert.equal(await evaluate('recycleMode && document.getElementById("recycle-btn").classList.contains("active")'),true);
     confirmNext=true;
@@ -235,17 +260,21 @@ async function main() {
     await wait('!busy && !battle.board.player[1]');
     await click('#end-turn');
     await wait('!busy && battle.energy >= 3');
-    await drag('twin_rail','player',1);
-    await wait(`!busy && battle.board.player[0]?.cardId === 'twin_rail'`);
+    const dragId = await evaluate(`battle.hand.find(card => card.type === 'unit' && card.width === 1 && card.cost <= battle.energy)?.cardId`);
+    assert(dragId, 'Tutorial hand needs an affordable unit for real mouse drag');
+    await drag(dragId,'player',1);
+    await wait(`!busy && battle.board.player[0]?.cardId === ${JSON.stringify(dragId)}`);
+    await evaluate(`globalThis.wideTestOriginal = battle.board.player; const unit = {...battle.board.player[0], cardId:'twin_rail', width:2}; battle.board.player=[unit,unit,...wideTestOriginal.slice(2)]; renderBattle(); true;`);
     await sleep(300);
     const wideGeometry=await evaluate(`(() => { const el=document.querySelector('#player-row [data-column="1"]'); const r=el.getBoundingClientRect(); const c=[...document.querySelectorAll('#forecast-row [data-column]')].map(e=>e.getBoundingClientRect()); return {same:battle.board.player[0].uid===battle.board.player[1].uid,width:el.dataset.width,grid:el.style.gridColumn,unit:[r.left,r.right],cols:c.map(x=>[x.left,x.right])}; })()`);
     assert.equal(wideGeometry.same && Number(wideGeometry.width)===2 && Math.abs(wideGeometry.unit[0]-wideGeometry.cols[0][0])<3 && Math.abs(wideGeometry.unit[1]-wideGeometry.cols[1][1])<3,true,`Wide unit does not span the state columns: ${JSON.stringify(wideGeometry)}`);
+    await capture('after-wide');
+    await evaluate(`battle.board.player = wideTestOriginal; delete globalThis.wideTestOriginal; renderBattle(); true;`);
     const turn=await evaluate('battle.turn');
     await click('#end-turn');
     await wait(`!busy && battle.turn === ${turn+1}`);
     assert.equal(await evaluate(`Number(document.getElementById('turn').textContent)===battle.turn && Number(document.getElementById('energy').textContent)===battle.energy && Number(document.getElementById('deck-count').textContent)===battle.deckCount && Number(document.getElementById('player-hp').textContent)===battle.hp.player && Number(document.getElementById('enemy-hp').textContent)===battle.hp.enemy`),true,'Live battle data did not update');
-    await capture('after-wide');
-    console.log('ok real mouse drag, two-column deployment, recycle confirmation and end-turn live data');
+    console.log('ok real mouse drag, two-column rendering fixture, recycle confirmation and end-turn live data');
 
     const skinStates=await evaluate(`(() => {
       const unit=battle.board.player.find(Boolean),hp=unit.hp,atk=unit.atk;
