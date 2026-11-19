@@ -2200,3 +2200,6 @@ body:has(#game:not([hidden])) { height: 100dvh; min-height: 0; overflow: hidden;
   #map-view .map-table .map-node:active:not(:disabled) .map-node-icon,
   #map-view .map-table .map-node:focus-visible .map-node-icon { transform: none; }
 }
+#game { -webkit-user-select: none; user-select: none; }
+#game :is(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
+#game img { -webkit-user-drag: none; user-drag: none; }
