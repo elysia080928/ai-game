@@ -29,6 +29,7 @@ let draggingUid = null;
 let dragDropped = false;
 let busy = false;
 let loadingBattle = false;
+let combatPlayback = null;
 let toastTimer = null;
 let storyTypingTimer = null;
 let storyLineKey = "";
@@ -228,6 +229,7 @@ function renderSaveSlots() {
 }
 
 function render() {
+  combatPlayback?.abort();
   if (screen !== "game" || !state || state.phase !== "transition") clearTransition();
   if (screen !== "game" || !state || !["map_story", "before_story", "after_story"].includes(state.phase)) {
     if (storyTypingTimer !== null) clearInterval(storyTypingTimer);
@@ -709,21 +711,24 @@ async function selectMapNode(nodeId) {
 async function ensureBattle() {
   if (loadingBattle) return;
   loadingBattle = true;
+  busy = true;
   try {
     const data = await api("/api/battle/start", {});
-    apply(data);
+    await applyBattleResponse(data);
   } catch (error) {
     showToast(error.message);
     $("hand").innerHTML = "<p class='hint'>战斗载入失败。</p><button type='button' class='primary' id='battle-retry'>重新载入</button>";
     $("battle-retry").addEventListener("click", ensureBattle);
   } finally {
     loadingBattle = false;
+    busy = false;
   }
 }
 
 async function act(path, body) {
   if (busy) return;
   busy = true;
+  const previousBattle = battle;
   try {
     const data = await api(path, body);
     selectedUid = null;
@@ -734,7 +739,12 @@ async function act(path, body) {
       supplyPayment = null;
       supplyRemoveUid = null;
     }
-    apply(data);
+    if (data.combatEvents?.length && battle === previousBattle && screen === "game") {
+      try { await replayCombat(data.combatEvents); }
+      finally { if (battle === previousBattle) await applyBattleResponse(data); }
+    } else if (!data.combatEvents || battle === previousBattle) {
+      await applyBattleResponse(data);
+    }
   } catch (error) {
     if (["/api/battle/confirm", "/api/battle/retry", "/api/battle/return"].includes(path)) {
       $("result-action").disabled = false;
@@ -746,37 +756,285 @@ async function act(path, body) {
   }
 }
 
+async function applyBattleResponse(data) {
+  apply(data);
+  if (data?.drawnUids?.length) await playDrawAnimation(data.drawnUids);
+}
+
+async function playDrawAnimation(uids) {
+  if (!battle || battle.phase !== "player" || !uids.length || $("battle-view").hidden) return;
+  const handDock = $("hand-dock");
+  const hand = $("hand");
+  handDock.classList.add("is-open");
+  $("hand-toggle").setAttribute("aria-expanded", "true");
+  hand.scrollLeft = hand.scrollWidth;
+  await new Promise(requestAnimationFrame);
+
+  const cards = uids
+    .map((uid) => hand.querySelector(`.card[data-uid="${uid}"]`))
+    .filter(Boolean);
+  if (!cards.length) return;
+  cards.forEach((card) => card.classList.add("drawn-card"));
+
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setTimeout(() => cards.forEach((card) => card.classList.remove("drawn-card")), 900);
+    return;
+  }
+
+  const deck = $("deck-count").getBoundingClientRect();
+  const origin = { x: deck.left + deck.width / 2, y: deck.top + deck.height / 2 };
+  const orbs = [];
+  try {
+    await Promise.all(cards.map((card, index) => {
+      const target = card.getBoundingClientRect();
+      const dx = target.left + target.width / 2 - origin.x;
+      const dy = target.top + target.height / 2 - origin.y;
+      const orb = document.createElement("i");
+      orb.className = "draw-orb";
+      orb.setAttribute("aria-hidden", "true");
+      orb.style.left = `${origin.x}px`;
+      orb.style.top = `${origin.y}px`;
+      document.body.append(orb);
+      orbs.push(orb);
+      const delay = index * 65;
+      const flight = orb.animate([
+        { offset: 0, opacity: 0, transform: "translate(-50%,-50%) scale(.35)" },
+        { offset: .15, opacity: 1, transform: "translate(-50%,-50%) scale(1.15)" },
+        { offset: .58, opacity: .95, transform: `translate(calc(-50% + ${dx * .52}px),calc(-50% + ${dy * .52 - 38}px)) scale(.9)` },
+        { offset: 1, opacity: 0, transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(.25)` },
+      ], { duration: 260, delay, easing: "cubic-bezier(.22,.72,.25,1)", fill: "both" });
+      const reveal = card.animate([
+        { opacity: .45, transform: "translateY(7px) scale(.92)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+      ], { duration: 180, delay: delay + 150, easing: "cubic-bezier(.2,.8,.25,1)", fill: "both" });
+      return Promise.all([flight.finished, reveal.finished]);
+    }));
+  } finally {
+    orbs.forEach((orb) => orb.remove());
+    cards.forEach((card) => card.classList.remove("drawn-card"));
+  }
+}
+
+function combatUnit(uid) {
+  return $("battle-table").querySelector(`.unit[data-uid="${uid}"]`);
+}
+
+async function playLeaderDamage(side, amount, signal) {
+  if (amount <= 0) return;
+  const leader = $(`${side}-hp`).parentElement;
+  const target = side === "player" ? $("damage-overlay") : leader;
+  const intensity = amount >= 3 ? "combat-heavy" : "combat-light";
+  target.classList.add(intensity);
+  try {
+    await Promise.all([
+      playCombatFx(target, side === "player" ? "player-damage" : "enemy-damage", signal),
+      playCombatFx(leader.querySelector("b"), "hp-change", signal),
+      side === "player" && playCombatFx($("battle-table"), "combat-shake", signal),
+    ]);
+  } finally {
+    target.classList.remove(intensity);
+  }
+}
+
+function playCombatFx(element, name, signal) {
+  if (!element?.isConnected || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = (event) => {
+      if (event?.type.startsWith("animation") && (event.target !== element || event.animationName !== name)) return;
+      clearTimeout(timer);
+      element.removeEventListener("animationend", finish);
+      element.removeEventListener("animationcancel", finish);
+      signal.removeEventListener("abort", finish);
+      element.classList.remove(name);
+      resolve();
+    };
+    const timer = setTimeout(finish, 500);
+    element.addEventListener("animationend", finish);
+    element.addEventListener("animationcancel", finish);
+    signal.addEventListener("abort", finish, { once: true });
+    element.classList.add(name);
+    if (getComputedStyle(element).animationName !== name) finish();
+  });
+}
+
+async function combatMarker(anchor, name, signal, { text = "", shape, ink, destination, turn = 1 } = {}) {
+  if (!anchor?.isConnected || signal.aborted) return;
+  const table = $("battle-table");
+  const bounds = table.getBoundingClientRect();
+  const point = anchor.getBoundingClientRect();
+  const leaderNumber = text && anchor.classList.contains("leader");
+  const x = point.left + point.width / 2 + (leaderNumber ? 33 : 0);
+  const y = point.top + point.height * (text ? .25 : .5) - (leaderNumber ? 10 : 0);
+  const marker = document.createElement("div");
+  marker.className = "combat-marker";
+  marker.textContent = text;
+  marker.setAttribute("aria-hidden", "true");
+  marker.style.left = `${x - bounds.left - table.clientLeft}px`;
+  marker.style.top = `${y - bounds.top - table.clientTop}px`;
+  if (shape) marker.dataset.shape = shape;
+  if (ink) marker.style.setProperty("--fx-ink", ink);
+  marker.style.setProperty("--fx-turn", turn);
+  if (destination?.isConnected) {
+    const aim = destination.getBoundingClientRect();
+    const dx = aim.left + aim.width / 2 - x;
+    const dy = aim.top + aim.height / 2 - y;
+    marker.style.setProperty("--fx-x", `${dx}px`);
+    marker.style.setProperty("--fx-y", `${dy}px`);
+    marker.style.setProperty("--fx-angle", `${Math.atan2(dy, dx)}rad`);
+    marker.style.setProperty("--fx-length", `${Math.hypot(dx, dy)}px`);
+  }
+  table.append(marker);
+  try { await playCombatFx(marker, name, signal); }
+  finally { marker.remove(); }
+}
+
+function combatPose([x, y, angle, sx, sy], turn, mirror) {
+  return `translate(${mirror * x}px, ${turn * y}px) rotate(${-turn * mirror * angle}deg) scale(${sx}, ${sy})`;
+}
+
+async function replayCombat(events) {
+  if (!battle || $("battle-view").hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const table = $("battle-table");
+  const controller = new AbortController();
+  combatPlayback = controller;
+  const { signal } = controller;
+  const cancel = () => controller.abort();
+  window.addEventListener("pagehide", cancel, { once: true });
+  table.setAttribute("aria-busy", "true");
+  let attacker;
+  let attackProfile;
+  let intercepted = false;
+  let previousSource;
+  let stroke = 0;
+  try {
+    for (const event of events) {
+      if (signal.aborted || table.closest("[hidden]")) break;
+      const unit = event.target == null ? null : combatUnit(event.target);
+      const leader = event.target == null && event.leader ? $(`${event.side}-hp`).parentElement : null;
+      const target = unit?.querySelector(".pixel-art") || leader;
+      if (event.kind === "attack") {
+        intercepted = event.intercepted;
+        const source = combatUnit(event.source);
+        attacker = source?.querySelector(".pixel-art");
+        attackProfile = COMBAT_FX[source?.dataset.cardId] || COMBAT_FX.bean;
+        stroke = previousSource === event.source ? stroke + 1 : 0;
+        previousSource = event.source;
+        if (!attacker) continue;
+        const turn = event.side === "enemy" ? -1 : 1;
+        const mirror = stroke % 2 ? -1 : 1;
+        attacker.style.setProperty("--fx-pull", combatPose(attackProfile.pull, turn, mirror));
+        attacker.style.setProperty("--fx-thru", combatPose(attackProfile.thru, turn, mirror));
+        attacker.style.setProperty("--fx-end", combatPose(attackProfile.end, turn, mirror));
+        const aim = target || $(`${event.side}-row`).querySelector(`[data-column="${event.column}"]`);
+        const { cue, path, ink } = attackProfile;
+        const launch = path || (source.dataset.cardId === "mirror_drone" && event.pattern === "split_attack" ? "zigzag" : null);
+        await playCombatFx(attacker, "combat-windup", signal);
+        if (signal.aborted || !attacker.isConnected) continue;
+        attacker.classList.add("combat-extended");
+        await Promise.all([
+          playCombatFx(attacker, "combat-lunge", signal),
+          launch && aim
+            ? combatMarker(attacker, `combat-flight-${launch}`, signal, { shape: cue, ink, destination: aim, turn })
+            : combatMarker(attacker, "combat-cue", signal, { shape: cue, ink, turn }),
+        ]);
+        if (event.miss || !target) {
+          await Promise.all([
+            combatMarker(aim, "combat-number", signal, { text: "未命中" }),
+            playCombatFx(attacker, "combat-recover", signal),
+          ]);
+          attacker.classList.remove("combat-extended");
+          attacker = null;
+          attackProfile = null;
+          intercepted = false;
+        }
+        continue;
+      }
+      if (!target?.isConnected) {
+        attacker?.classList.remove("combat-extended");
+        attacker = null;
+        intercepted = false;
+        continue;
+      }
+      const recover = playCombatFx(attacker, "combat-recover", signal);
+      attacker?.classList.remove("combat-extended");
+      attacker = null;
+      const effect = COMBAT_COMMAND_FX[event.effect] || attackProfile || COMBAT_FX.bean;
+      attackProfile = null;
+      const reaction = COMBAT_FX[unit?.dataset.cardId] || COMBAT_FX.bean;
+      const text = event.amount > 0 ? `−${event.amount}` : event.blocked ? "格挡" : "0";
+      if (leader) renderLeader(event.side, event.hp, false);
+      else if (unit) {
+        const durability = unit.querySelector(".unit-durability");
+        durability.textContent = durability.textContent.replace(/\d+(?=\/)/, event.hp);
+        unit.setAttribute("aria-label", unit.getAttribute("aria-label").replace(/生命 \d+/, `生命 ${event.hp}`));
+        unit.classList.toggle("is-damaged", event.hp < Number(durability.textContent.split("/")[1]));
+        unit.dataset.hp = event.hp;
+      }
+      await Promise.all([
+        recover,
+        combatMarker(target, "combat-impact", signal, { shape: effect.impact, ink: effect.ink, turn: event.side === "player" ? 1 : -1 }),
+        leader && event.side === "enemy" && event.amount > 0 &&
+          combatMarker(target, "combat-impact", signal, { shape: "leader-ring", ink: "#ffd3b0" }),
+        unit && event.amount > 0 && playCombatFx(target, `combat-hit-${reaction.hit}`, signal),
+        unit && (event.blocked || intercepted) && combatMarker(target, "combat-guard", signal, {
+          shape: intercepted ? "ward" : "mesh", ink: reaction.ink,
+        }),
+        combatMarker(target, "combat-number", signal, { text }),
+        leader && playLeaderDamage(event.side, event.amount, signal),
+      ]);
+      intercepted = false;
+      if (signal.aborted || !target.isConnected) continue;
+      if (unit && event.hp === 0) {
+        unit.querySelector(".unit-status span:last-child").textContent = "OFFLINE";
+        await Promise.all([
+          playCombatFx(unit, "combat-death", signal),
+          combatMarker(target, "combat-dust", signal, { shape: reaction.impact, ink: reaction.ink }),
+        ]);
+        if (signal.aborted || !unit.isConnected) continue;
+        const column = Number(unit.dataset.column);
+        unit.outerHTML = Array.from({ length: Number(unit.dataset.width) }, (_, offset) =>
+          unitHtml(null, event.side, column + offset)).join("");
+      }
+    }
+  } finally {
+    attacker?.classList.remove("combat-extended");
+    table.removeAttribute("aria-busy");
+    window.removeEventListener("pagehide", cancel);
+    combatPlayback = null;
+  }
+}
+
 const UNIT_DOSSIERS = {
-  bean: "定位提案 · 低费轻型机体，适合抢先占位。",
-  shell: "定位提案 · 坚实耐久，适合稳住所在列。",
-  scout: "定位提案 · 轻型侦察单位，适合低费部署。",
-  worker: "定位提案 · 均衡型机体，适合补充战线。",
-  striker: "定位提案 · 攻防均衡，适合承担主攻。",
-  heavy: "定位提案 · 高攻高耐久，适合压制战线。",
-  guard: "定位提案 · 均衡守备，适合保护关键列。",
-  flyer: "定位提案 · 轻型空中支援，适合补充火力。",
-  twin_rail: "占据连续两列；每次攻击分别打击两列。",
-  arc_drone: "每次攻击当前列与右侧相邻列。",
-  double_claw: "每次攻击同一列两次。",
-  phase_flyer: "飞越没有对空能力的目标；只能被对空单位攻击。",
-  burst_beetle: "被摧毁时，对左右相邻敌军各造成 1 点伤害。",
-  shield_moth: "护盾可抵消一次伤害，并使该次伤害减少 1。",
-  rail_guard: "相邻友军受到敌方攻击时，可代为拦截一次。",
-  small_sentry: "定位提案 · 低威胁前哨，适合占据空列。",
-  defender: "定位提案 · 高耐久守备单位，适合拖慢推进。",
-  assault_sentry: "定位提案 · 高攻击轻装单位，优先施加压力。",
-  fork_sentry: "每次攻击当前列与右侧相邻列。",
-  wide_bulwark: "占据连续两列，以宽幅机体封锁战线。",
-  double_striker: "每次攻击同一列两次。",
-  reach_turret: "具备对空能力，可以攻击飞行单位。",
-  phase_hunter: "飞越没有对空能力的目标；只能被对空单位攻击。",
-  mine_beetle: "被摧毁时，对正对列单位造成 2 点伤害。",
-  signal_jammer: "首次部署后，使玩家下回合能量 -1（每场战斗一次）。",
-  drift_hunter: "敌方阶段结束时尝试向右移动一列。",
-  null_anchor: "锁定相邻列，使相邻友军无法被代为拦截。",
-  siege_carrier: "占据连续两列，以宽幅机体推进战线。",
-  mirror_core: "每次攻击覆盖全部列；护盾可抵消两次伤害。",
-  mirror_drone: "部署时复制正对单位的攻击模式。",
+  bean: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  shell: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  scout: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  worker: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  striker: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  heavy: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  guard: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  flyer: { tags: ["飞行"], description: "越过非对空单位攻击领袖；仅对空可命中。" },
+  twin_rail: { tags: ["宽体", "分叉"], description: "占两列，分别攻击两列。" },
+  arc_drone: { tags: ["分叉"], description: "攻击本列和右侧列。" },
+  double_claw: { tags: ["连击"], description: "同列连击两次；首击击杀后，次击打领袖。" },
+  phase_flyer: { tags: ["飞行"], description: "越过非对空单位攻击领袖；仅对空可命中。" },
+  burst_beetle: { tags: ["击败爆发"], description: "被击败时，相邻敌人各受 1 点伤害。" },
+  shield_moth: { tags: ["护盾"], description: "首次受伤减免 1 点伤害。" },
+  rail_guard: { tags: ["拦截"], description: "替相邻友军拦截一次攻击。" },
+  small_sentry: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  defender: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  assault_sentry: { tags: ["普通"], description: "攻击本列；空列时攻击领袖。" },
+  fork_sentry: { tags: ["分叉"], description: "攻击本列和右侧列。" },
+  wide_bulwark: { tags: ["宽体"], description: "占两列；只攻击起始列。" },
+  double_striker: { tags: ["连击"], description: "同列连击两次；首击击杀后，次击打领袖。" },
+  reach_turret: { tags: ["对空"], description: "可攻击飞行单位。" },
+  phase_hunter: { tags: ["飞行"], description: "越过非对空单位攻击领袖；仅对空可命中。" },
+  mine_beetle: { tags: ["击败爆发"], description: "被击败时，对位单位受 2 点伤害。" },
+  signal_jammer: { tags: ["能量干扰"], description: "部署后令下回合能量 -1；每战一次。" },
+  drift_hunter: { tags: ["位移"], description: "敌方阶段后右移；受阻或到边缘停下。" },
+  null_anchor: { tags: ["锚定"], description: "相邻玩家单位不能被轨道守卫拦截。" },
+  siege_carrier: { tags: ["宽体"], description: "占两列；只攻击起始列。" },
+  mirror_core: { tags: ["横扫", "护盾"], description: "横扫全场单位，不伤空列领袖；两层护盾各减伤 1。" },
+  mirror_drone: { tags: ["镜像"], description: "部署时复制对位机偶的攻击模式。" },
 };
 
 function unitHtml(unit, side, column) {
@@ -791,7 +1049,12 @@ function unitHtml(unit, side, column) {
         unit.anchor ? "锚定" : "",
       ].filter(Boolean).join("，")
     : "";
-  const notes = unit ? UNIT_DOSSIERS[unit.cardId] || "定位提案 · 常规机体，按当前属性执行攻击。" : "";
+  const dossier = unit ? UNIT_DOSSIERS[unit.cardId] || {
+    tags: ["普通"], description: "攻击本列；空列时攻击领袖。",
+  } : null;
+  const notes = dossier
+    ? `<span class="unit-tags">${dossier.tags.map((tag) => `<span class="unit-tag" data-tag="${esc(tag)}">${esc(tag)}</span>`).join("")}</span><span class="unit-intro">${esc(dossier.description)}</span>`
+    : "";
   const label = unit
     ? `${span} 列，${unit.name}，等级 ${unit.level ?? 1}，攻击 ${unit.atk}，生命 ${unit.hp}${charges ? `，${charges}` : ""}`
     : `${column} 列，空列`;
@@ -802,7 +1065,7 @@ function unitHtml(unit, side, column) {
   const previous = $(`${side}-row`).querySelector(`[data-uid="${unit.uid}"]`);
   const damaged = previous && unit.hp < Number(previous.dataset.hp);
   const boosted = previous && unit.atk > Number(previous.dataset.atk);
-  return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}${unit.hp < unit.maxHp ? " is-damaged" : ""}${damaged ? " just-damaged" : ""}${boosted ? " just-boosted" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" data-hp="${unit.hp}" data-atk="${unit.atk}" tabindex="0" aria-label="${esc(label)}"${style}>
+  return `<div class="slot unit ${side}${width > 1 ? " wide" : ""}${unit.hp < unit.maxHp ? " is-damaged" : ""}${damaged ? " just-damaged" : ""}${boosted ? " just-boosted" : ""}" data-side="${side}" data-column="${unit.column}" data-width="${width}" data-uid="${unit.uid}" data-card-id="${esc(unit.cardId)}" data-hp="${unit.hp}" data-atk="${unit.atk}" tabindex="0" aria-label="${esc(label)}"${style}>
       <div class="unit-core" aria-hidden="true">${pixelArtHtml(unit)}</div>
       <section class="unit-dossier" aria-label="机偶档案">
         <div class="unit-profile">
@@ -810,7 +1073,7 @@ function unitHtml(unit, side, column) {
           <span class="unit-heading"><span class="unit-name">${esc(unit.name)}</span><small class="unit-level">LV.${String(unit.level ?? 1).padStart(2, "0")}</small></span>
           <span class="unit-durability">耐 ${unit.hp}/${unit.maxHp}</span>
         </div>
-        <div class="unit-mechanic">${esc(notes)}</div>
+        <div class="unit-mechanic">${notes}</div>
         <div class="unit-status"><span>UNIT ID · ${String(unit.uid).padStart(3, "0")}</span><span>${unit.hp > 0 ? "ONLINE" : "OFFLINE"}</span></div>
       </section>
     </div>`;
@@ -951,6 +1214,23 @@ function renderTutorial() {
   for (const id of step.uiTargets || []) $(id)?.classList.add("tutorial-target");
 }
 
+function renderLeader(side, hp, flash = true) {
+  const counter = $(`${side}-hp`);
+  const leader = counter.parentElement;
+  const maxHp = state.node?.leaderMaxHp?.[side] ?? Number(leader.dataset.maxHp);
+  const damaged = flash && leader.dataset.hp !== undefined && hp < Number(leader.dataset.hp);
+  counter.textContent = hp;
+  leader.dataset.hp = hp;
+  leader.dataset.maxHp = maxHp;
+  leader.classList.toggle("is-critical", hp <= maxHp / 3);
+  leader.classList.toggle("just-damaged", damaged);
+  leader.setAttribute("aria-label", `${side === "enemy" ? "敌方" : "己方"}领袖，生命 ${hp} / ${maxHp}`);
+  leader.querySelector(".leader-max").textContent = `/ ${maxHp}`;
+  const cells = leader.querySelector(".leader-cells");
+  if (cells.children.length !== maxHp) cells.innerHTML = Array.from({length: maxHp}, () => "<i></i>").join("");
+  [...cells.children].forEach((cell, index) => cell.classList.toggle("filled", index < hp));
+}
+
 function renderBattle() {
   const active = document.activeElement;
   const focusInfo = active && $("battle-view").contains(active)
@@ -964,20 +1244,8 @@ function renderBattle() {
     return;
   }
 
-  $("enemy-hp").textContent = battle.hp.enemy;
-  $("player-hp").textContent = battle.hp.player;
   for (const side of ["enemy", "player"]) {
-    const leader = $(`${side}-hp`).parentElement;
-    const hp = battle.hp[side];
-    const maxHp = state.node?.leaderMaxHp?.[side] ?? Number(leader.dataset.maxHp);
-    const damaged = leader.dataset.hp !== undefined && hp < Number(leader.dataset.hp);
-    leader.dataset.hp = hp;
-    leader.dataset.maxHp = maxHp;
-    leader.classList.toggle("is-critical", hp <= maxHp / 3);
-    leader.classList.toggle("just-damaged", damaged);
-    leader.setAttribute("aria-label", `${side === "enemy" ? "敌方" : "己方"}领袖，生命 ${hp} / ${maxHp}`);
-    leader.querySelector(".leader-max").textContent = `/ ${maxHp}`;
-    leader.querySelector(".leader-cells").innerHTML = Array.from({length: maxHp}, (_, i) => `<i${i < hp ? ' class="filled"' : ""}></i>`).join("");
+    renderLeader(side, battle.hp[side]);
   }
   $("turn").textContent = battle.turn;
   $("energy").textContent = battle.energy;
@@ -1067,18 +1335,23 @@ function renderResult() {
     hideDialog(panel);
     return;
   }
+  clearTimeout(toastTimer);
+  toastTimer = null;
+  $("toast").hidden = true;
   const action = $("result-action");
   const returnButton = $("result-return");
   const dialog = panel.querySelector(".result-dialog");
   action.disabled = false;
   returnButton.disabled = false;
   if (battle.result === "win") {
+    $("result-title").textContent = "战斗胜利";
     $("result-image").src = "/assets/ui/battle-result-victory.png";
     $("result-image").alt = "VICTORY，BATTLE WON";
     dialog.dataset.result = "win";
     dialog.setAttribute("aria-label", "战斗胜利结算");
     action.dataset.action = "confirm";
   } else {
+    $("result-title").textContent = "战斗失败";
     $("result-image").src = "/assets/ui/battle-result-defeat.png";
     $("result-image").alt = "GAME OVER，BATTLE FAILED";
     dialog.dataset.result = "lose";
@@ -1976,15 +2249,18 @@ function bindEvents() {
 
   $("end-turn").addEventListener("click", () => act("/api/battle/end", {}));
   $("hand-toggle").addEventListener("click", () => {
+    if (busy) return;
     $("hand-count").textContent = $("hand").querySelectorAll(".card").length;
     const open = $("hand-dock").classList.toggle("is-open");
     $("hand-toggle").setAttribute("aria-expanded", String(open));
   });
   $("battle-table").addEventListener("click", () => {
+    if (busy) return;
     $("hand-dock").classList.remove("is-open");
     $("hand-toggle").setAttribute("aria-expanded", "false");
   });
   $("recycle-btn").addEventListener("click", () => {
+    if (busy) return;
     recycleMode = !recycleMode;
     if (recycleMode) selectedUid = null;
     renderBattle();

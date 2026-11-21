@@ -80,6 +80,21 @@ def map_after_battle1(option_id="battle1_supply"):
     return state
 
 
+def test_leader_damage_events_match_health_lost():
+    for side, defender, result in (("player", "enemy", "win"), ("enemy", "player", "lose")):
+        battle = make()
+        battle["board"][defender] = [None] * 4
+        battle["hp"][defender] = 2
+        attacker = put_enemy(battle, "测试机偶", 1, atk=5, hp=2, side=side)
+        battle["combatEvents"] = []
+        B._attack_columns(battle, attacker)
+        attack, damage = battle["combatEvents"]
+        assert attack["kind"] == "attack" and attack["leader"] and attack["side"] == defender
+        assert damage == {"kind": "damage", "target": None, "side": defender,
+                          "leader": True, "hp": 0, "amount": 2}
+        assert battle["phase"] == "over" and battle["result"] == result
+
+
 def test_opening_hand():
     for seed in range(300):
         b = make(seed)
@@ -308,11 +323,47 @@ def test_forced_discard():
         B.end_turn(b, random.Random(2))
     assert b["turn"] == 4
     assert b["phase"] == "discard", b["phase"]
-    assert len(b["hand"]) == 12
+    assert len(b["hand"]) == 10
+    assert len(b["deck"]) == 2
+    assert B.view(b)["discardRequired"] == 2
+    existing_uids = {card["uid"] for card in b["hand"]}
     B.discard(b, [c["uid"] for c in b["hand"][:2]])
     assert b["phase"] == "player"
     assert len(b["hand"]) == 10
     assert len(b["discarded"]) == 2
+    assert len(b["deck"]) == 0
+    assert not existing_uids.issuperset(card["uid"] for card in b["hand"])
+
+    short_deck = B.make_battle(
+        [{"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 0} for _ in range(11)],
+        encounter,
+        G.CARDS,
+        G.ENEMIES,
+        rng=random.Random(1),
+    )
+    for _ in range(3):
+        B.end_turn(short_deck, random.Random(2))
+    assert short_deck["phase"] == "discard"
+    assert B.view(short_deck)["discardRequired"] == 1
+    B.discard(short_deck, [short_deck["hand"][0]["uid"]])
+    assert len(short_deck["hand"]) == 10
+    assert not short_deck["deck"]
+
+    legacy = B.make_battle(
+        [{"cardId": "bean", "level": 1, "atkBonus": 0, "hpBonus": 0} for _ in range(16)],
+        encounter,
+        G.CARDS,
+        G.ENEMIES,
+        rng=random.Random(1),
+    )
+    legacy["hand"].extend(legacy["deck"][:6])
+    del legacy["deck"][:6]
+    legacy["phase"] = "discard"
+    legacy_hand = len(legacy["hand"])
+    legacy_deck = len(legacy["deck"])
+    B.discard(legacy, [card["uid"] for card in legacy["hand"][:2]])
+    assert len(legacy["hand"]) == legacy_hand - 2
+    assert len(legacy["deck"]) == legacy_deck
 
 
 def test_story_flow_and_new_game():
@@ -1638,11 +1689,20 @@ def test_flying_and_reach():
     b = make(0)
     b["plan"] = []
     b["board"]["enemy"] = [None] * B.COLUMNS
-    put_unit(b, "player", "phase_flyer", 1)
+    put_unit(b, "player", "flyer", 1)
     ground = put_enemy(b, "地面单位", 1, 1, 5)
     hp = b["hp"]["enemy"]
     B._player_attack(b)
-    assert ground["hp"] == 5 and b["hp"]["enemy"] == hp - 2, "飞行应绕过地面单位"
+    assert ground["hp"] == 5 and b["hp"]["enemy"] == hp - 3, "飞行应绕过地面单位"
+
+    b = make(1)
+    b["plan"] = []
+    b["board"]["enemy"] = [None] * B.COLUMNS
+    put_unit(b, "player", "flyer", 1)
+    opposing_flyer = put_enemy(b, "敌方飞行单位", 1, 1, 5, abilities=["flying"])
+    hp = b["hp"]["enemy"]
+    B._player_attack(b)
+    assert opposing_flyer["hp"] == 2 and b["hp"]["enemy"] == hp, "飞行单位应能攻击飞行防守者"
 
     b = make(1)
     b["plan"] = []
@@ -1651,7 +1711,7 @@ def test_flying_and_reach():
     flyer = put_enemy(b, "飞行单位", 1, 1, 2, abilities=["flying"])
     hp = b["hp"]["enemy"]
     B._player_attack(b)
-    assert flyer["hp"] == 2 and b["hp"]["enemy"] == hp, "无 reach 的单位不能伤害飞行单位"
+    assert flyer["hp"] == 2 and b["hp"]["enemy"] == hp, "非飞行且无 reach 的单位不能伤害飞行单位"
 
     b = make(2)
     b["plan"] = []
@@ -1673,7 +1733,7 @@ def test_flying_and_reach():
     b = make(4)
     b["plan"] = []
     b["board"]["enemy"] = [None] * B.COLUMNS
-    flyer = put_unit(b, "player", "phase_flyer", 1)
+    flyer = put_unit(b, "player", "flyer", 1)
     put_enemy(b, "牵引炮塔", 1, 1, 4, abilities=["reach"])
     B._enemy_phase(b)
     assert flyer["hp"] == 1, "reach 敌人应能攻击飞行单位"

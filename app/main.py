@@ -584,12 +584,19 @@ def _make_battle(user_id, state, slot_id):
         opening_draw=B.OPENING_DRAW + state.get("pendingDrawBonus", 0),
     )
     battle_state["nodeId"] = node["id"]
+    drawn_uids = battle_state.pop("_drawnUids", [])
     _store_battle(user_id, battle_state, slot_id)
+    battle_state["_responseDrawnUids"] = drawn_uids
     return battle_state
 
 
-def _battle_response(state, battle_state):
-    return {"state": game.public_state(state), "battle": B.view(battle_state)}
+def _battle_response(state, battle_state, drawn_uids=None):
+    if drawn_uids is None:
+        drawn_uids = battle_state.pop("_responseDrawnUids", None)
+    response = {"state": game.public_state(state), "battle": B.view(battle_state)}
+    if drawn_uids is not None:
+        response["drawnUids"] = drawn_uids
+    return response
 
 
 def _abandon_lost_challenge(state, user_id, slot_id):
@@ -654,9 +661,11 @@ def battle_command(body: CommandBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
         battle_state = _current_battle(user["id"], state, user["slot"])
+        battle_state["combatEvents"] = []
         B.play_command(battle_state, body.uid, body.targetUid)
+        events = battle_state.pop("combatEvents")
         _store_battle(user["id"], battle_state, user["slot"])
-        return _battle_response(state, battle_state)
+        return {**_battle_response(state, battle_state), "combatEvents": events}
 
 
 @app.post("/api/battle/recycle")
@@ -674,9 +683,9 @@ def battle_discard(body: DiscardBody, user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
         battle_state = _current_battle(user["id"], state, user["slot"])
-        B.discard(battle_state, body.uids)
+        drawn_uids = B.discard(battle_state, body.uids)
         _store_battle(user["id"], battle_state, user["slot"])
-        return _battle_response(state, battle_state)
+        return _battle_response(state, battle_state, drawn_uids)
 
 
 @app.post("/api/battle/end")
@@ -684,9 +693,12 @@ def battle_end(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
         battle_state = _current_battle(user["id"], state, user["slot"])
+        battle_state["combatEvents"] = []
         B.end_turn(battle_state, rng=random.Random())
+        events = battle_state.pop("combatEvents")
+        drawn_uids = battle_state.pop("_drawnUids", [])
         _store_battle(user["id"], battle_state, user["slot"])
-        return _battle_response(state, battle_state)
+        return {**_battle_response(state, battle_state, drawn_uids), "combatEvents": events}
 
 
 @app.post("/api/battle/retry")

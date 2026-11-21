@@ -64,8 +64,8 @@ async function main() {
       await command('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
       await sleep(280);
     };
-    const capture = async name => {
-      const r = await command('Page.captureScreenshot', { format: 'png' });
+    const capture = async (name, clip) => {
+      const r = await command('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true, ...(clip && {clip}) });
       fs.writeFileSync(path.join(output, name + '.png'), Buffer.from(r.data, 'base64'));
     };
     const click = async selector => {
@@ -111,16 +111,33 @@ async function main() {
         root.innerHTML = ids.map(cardId => cardFaceHtml({cardId, type:'unit'})).join('');
         const images = [...root.querySelectorAll('img')];
         await Promise.all(images.map(img => img.decode()));
+        const aircraft = new Set(['flyer','phase_flyer','phase_hunter']);
         return images.length === 30 && images.every((img, i) => {
           const css = getComputedStyle(img);
           const expected = ${JSON.stringify(enemyIds)}.includes(ids[i]) ? 'enemy-' + ids[i] : CARD_ART[ids[i]];
           return expected && new URL(img.src).pathname === '/assets/cards/' + expected + '.png' &&
-            img.naturalWidth > 0 && css.transform === 'none' && !/sepia|hue-rotate|saturate/.test(css.filter);
-        }) && getComputedStyle(document.querySelector('.title-drone')).transform === 'none';
+            img.naturalWidth > 0 && css.transform === 'none' &&
+            css.rotate === (aircraft.has(ids[i]) ? '180deg' : 'none') &&
+            !/sepia|hue-rotate|saturate/.test(css.filter);
+        }) && !document.querySelector('.title-drone');
       } finally { root.remove(); }
     })()`);
     assert(artCheck, 'All 30 unit sprites must load without rotation, mirroring or recoloring');
     console.log('ok all 30 unit sprites load in shared battle/event card art');
+    const dossierCheck = await evaluate(`(() => {
+      const ids = ${JSON.stringify(unitIds.concat(enemyIds))};
+      const complete = ids.length === 30 && ids.every(id => {
+        const entry = UNIT_DOSSIERS[id];
+        return entry && entry.tags.length && entry.description;
+      });
+      const flyer = UNIT_DOSSIERS.phase_flyer;
+      const rendered = unitHtml({uid:1,cardId:'phase_flyer',name:'相位飞行器',level:1,atk:2,hp:2,maxHp:2,column:1,width:1,side:'player'},'player',1);
+      return complete && UNIT_DOSSIERS.flyer.tags.includes('飞行') &&
+        flyer.tags.includes('飞行') && flyer.description.includes('攻击') && flyer.description.includes('对空') &&
+        rendered.includes('unit-tag') && rendered.includes('unit-intro');
+    })()`);
+    assert(dossierCheck, 'All unit dossiers need tags and descriptions, with explicit flying rules');
+    console.log('ok all 30 unit dossiers include tags and descriptions');
     // Real API state in a fresh browser profile; never overwrite an existing account/save.
     await evaluate(`(async () => {
       const account = 'layout_' + Date.now().toString(36);
@@ -196,8 +213,8 @@ async function main() {
             }),
             leaderGauge:['enemy','player'].every(side=>{
               const el=document.querySelector('.leader.'+side),r=el.getBoundingClientRect(),g=el.querySelector('.leader-cells').getBoundingClientRect();
-              const value=el.querySelector('b').textContent,max=el.querySelector('.leader-max').textContent;
-              return [...el.querySelectorAll(':scope > span,:scope > b,.leader-max')].every(label=>getComputedStyle(label).visibility==='hidden') &&
+              const counter=el.querySelector('b'),value=counter.textContent,max=el.querySelector('.leader-max').textContent;
+              return getComputedStyle(counter).visibility==='visible' && counter.getBoundingClientRect().top>=g.bottom &&
                 value===String(battle.hp[side]) && max.trim()==='/ '+state.node.leaderMaxHp[side] && g.width>=24 && g.height>=72 && g.height>g.width &&
                 Math.abs(g.x+g.width/2-r.x-r.width/2)<2 && Math.abs(g.y+g.height/2-r.y-r.height/2)<2;
             }),
@@ -220,6 +237,30 @@ async function main() {
       await capture(`after-${width}`);
       console.log(`ok ${width}x${height}: columns, HP, hand overlay, footer, art, HUD and hit targets`);
     }
+    await resize(667,375);
+    await evaluate(`(() => {
+      globalThis.dossierPreviousBattle=battle;
+      const fixture=JSON.parse(JSON.stringify(battle));
+      const make=(cardId,name,uid,side,column)=>({uid,cardId,name,level:1,atk:2,hp:2,maxHp:3,column,width:1,side,attackPattern:cardId==='mirror_core'?'sweep':'forward',abilities:['phase_flyer','phase_hunter'].includes(cardId)?['flying']:[],shield:cardId==='mirror_core'?2:0,guard:0,shift:0,anchor:0});
+      fixture.board.player=[make('phase_flyer','相位飞行器',9101,'player',1),make('mirror_core','镜像核心',9102,'player',2),make('double_claw','双爪维修兽',9103,'player',3),make('burst_beetle','爆裂甲虫',9104,'player',4)];
+      fixture.board.enemy=[make('phase_hunter','相位猎手',9201,'enemy',1),make('null_anchor','空间锚',9202,'enemy',2),make('drift_hunter','漂移猎手',9203,'enemy',3),make('mirror_drone','镜像无人机',9204,'enemy',4)];
+      battle=fixture; renderBattle(); return true;
+    })()`);
+    const dossierLayout = await evaluate(`(() => {
+      const units=[...document.querySelectorAll('.slot.unit')];
+      const details=units.map(el=>{
+        const dossier=el.querySelector('.unit-dossier').getBoundingClientRect(),mechanic=el.querySelector('.unit-mechanic').getBoundingClientRect(),tags=el.querySelector('.unit-tags').getBoundingClientRect(),intro=el.querySelector('.unit-intro').getBoundingClientRect(),status=el.querySelector('.unit-status').getBoundingClientRect(),row=el.getBoundingClientRect();
+        return {id:el.dataset.cardId,tag:el.querySelector('.unit-tags').textContent,intro:el.querySelector('.unit-intro').textContent,fit:dossier.top>=row.top && dossier.bottom<=row.bottom && tags.top>=mechanic.top && tags.bottom<=mechanic.bottom && intro.top>=mechanic.top && intro.bottom<=mechanic.bottom && mechanic.bottom<=status.top+1 && status.bottom<=dossier.bottom,rects:{dossier:[dossier.top,dossier.bottom],row:[row.top,row.bottom],mechanic:[mechanic.top,mechanic.bottom],tags:[tags.top,tags.bottom],intro:[intro.top,intro.bottom],status:[status.top,status.bottom]}};
+      });
+      return {fit:details.length===8 && details.every(item=>item.fit),details};
+    })()`);
+    assert(dossierLayout.fit, `Compact unit dossiers overflowed: ${JSON.stringify(dossierLayout.details)}`);
+    const dossierHandOpen = await evaluate(`$('hand-dock').classList.contains('is-open')`);
+    await evaluate(`$('hand-dock').classList.remove('is-open'); true`);
+    await capture('dossiers-667');
+    if (dossierHandOpen) await evaluate(`$('hand-dock').classList.add('is-open'); true`);
+    await evaluate(`(() => { battle=globalThis.dossierPreviousBattle; delete globalThis.dossierPreviousBattle; renderBattle(); return true; })()`);
+    console.log('ok tagged dossiers fit on narrow landscape with flight and multi-trait units');
     await resize(1440,900);
     const selectable = await evaluate(`document.querySelector('#hand .card[data-type="unit"]')?.dataset.uid`);
     await click(`#hand .card[data-uid="${selectable}"]`);
@@ -272,7 +313,7 @@ async function main() {
     await evaluate(`battle.board.player = wideTestOriginal; delete globalThis.wideTestOriginal; renderBattle(); true;`);
     const turn=await evaluate('battle.turn');
     await click('#end-turn');
-    await wait(`!busy && battle.turn === ${turn+1}`);
+    await wait(`!busy && (battle.turn === ${turn+1} || battle.phase === 'over')`);
     assert.equal(await evaluate(`Number(document.getElementById('turn').textContent)===battle.turn && Number(document.getElementById('energy').textContent)===battle.energy && Number(document.getElementById('deck-count').textContent)===battle.deckCount && Number(document.getElementById('player-hp').textContent)===battle.hp.player && Number(document.getElementById('enemy-hp').textContent)===battle.hp.enemy`),true,'Live battle data did not update');
     console.log('ok real mouse drag, two-column rendering fixture, recycle confirmation and end-turn live data');
 
@@ -287,6 +328,95 @@ async function main() {
       return flashed && counts && !document.querySelector('.slot.just-damaged,.slot.just-boosted');
     })()`);
     assert(skinStates,'Damage/boost or zero/full/critical leader states failed');
+    if (process.env.COMBAT_FX_SCREENSHOTS === '1') {
+      const ids = unitIds.concat(enemyIds);
+      assert.equal(await evaluate(`Object.keys(COMBAT_FX).sort().join() === ${JSON.stringify([...ids].sort().join())}`), true);
+      const sample = new Set(['bean','shell','striker','twin_rail','arc_drone','heavy','double_claw','phase_flyer','reach_turret','siege_carrier','mirror_core']);
+      const crop = {x: 390, y: 120, width: 680, height: 750, scale: 1};
+      const cards = ids.map(cardId => ({ ...content.cards[cardId], ...content.enemies[cardId], cardId }));
+      await evaluate(`globalThis.fxOriginal = battle; globalThis.fxFrames = []; true;`);
+      for (const [index, card] of cards.entries()) {
+        const side = index < unitIds.length ? 'player' : 'enemy';
+        const targetSide = side === 'player' ? 'enemy' : 'player';
+        const stats = card.levels?.[0] || card;
+        const source = {cardId:card.cardId,name:card.name,column:2,width:card.width || 1,uid:9001,side,atk:stats.atk,hp:stats.hp,maxHp:stats.hp};
+        const target = {cardId:side === 'player' ? 'defender' : 'shell',name:side === 'player' ? '防守机偶' : '盾壳机器人',column:2,width:1,uid:9002,side:targetSide,atk:1,hp:1,maxHp:4};
+        const events = [
+          {kind:'attack',source:9001,target:9002,side:targetSide,column:2,pattern:card.attackPattern},
+          {kind:'damage',target:9002,side:targetSide,hp:0,amount:1},
+        ];
+        await evaluate(`(async () => {
+          const source=${JSON.stringify(source)},target=${JSON.stringify(target)};
+          const row=unit=>[null,unit,unit.width===2?unit:null,null];
+          battle={...fxOriginal,board:{[source.side]:row(source),[target.side]:row(target)}};
+          renderBattle();
+          await Promise.all([...document.querySelectorAll('.slot.unit img')].map(img=>img.decode()));
+          const table=$('battle-table'), phases=[];
+          const observe=new MutationObserver(records=>{
+            for(const {target:el} of records){
+              if(!el.isConnected) continue;
+              const name=getComputedStyle(el).animationName;
+              if(name==='combat-lunge') phases.push([name,el.style.getPropertyValue('--fx-end')]);
+              if(name==='combat-cue'||name.startsWith('combat-flight')||name==='combat-impact'||name==='combat-dust') phases.push([name,el.dataset.shape]);
+              if(name==='combat-impact'){ globalThis.fxImpactMarker=el; el.getAnimations().forEach(animation=>{animation.pause();animation.currentTime=128;}); }
+              if(name==='combat-dust'){ globalThis.fxDeathMarker=el; el.getAnimations().forEach(animation=>{animation.pause();animation.currentTime=105;}); }
+            }
+          });
+          observe.observe(table,{subtree:true,attributes:true,attributeFilter:['class']});
+          globalThis.fxPlayback=replayCombat(${JSON.stringify(events)}).finally(()=>observe.disconnect());
+          globalThis.fxPhases=phases;
+          return true;
+        })()`);
+        if (sample.has(card.cardId)) {
+          for (const [phase, selector, time] of [
+            ['attack','#battle-table :is([class*="combat-flight"],.combat-lunge)',100],
+            ['impact','#battle-table .combat-impact',128],
+            ['death','#battle-table .combat-dust',92],
+          ]) {
+            try {
+              await wait(`!!document.querySelector(${JSON.stringify(selector)})`);
+            } catch (error) {
+              throw Error(`${error.message}: ${await evaluate(`JSON.stringify({phases:fxPhases,units:[...document.querySelectorAll('.slot.unit')].map(el=>[el.dataset.cardId,el.dataset.hp]),markers:[...document.querySelectorAll('.combat-marker')].map(el=>[el.className,el.dataset.shape]),aborted:combatPlayback?.signal.aborted})`)}`);
+            }
+            await evaluate(`(() => {
+              const animations=$('battle-table').getAnimations({subtree:true});
+              animations.forEach(animation=>{animation.pause();animation.currentTime=Math.min(${time},animation.effect.getTiming().duration-1);});
+              return true;
+            })()`);
+            await capture(`fx-${card.cardId}-${phase}`, crop);
+            if(phase==='impact') await evaluate('fxImpactMarker?.getAnimations().forEach(animation=>animation.play()); true;');
+            if(phase==='death') await evaluate('fxDeathMarker?.getAnimations().forEach(animation=>animation.play()); true;');
+            await evaluate(`$('battle-table').getAnimations({subtree:true}).forEach(animation=>animation.play()); true;`);
+          }
+        }
+        const phases = await evaluate('fxPlayback.then(()=>fxPhases)');
+        const profile = await evaluate(`COMBAT_FX[${JSON.stringify(card.cardId)}]`);
+        assert(phases.some(([name, shape]) => name === 'combat-impact' && shape === profile.impact), JSON.stringify([card.cardId, phases]));
+        assert(phases.some(([name, shape]) => name === (profile.path ? 'combat-flight-' + profile.path : 'combat-cue') && shape === profile.cue), JSON.stringify([card.cardId, phases]));
+        assert(phases.some(([name, pose]) => name === 'combat-lunge' && pose.includes(`${(side === 'player' ? -1 : 1) * profile.end[1]}px)`)), JSON.stringify([card.cardId, phases]));
+        assert(phases.some(([name]) => name === 'combat-dust'), card.cardId);
+        assert(await evaluate('!combatPlayback && !document.querySelector(".combat-marker,.combat-extended")'), card.cardId);
+      }
+      for (const side of ['player','enemy']) {
+        assert(await evaluate(`(() => {
+          battle={...fxOriginal,hp:{...fxOriginal.hp,${side}:8}}; renderBattle();
+          globalThis.fxPlayback=replayCombat([6,3].map((hp,index)=>({kind:'damage',target:null,leader:true,side:'${side}',hp,amount:index?3:2})));
+          return $(${JSON.stringify(side+'-hp')}).textContent==='6';
+        })()`));
+        assert.equal(await evaluate(`$('damage-overlay').classList.contains('player-damage')`), side === 'player');
+        assert.equal(await evaluate(`document.querySelector('.leader.enemy').classList.contains('enemy-damage')`), side === 'enemy');
+        assert(await evaluate(`(() => {
+          const overlay=$('damage-overlay'), rect=overlay.getBoundingClientRect();
+          return rect.left===0 && rect.top===0 && rect.width===innerWidth && rect.height===innerHeight &&
+            getComputedStyle(overlay).pointerEvents==='none';
+        })()`));
+        await capture('fx-leader-' + side);
+        await evaluate('fxPlayback.then(()=>true)');
+        assert(await evaluate(`$(${JSON.stringify(side+'-hp')}).textContent==='3' && !$('damage-overlay').classList.contains('player-damage')`));
+      }
+      await evaluate('battle=fxOriginal; delete globalThis.fxOriginal; renderBattle(); true;');
+      console.log('ok all 30 combat profiles, both leaders, consecutive damage and animation cleanup');
+    }
     await command('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.slot.unit'),'::before').animationName`),'none');
     const saved=await evaluate('JSON.stringify([battle.hp,battle.board,state.node.leaderMaxHp])');

@@ -208,8 +208,8 @@ async function main() {
         return { x: rect.left + scrollX, y: rect.top + scrollY, width: rect.width, height: rect.height, scale: 1 };
       })()`);
       const { data } = await command("Page.captureScreenshot", {
-        format: "png", ...(clip ? { clip, captureBeyondViewport: true } : {}),
-      });
+        format: "png", optimizeForSpeed: true, ...(clip ? { clip, captureBeyondViewport: true } : {}),
+      }, 45000);
       const file = path.join(os.tmpdir(), name);
       fs.writeFileSync(file, Buffer.from(data, "base64"));
       console.log(`截图 ${file}`);
@@ -294,12 +294,13 @@ async function main() {
             near(art.left, (innerWidth - art.width) / 2) && near(art.top, (innerHeight - art.height) / 2),
           hidden: ['#game > .topbar', '#battle-view', '#hand-dock'].every((selector) =>
             getComputedStyle(document.querySelector(selector)).visibility === 'hidden'),
+          toastHidden: $('toast').hidden,
           overflow: document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight,
           buttons,
         };
       })()`);
       if ((size && size.some((value, index) => value !== details.viewport[index])) ||
-          !details.shell || !details.art || !details.hidden || details.overflow || !details.buttons.every(Boolean)) {
+          !details.shell || !details.art || !details.hidden || !details.toastHidden || details.overflow || !details.buttons.every(Boolean)) {
         throw new Error(`全屏${asset}结算布局异常：${JSON.stringify(details)}`);
       }
     }
@@ -611,6 +612,13 @@ async function main() {
     await waitFor(async () => await visible("game"), "注册后进入游戏");
     await waitFor(async () => await visible("menu-view"), "注册后显示标题菜单");
     await screenshot("ai-game-title-menu.png", "#menu-view");
+    const menuArt = await evaluate(`({
+      background: getComputedStyle(document.getElementById('menu-view')).backgroundImage,
+      placeholders: document.querySelectorAll('.title-reactor,.title-station,.title-drone').length,
+    })`);
+    if (!menuArt.background.includes("main-menu-bg.png") || menuArt.placeholders) {
+      throw new Error(`主菜单背景图或占位机偶不符合预期：${JSON.stringify(menuArt)}`);
+    }
     if (await evaluate("document.getElementById('continue-btn').disabled")) throw new Error("新账号第 1 槽已有初始冒险，但继续游戏不可用");
     for (const [width, height, mobile] of [[1024, 600, false], [667, 375, true]]) {
       await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
@@ -794,6 +802,11 @@ async function main() {
       "战斗界面载入"
     );
     console.log("ok 固定剧情素材、全屏版式、逐字显示、点击补全文字与回车推进");
+    await waitFor(
+      () => evaluate("document.getElementById('hand-toggle').getAttribute('aria-expanded') === 'true'"),
+      "起手抽牌自动展开手牌"
+    );
+    await waitFor(() => evaluate("document.querySelectorAll('.draw-orb').length > 0"), "起手抽牌光点飞行");
     const initialHandCount = await evaluate(`({
       label: Number(document.getElementById('hand-count').textContent),
       cards: document.querySelectorAll('#hand .card').length,
@@ -813,6 +826,8 @@ async function main() {
       throw new Error(`战斗记录仍显示或挤占战场布局：${JSON.stringify(battleLogLayout)}`);
     }
     await evaluate("document.getElementById('hand-count').textContent = '0'; true;");
+    await click("#hand-toggle");
+    await waitFor(() => evaluate("getComputedStyle(document.getElementById('hand')).visibility === 'hidden'"), "手牌抽屉收起");
     await click("#hand-toggle");
     await waitFor(() => evaluate("document.getElementById('hand').clientHeight >= 190"), "手牌抽屉展开");
     const handStats = await evaluate(`(() => {
@@ -1775,11 +1790,11 @@ print(json.dumps(states))
         throw new Error(`第一张地图背景或标题异常：${JSON.stringify(check)}`);
       }
       if (check.mapType === "map2" &&
-          (!check.boardMap2 || !check.terrainImage.includes("deep-circuit-map"))) {
+          (!check.boardMap2 || !check.terrainImage.includes("borderlands-map"))) {
         throw new Error(`第二张地图背景或标题异常：${JSON.stringify(check)}`);
       }
       if (check.mapType === "map3" &&
-          (!check.boardMap3 || !check.terrainImage.includes("ocean-depths-map"))) {
+          (!check.boardMap3 || !check.terrainImage.includes("borderlands-map"))) {
         throw new Error(`第三张地图背景或标题异常：${JSON.stringify(check)}`);
       }
       return check;

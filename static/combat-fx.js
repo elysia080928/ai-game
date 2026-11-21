@@ -1,0 +1,40 @@
+"use strict";
+
+const COMBAT_FX = {
+  bean:       { pull: [0,-5,8,.83,1.05], thru: [-7,3,-12,1.06,1.13], end: [4,19,12,1.19,.85], cue: "pips", impact: "pixel", hit: "bounce", ink: "#adcfff" },
+  shell:      { pull: [0,-7,0,1.12,.83], thru: [0,4,0,1.18,1], end: [0,16,0,1.2,.94], cue: "plate", impact: "plates", hit: "brace", ink: "#bff1df" },
+  striker:    { pull: [-12,-9,-11,1,.84], thru: [11,7,14,1,1.08], end: [-5,39,-15,1.08,1.1], cue: "chevron", impact: "crosscut", hit: "skid", ink: "#ff97c3" },
+  twin_rail:  { pull: [0,0,0,1.12,.94], thru: [0,-7,0,1.04,.9], end: [0,-2,0,1.01,1], cue: "rail", path: "linear", impact: "rivet", hit: "brace", ink: "#9fe9ed" },
+  arc_drone:  { pull: [-8,-2,-14,.86,1.1], thru: [8,-1,15,1.1,.95], end: [0,8,0,1.14,1], cue: "bolt", path: "zigzag", impact: "static", hit: "phase", ink: "#8eeaff" },
+  heavy:      { pull: [0,-13,0,.91,1.12], thru: [0,-7,0,1,1.18], end: [0,32,4,1.29,.78], cue: "weight", impact: "fault", hit: "brace", ink: "#ffc482" },
+  scout:      { pull: [13,-6,17,.88,1], thru: [-16,14,-24,.97,1.12], end: [-8,25,-8,1,1], cue: "reticle", path: "arc", impact: "ticks", hit: "skid", ink: "#e9e7c7" },
+  worker:     { pull: [-9,-4,-19,.9,.96], thru: [-16,11,17,1.07,1.06], end: [12,22,31,1.12,.97], cue: "tool", impact: "cogs", hit: "bounce", ink: "#ebadff" },
+  guard:      { pull: [-8,-4,-8,1.1,.92], thru: [2,9,13,1.13,.97], end: [14,20,26,1.02,1.07], cue: "kite", impact: "ward", hit: "brace", ink: "#f6db81" },
+  flyer:      { pull: [-7,-11,-11,.91,1.03], thru: [-3,13,4,.78,1.18], end: [0,43,0,.84,1.21], cue: "exhaust", impact: "wake", hit: "skid", ink: "#ffd79a" },
+  double_claw:{ pull: [-14,-4,-23,1.15,.83], thru: [0,14,6,.97,1.14], end: [13,24,22,.89,1.12], cue: "pincer", impact: "rake", hit: "bounce", ink: "#ff9a8b" },
+  phase_flyer:{ pull: [9,-13,8,.63,1.14], thru: [-16,0,-9,.35,1.26], end: [-4,31,4,.96,1.09], cue: "gate", impact: "rift", hit: "phase", ink: "#a2ffeb" },
+  burst_beetle:{ pull: [0,-4,0,1.23,.75], thru: [-4,18,-6,.85,1.11], end: [3,23,11,1.1,1.06], cue: "spines", impact: "quills", hit: "bounce", ink: "#f9ad71" },
+  shield_moth:{ pull: [-8,-10,-9,1.25,.84], thru: [10,5,10,.68,1.1], end: [0,15,0,1.25,.94], cue: "wings", path: "arc", impact: "mesh", hit: "phase", ink: "#9dbdff" },
+  rail_guard: { pull: [5,-2,9,1.06,.97], thru: [-4,-11,-6,1.12,.82], end: [0,-1,0,1,1], cue: "rail-spike", path: "linear", impact: "pin", hit: "brace", ink: "#a8f6be" },
+  small_sentry:{ pull: [8,3,14,.9,.92], thru: [-11,-6,-15,.92,1.08], end: [4,-2,5,.97,1], cue: "needle", path: "linear", impact: "pinprick", hit: "bounce", ink: "#ffad9a" },
+  defender:   { pull: [5,-6,8,1.16,.87], thru: [-5,6,-7,1.24,.9], end: [0,14,0,1.26,.93], cue: "backstop", impact: "bracket", hit: "brace", ink: "#f5cb92" },
+  assault_sentry:{ pull: [12,-9,15,1,.9], thru: [-8,19,-12,.9,1.24], end: [0,36,6,1.18,1], cue: "jets", impact: "shatter", hit: "skid", ink: "#ffa188" },
+  fork_sentry:{ pull: [-5,-3,-10,1.05,1], thru: [8,-10,14,1.04,.91], end: [-2,-2,-4,1.03,1], cue: "fork", path: "zigzag", impact: "forkprint", hit: "brace", ink: "#ff9b83" },
+  wide_bulwark:{ pull: [0,-10,0,1.28,.82], thru: [0,6,0,1.37,.95], end: [0,21,0,1.32,1.05], cue: "treads", impact: "stamp", hit: "brace", ink: "#d2c9b0" },
+  double_striker:{ pull: [8,-9,12,.95,1], thru: [-12,2,-22,1.02,1.07], end: [6,29,8,1,1.1], cue: "blade", impact: "bladeprint", hit: "skid", ink: "#ffd481" },
+  reach_turret:{ pull: [-5,-4,-8,1.03,.94], thru: [2,-9,5,1.13,.84], end: [1,1,3,1.07,.98], cue: "tether", path: "beam", impact: "clamp", hit: "brace", ink: "#ffb77f" },
+  phase_hunter:{ pull: [-18,-3,-22,.72,1], thru: [19,10,19,.52,1.24], end: [7,36,7,1.06,.91], cue: "signal", impact: "split", hit: "phase", ink: "#ff9d9d" },
+  mine_beetle:{ pull: [0,-6,0,.79,1.24], thru: [10,8,26,.87,1.02], end: [-2,13,-16,1.23,.83], cue: "charge", impact: "fuse", hit: "bounce", ink: "#ffdd79" },
+  signal_jammer:{ pull: [0,-2,0,.92,1.05], thru: [-4,0,-5,1.1,.92], end: [0,0,0,1.08,.95], cue: "signal", path: "linear", impact: "interference", hit: "phase", ink: "#d6a1ff" },
+  drift_hunter:{ pull: [-19,-5,-31,.92,1], thru: [13,5,37,1.08,.88], end: [18,26,19,1.04,1.13], cue: "drift", impact: "skidmarks", hit: "skid", ink: "#c8ecff" },
+  null_anchor:{ pull: [0,0,0,.84,1.08], thru: [0,0,12,1.12,.85], end: [0,0,0,1.18,.89], cue: "orbit", path: "beam", impact: "lock", hit: "phase", ink: "#c2c0ff" },
+  siege_carrier:{ pull: [0,-13,0,1.12,.92], thru: [-4,-5,5,1.17,.96], end: [4,-7,-4,1.16,.82], cue: "ordnance", path: "arc", impact: "crater", hit: "brace", ink: "#ffc77f" },
+  mirror_core:{ pull: [0,-3,-13,.8,1.1], thru: [0,1,11,1.18,.87], end: [0,3,0,1.2,.98], cue: "lattice", path: "beam", impact: "spectrum", hit: "phase", ink: "#e7a9ff" },
+  mirror_drone:{ pull: [-12,-4,-12,.89,1], thru: [13,6,16,1.08,.92], end: [-3,18,-7,1,1.11], cue: "echo", impact: "phantom", hit: "phase", ink: "#b7baff" },
+};
+
+const COMBAT_COMMAND_FX = {
+  energy: { impact: "static", ink: "#a8daff" },
+  burst_beetle: { impact: "shrapnel", ink: COMBAT_FX.burst_beetle.ink },
+  mine_beetle: { impact: "detonation", ink: COMBAT_FX.mine_beetle.ink },
+};

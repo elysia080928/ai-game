@@ -161,7 +161,7 @@ def make_battle(
         b["deck"] = ordered + b["deck"]
     else:
         rng.shuffle(b["deck"])
-    _start_turn(b, rng)
+    b["_drawnUids"] = _start_turn(b, rng)
     _deploy_plan_turn(b, b["turn"])
     _fill_enemy_reserve(b, rng, include_next_turn=True)
     return b
@@ -171,7 +171,7 @@ def _start_turn(b, rng):
     b["turn"] += 1
     if b["turn"] == 1:
         b["energy"] = b["firstTurnEnergy"]
-        _draw_opening(b, rng)
+        drawn_uids = _draw_opening(b, rng)
         _log(b, f"第 1 回合：获得 {b['energy']} 点能量，抽取起手 {b['openingDraw']} 张")
     else:
         penalty = b["nextTurnEnergyPenalty"]
@@ -179,21 +179,28 @@ def _start_turn(b, rng):
         b["energy"] += 2
         if penalty:
             b["energy"] = max(0, b["energy"] - penalty)
-            _log(b, f"第 {b['turn']} 回合：获得 2 点能量（信号干扰 -{penalty}），抽 2 张")
+            _log(b, f"第 {b['turn']} 回合：获得 2 点能量（信号干扰 -{penalty}）")
         else:
-            _log(b, f"第 {b['turn']} 回合：获得 2 点能量，抽 2 张")
-        _draw_regular(b, rng, 2)
-    if b["phase"] != "over" and len(b["hand"]) > MAX_HAND:
-        b["phase"] = "discard"
-        _log(b, f"手牌超过 {MAX_HAND} 张，请选择弃牌")
+            _log(b, f"第 {b['turn']} 回合：获得 2 点能量")
+        draw_count = _available_draw_count(b, 2)
+        required = max(0, len(b["hand"]) + draw_count - MAX_HAND)
+        if required:
+            b["pendingDraw"] = draw_count
+            b["phase"] = "discard"
+            drawn_uids = []
+            _log(b, f"抽牌前请先弃掉 {required} 张手牌")
+        else:
+            drawn_uids = _draw_regular(b, rng, draw_count)
+            _log(b, f"抽取 {len(drawn_uids)} 张")
     _check_stalemate(b)
+    return drawn_uids
 
 
 def _draw_opening(b, rng):
     if "tutorialStep" in b:
         b["hand"] = b["deck"][:OPENING_DRAW]
         del b["deck"][:OPENING_DRAW]
-        return
+        return [card["uid"] for card in b["hand"]]
     eligible = [c for c in b["deck"] if _card_cost(b, c) < HIGH_COST]
     count = min(b["openingDraw"], len(eligible))
     if count < 1:
@@ -218,21 +225,30 @@ def _draw_opening(b, rng):
     uids = {c["uid"] for c in picks}
     b["deck"] = [c for c in b["deck"] if c["uid"] not in uids]
     b["hand"].extend(picks)
+    return [card["uid"] for card in picks]
 
 
 def _drawable(b, card):
     return b["turn"] >= HIGH_COST_UNLOCK_TURN or _card_cost(b, card) < HIGH_COST
 
 
+def _available_draw_count(b, count):
+    return min(count, sum(1 for card in b["deck"] if _drawable(b, card)))
+
+
 def _draw_regular(b, rng, count):
+    drawn_uids = []
     for _ in range(count):
         for index, card in enumerate(b["deck"]):
             if _drawable(b, card):
-                b["hand"].append(b["deck"].pop(index))
+                drawn = b["deck"].pop(index)
+                b["hand"].append(drawn)
+                drawn_uids.append(drawn["uid"])
                 break
         else:
             _log(b, "牌堆中已无符合条件可抽的牌，本次少抽")
-            return
+            return drawn_uids
+    return drawn_uids
 
 
 def _require_playable(b):
@@ -371,12 +387,12 @@ def _resolve_on_destroy(b, unit):
                 continue
             seen.add(target["uid"])
             _log(b, f"{unit['name']} 爆炸，对 {target['name']} 造成 1 点伤害")
-            _damage_unit(b, target, 1)
+            _damage_unit(b, target, 1, effect="burst_beetle")
     elif trigger == "hit_opposite":
         target = b["board"][side][unit["column"] - 1]
         if target is not None:
             _log(b, f"{unit['name']} 爆炸，对 {target['name']} 造成 2 点伤害")
-            _damage_unit(b, target, 2)
+            _damage_unit(b, target, 2, effect="mine_beetle")
 
 
 def _guard_for(b, target):
@@ -407,12 +423,21 @@ def _anchor_blocks(b, target):
     return False
 
 
-def _damage_unit(b, unit, amount):
-    if amount > 0 and unit.get("shield", 0) > 0:
+def _combat_event(b, kind, **fields):
+    if "combatEvents" in b:
+        b["combatEvents"].append({"kind": kind, **fields})
+
+
+def _damage_unit(b, unit, amount, effect=None):
+    blocked = amount > 0 and unit.get("shield", 0) > 0
+    if blocked:
         unit["shield"] -= 1
         amount = max(0, amount - 1)
         _log(b, f"{unit['name']} 的护盾抵消 1 点伤害")
+    applied = min(unit["hp"], amount)
     unit["hp"] -= amount
+    _combat_event(b, "damage", target=unit["uid"], side=unit["side"], hp=max(0, unit["hp"]),
+                  amount=applied, blocked=blocked, effect=effect)
     if unit["hp"] <= 0:
         unit["hp"] = 0
         _remove_unit(b, unit)
@@ -513,7 +538,7 @@ def play_command(b, uid, target_uid):
         _log(b, f"紧急维修为 {target['name']} 恢复 {healed} 点生命")
     else:
         _log(b, f"闪电脉冲对 {target['name']} 造成 {stats['damage']} 点伤害")
-        _damage_unit(b, target, stats["damage"])
+        _damage_unit(b, target, stats["damage"], effect="energy")
     _advance_tutorial(b)
     _check_stalemate(b)
 
@@ -536,7 +561,12 @@ def recycle(b, column):
 def discard(b, uids):
     if b["phase"] != "discard":
         raise GameError("当前不需要弃牌")
-    required = len(b["hand"]) - MAX_HAND
+    pending_draw = b.get("pendingDraw")
+    required = (
+        max(0, len(b["hand"]) + pending_draw - MAX_HAND)
+        if pending_draw is not None
+        else len(b["hand"]) - MAX_HAND
+    )
     if len(uids) != required:
         raise GameError(f"需要弃掉 {required} 张牌")
     if len(set(uids)) != len(uids):
@@ -547,9 +577,14 @@ def discard(b, uids):
     chosen = set(uids)
     b["hand"] = [c for c in b["hand"] if c["uid"] not in chosen]
     b["discarded"].extend(uids)
+    drawn_uids = []
+    if pending_draw is not None:
+        drawn_uids = _draw_regular(b, random.Random(), pending_draw)
+        b.pop("pendingDraw", None)
     b["phase"] = "player"
     _log(b, f"弃掉 {len(uids)} 张牌")
     _check_stalemate(b)
+    return drawn_uids
 
 
 def end_turn(b, rng=None):
@@ -562,7 +597,7 @@ def end_turn(b, rng=None):
     _enemy_phase(b, rng)
     if b["phase"] == "over":
         return
-    _start_turn(b, rng)
+    b["_drawnUids"] = _start_turn(b, rng)
     _fill_enemy_reserve(b, rng, include_next_turn=True)
     _advance_tutorial(b)
 
@@ -585,14 +620,27 @@ def _target_columns(unit):
 def _resolve_attack(b, attacker, column):
     defender_side = "enemy" if attacker["side"] == "player" else "player"
     target = b["board"][defender_side][column - 1]
-    if target is not None and _has_ability(attacker, "flying") and not _has_ability(target, "reach"):
+    if (
+        target is not None
+        and _has_ability(attacker, "flying")
+        and not _has_ability(target, "flying")
+        and not _has_ability(target, "reach")
+    ):
         _log(b, f"{attacker['name']} 飞越 {column} 列")
         target = None
-    if target is not None and _has_ability(target, "flying") and not _has_ability(attacker, "reach"):
+    if (
+        target is not None
+        and _has_ability(target, "flying")
+        and not _has_ability(attacker, "reach")
+        and not _has_ability(attacker, "flying")
+    ):
         _log(b, f"{attacker['name']} 无法攻击飞行单位 {target['name']}")
+        _combat_event(b, "attack", source=attacker["uid"], target=target["uid"],
+                      side=defender_side, column=column, pattern=attacker.get("attackPattern", "forward"), miss=True)
         return
     if target is None and attacker.get("attackPattern") == "sweep":
         return
+    intercepted = False
     if target is not None and attacker["side"] == "enemy":
         guard = _guard_for(b, target)
         if guard is not None and _anchor_blocks(b, target):
@@ -601,22 +649,33 @@ def _resolve_attack(b, attacker, column):
             guard["guard"] -= 1
             _log(b, f"{guard['name']} 替 {target['name']} 拦截攻击")
             target = guard
+            intercepted = True
+    _combat_event(b, "attack", source=attacker["uid"], target=target["uid"] if target else None,
+                  side=defender_side, column=column, pattern=attacker.get("attackPattern", "forward"),
+                  leader=target is None, miss=False, intercepted=intercepted)
     if target is not None:
         _log(b, f"{attacker['name']} 攻击 {target['name']}，造成 {attacker['atk']} 点伤害")
         _damage_unit(b, target, attacker["atk"])
         return
-    hp_key = "enemy" if attacker["side"] == "player" else "player"
-    b["hp"][hp_key] -= attacker["atk"]
+    applied = min(b["hp"][defender_side], attacker["atk"])
+    b["hp"][defender_side] -= attacker["atk"]
     who = "敌方领袖" if attacker["side"] == "player" else "己方领袖"
     _log(b, f"{attacker['name']} 攻击{who}，造成 {attacker['atk']} 点伤害")
-    if b["hp"][hp_key] <= 0:
-        b["hp"][hp_key] = 0
+    if b["hp"][defender_side] <= 0:
+        b["hp"][defender_side] = 0
         (_win if attacker["side"] == "player" else _lose)(b)
+    _combat_event(b, "damage", target=None, side=defender_side, leader=True,
+                  hp=b["hp"][defender_side], amount=applied)
 
 
 def _attack_columns(b, unit):
     """一次多列攻击；横扫对同一宽体单位只结算一次。"""
     defender = "enemy" if unit["side"] == "player" else "player"
+    if unit.get("attackPattern") == "sweep" and not any(b["board"][defender]):
+        if b["phase"] != "over" and _on_board(b, unit):
+            _combat_event(b, "attack", source=unit["uid"], target=None,
+                          side=defender, column=unit["column"], miss=True)
+        return
     swept = set()
     for column in _target_columns(unit):
         if b["phase"] == "over":
@@ -888,7 +947,11 @@ def view(b):
             "enemy": [_unit_view(u) for u in b["board"]["enemy"]],
         },
         "deckCount": len(b["deck"]),
-        "discardRequired": max(0, len(b["hand"]) - MAX_HAND) if b["phase"] == "discard" else 0,
+        "discardRequired": (
+            max(0, len(b["hand"]) + b["pendingDraw"] - MAX_HAND)
+            if "pendingDraw" in b
+            else max(0, len(b["hand"]) - MAX_HAND)
+        ) if b["phase"] == "discard" else 0,
         "nextTurnEnergyPenalty": b["nextTurnEnergyPenalty"],
         "forecast": [
             {
