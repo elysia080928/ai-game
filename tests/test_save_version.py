@@ -59,13 +59,16 @@ from app.main import app  # noqa: E402
 
 def test_save_version():
     migrated = sqlite3.connect(DB_PATH)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 3
     assert migrated.execute("SELECT state, revision, updated_at FROM save_slots WHERE user_id=900 AND slot_id=1").fetchone() == (legacy_state, 7, 11)
     assert migrated.execute("SELECT state, updated_at FROM battle_slots WHERE user_id=900 AND slot_id=1").fetchone() == ("legacy-battle", 12)
     assert migrated.execute("SELECT slot_id, state FROM save_backups WHERE user_id=900").fetchone() == (1, "legacy-backup")
     assert migrated.execute("SELECT COUNT(*) FROM saves").fetchone()[0] == 0
     assert migrated.execute("SELECT COUNT(*) FROM battles").fetchone()[0] == 0
+    assert migrated.execute("SELECT 1 FROM cg_backfill_pending WHERE user_id=900").fetchone() is not None
     migrated.close()
+    with api.db.LOCK:
+        assert [item["id"] for item in api._cg_gallery(900)] == ["opening_sky"]
     restored, changed = api.game.migrate_state(json.loads(api.db.conn().execute(
         "SELECT state FROM save_slots WHERE user_id=900 AND slot_id=1"
     ).fetchone()[0]))
@@ -76,6 +79,14 @@ def test_save_version():
     )
     assert response.status_code == 200, response.text
     assert response.json()["state"]["phase"] == "map_story"
+    assert client.get("/api/cg-gallery").json()["items"] == []
+    unlocked = client.post("/api/cg-unlock", json={"cgId": "opening_sky"})
+    assert unlocked.status_code == 200 and [item["id"] for item in unlocked.json()["items"]] == ["opening_sky"]
+    assert client.post("/api/cg-unlock", json={"cgId": "missing"}).status_code == 400
+    assert client.post("/api/game/new", json={"slotId": 2}).status_code == 200
+    assert [item["id"] for item in client.get("/api/cg-gallery").json()["items"]] == ["opening_sky"]
+    assert client.post("/api/save-slots/1/select", json={}).status_code == 200
+    assert client.delete("/api/save-slots/2").status_code == 200
     assert client.post("/api/battle/start").status_code == 400
     response = client.post("/api/story/advance", json={"skip": False})
     assert response.status_code == 200, response.text
@@ -388,6 +399,82 @@ def test_save_version():
         assert reset_client.get("/api/state").json()["state"]["phase"] == "map"
         assert reset_client.post("/api/battle/return").status_code == 400
         assert reset_client.post("/api/battle/start").status_code == 400
+        for result, final_slot in (("win", 2), ("lose", 3)):
+            response = reset_client.post(
+                "/api/game/new", json={"slotId": final_slot, "confirm": True}
+            )
+            assert response.status_code == 200, response.text
+            final_state = game_data.new_state(48, "map3", version=2)
+            final_boss = next(
+                node for node in final_state["mapData"]["nodes"] if node.get("role") == "boss"
+            )
+            final_state["nodeId"] = final_boss["id"]
+            final_state["phase"] = "node"
+            final_state["pendingChallenges"] = [{"id": "supply_sentry", "rewardSeed": 44}]
+            api._save_state(reset_user_id, final_state, final_slot)
+            api._make_battle(reset_user_id, final_state, final_slot)
+
+            original_end_turn = api.B.end_turn
+
+            def finish_fixture_battle(battle_state, rng=None):
+                battle_state["phase"] = "over"
+                battle_state["result"] = result
+
+            api.B.end_turn = finish_fixture_battle
+            try:
+                ended = reset_client.post("/api/battle/end")
+            finally:
+                api.B.end_turn = original_end_turn
+
+            assert ended.status_code == 200, ended.text
+            assert ended.json()["battle"] is None
+            assert ended.json()["state"]["phase"] == "after_story"
+            assert ended.json()["state"]["story"]["text"] == "请输入文本"
+            assert ended.json()["state"]["story"]["background"] == "cg/cg-dungeon-warning-turn-v2.png"
+            assert reset_client.get("/api/state").json()["state"]["story"]["line"] == 1
+            assert reset_client.post("/api/battle/start").status_code == 400
+            assert reset_client.post("/api/battle/retry").status_code == 400
+
+            if result == "win":
+                assert ended.json()["state"]["gold"] == 10
+                assert ended.json()["state"]["pendingChallenge"] is None
+                continued = reset_client.post("/api/story/advance", json={})
+                assert continued.status_code == 200
+                assert continued.json()["state"]["phase"] == "elite_reward"
+                reward = reset_client.post("/api/elite/reward/leave")
+                assert reward.status_code == 200 and reward.json()["state"]["phase"] == "transition"
+            else:
+                assert ended.json()["state"]["gold"] == 0
+                assert ended.json()["state"]["pendingChallenge"] is None
+                continued = reset_client.post("/api/story/advance", json={})
+                assert continued.status_code == 200
+                assert continued.json()["state"]["phase"] == "transition"
+
+            completed = reset_client.post("/api/story/advance", json={"transition": True})
+            assert completed.status_code == 200
+            assert completed.json()["state"]["phase"] == "complete"
+            assert completed.json()["state"]["completed"].count(final_boss["id"]) == 1
+
+        stale_state = game_data.new_state(49, "map3", version=2)
+        stale_boss = next(
+            node for node in stale_state["mapData"]["nodes"] if node.get("role") == "boss"
+        )
+        stale_state["nodeId"] = stale_boss["id"]
+        stale_state["phase"] = "node"
+        api._save_state(reset_user_id, stale_state, 1)
+        stale_battle = api._make_battle(reset_user_id, stale_state, 1)
+        stale_battle["phase"] = "over"
+        stale_battle["result"] = "lose"
+        api._store_battle(reset_user_id, stale_battle, 1)
+        selected = reset_client.post("/api/save-slots/1/select", json={})
+        assert selected.status_code == 200, selected.text
+        resumed = reset_client.post("/api/battle/start")
+        assert resumed.status_code == 200, resumed.text
+        assert resumed.json()["battle"] is None
+        assert resumed.json()["state"]["story"]["background"] == "cg/cg-dungeon-warning-turn-v2.png"
+        assert api.db.conn().execute(
+            "SELECT COUNT(*) FROM battle_slots WHERE user_id = ? AND slot_id = 1", (reset_user_id,)
+        ).fetchone()[0] == 0
         reset_client.close()
 
         # 过期会话不能再读取存档。

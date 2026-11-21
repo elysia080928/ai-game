@@ -43,6 +43,9 @@ let musicStarted = false;
 let activeMusic = null;
 let activeMusicTrack = "";
 let musicRequest = 0;
+let galleryItems = null;
+let galleryLoading = false;
+let storyCgUnlockKey = "";
 const openingCgFallback = new Set();
 const openingCgSeenFallback = new Set();
 
@@ -52,6 +55,14 @@ const MUSIC_FILES = {
   event: "/assets/music/%E5%A5%87%E9%81%87.mp3",
   battle: "/assets/music/%E6%88%98%E6%96%97.mp3",
   cg: "/assets/music/CG.mp3",
+};
+const CG_ID_BY_BACKGROUND = {
+  "cg/晴空伸手.png": "opening_sky",
+  "cg/篝火星河.png": "campfire_stars",
+  "cg/林间篝火.png": "campfire_woods",
+  "cg/篝火抱膝.png": "campfire_knees",
+  "cg/篝火暖手.png": "campfire_warm",
+  "cg/cg-dungeon-warning-turn-v2.png": "boss_warning",
 };
 
 const NODE_TYPES = {
@@ -132,6 +143,57 @@ function clearOpeningCgPending(slotId = activeSlot) {
   } catch (_) { /* 内存中的标记仍会清除 */ }
 }
 
+async function unlockCg(cgId) {
+  const data = await api("/api/cg-unlock", { cgId });
+  galleryItems = data.items || galleryItems || [];
+  if (screen === "gallery") renderGallery();
+}
+
+async function loadGallery() {
+  if (galleryLoading || !username) return;
+  galleryLoading = true;
+  try {
+    const data = await api("/api/cg-gallery");
+    galleryItems = data.items || [];
+    renderGallery();
+  } catch (error) {
+    galleryItems = null;
+    $("cg-gallery").className = "gallery-empty";
+    $("cg-gallery").innerHTML = `<span class="gallery-mark" aria-hidden="true">!</span><h2>记忆读取失败</h2><p>${esc(error.message)}</p>`;
+  } finally {
+    galleryLoading = false;
+  }
+}
+
+function renderGallery() {
+  const root = $("cg-gallery");
+  if (!root || galleryItems === null) return;
+  if (!galleryItems.length) {
+    root.className = "gallery-empty";
+    root.innerHTML = '<span class="gallery-mark" aria-hidden="true">✦</span><h2>尚无已解锁的 CG</h2><p>故事中的记忆将在解锁后收录于此。</p>';
+    return;
+  }
+  root.className = "gallery-grid";
+  root.innerHTML = galleryItems.map((item) => `
+    <button class="gallery-card" type="button" data-cg-path="${esc(item.path)}" data-cg-title="${esc(item.title)}" data-cg-chapter="${esc(item.chapter)}">
+      <img src="/assets/${encodeURI(item.path)}" alt="${esc(item.title)}" draggable="false">
+      <span class="gallery-card-caption"><span class="gallery-card-title">${esc(item.title)}</span><span class="gallery-card-chapter">${esc(item.chapter)}</span></span>
+    </button>`).join("");
+}
+
+function openCgPreview(item) {
+  $("cg-preview-title").textContent = `${item.title} · ${item.chapter}`;
+  const image = $("cg-preview-image");
+  image.src = `/assets/${encodeURI(item.path)}`;
+  image.alt = item.title;
+  showDialog($("cg-preview"), $("cg-preview-close"));
+}
+
+function closeCgPreview() {
+  hideDialog($("cg-preview"));
+  $("cg-preview-image").removeAttribute("src");
+}
+
 function openingCgVisible() {
   return screen === "game" && state?.phase === "map_story" && hasOpeningCgPending();
 }
@@ -140,6 +202,7 @@ function desiredMusicTrack() {
   if (screen !== "game") return "menu";
   if (openingCgVisible()) return "cg";
   if (!state || state.complete) return "menu";
+  if (state.story?.background === "black" || state.story?.background?.startsWith("cg/")) return "cg";
   if (state.phase === "map" || state.phase === "transition") return "event";
   if (["map_story", "before_story", "after_story"].includes(state.phase)) return "story";
   if (state.phase === "elite_reward" || state.node?.type === "battle") return "battle";
@@ -274,6 +337,7 @@ function apply(data) {
       storyLineKey = "";
       storyCharacters = [];
       storyVisibleCharacters = 0;
+      storyCgUnlockKey = "";
     }
     const previousNode = state && state.node ? state.node.id : null;
     const nextNode = data.state.node ? data.state.node.id : null;
@@ -351,6 +415,7 @@ function render() {
     storyLineKey = "";
     storyCharacters = [];
     storyVisibleCharacters = 0;
+    storyCgUnlockKey = "";
   }
   const loggedIn = !!username;
   $("auth").hidden = loggedIn;
@@ -383,6 +448,7 @@ function render() {
   }
   if (screen === "gallery") {
     $("cg-view").hidden = false;
+    renderGallery();
     return;
   }
   if (screen !== "game" || !state) {
@@ -529,6 +595,15 @@ function finishStoryTyping() {
   const options = state.story.options || [];
   $("story-options").hidden = options.length === 0;
   $("story-continue-hint").hidden = options.length > 0;
+  const background = state.story.background;
+  const cgId = CG_ID_BY_BACKGROUND[background];
+  const unlockKey = cgId || "";
+  if (cgId && unlockKey !== storyCgUnlockKey) {
+    storyCgUnlockKey = unlockKey;
+    unlockCg(cgId).catch(() => {
+      if (storyCgUnlockKey === unlockKey) storyCgUnlockKey = "";
+    });
+  }
 }
 
 function advanceStoryFromScene() {
@@ -544,7 +619,18 @@ function renderStory() {
     return;
   }
   $("story-view").hidden = false;
-  $("story-panel").className = "story-panel";
+  const panel = $("story-panel");
+  const background = story.background || "";
+  const cgBackground = background.startsWith("cg/");
+  const cgScene = cgBackground || background === "black";
+  panel.className = cgScene ? "story-panel story-cg" : "story-panel";
+  panel.style.backgroundImage = cgBackground
+    ? `url("${encodeURI(`/assets/${background}`)}")`
+    : background === "black" ? "none" : "";
+  panel.style.backgroundSize = cgScene ? "contain" : "";
+  panel.style.backgroundPosition = cgScene ? "center" : "";
+  panel.style.backgroundRepeat = cgScene ? "no-repeat" : "";
+  panel.style.backgroundColor = cgScene ? "#000" : "";
   $("story-node").textContent = story.title || `${state.node.name} · ${state.phase === "after_story" ? "后日谈" : "前日谈"}`;
   $("story-speaker").textContent = story.speaker;
   $("story-text").setAttribute("aria-label", story.text);
@@ -665,6 +751,7 @@ function onTransitionMessage(event) {
 
 async function advanceStory(skip) {
   if (busy) return;
+  if (skip && state?.story && storyVisibleCharacters < storyCharacters.length) finishStoryTyping();
   busy = true;
   try {
     const data = await api("/api/story/advance", { skip });
@@ -1242,7 +1329,7 @@ function cardFaceHtml(card) {
   const isUnit = card.type === "unit";
   const description = isUnit
     ? traitText(card) || "机偶单位 · 自动攻击对位目标"
-    : card.effectText || (card.heal != null ? `恢复 ${card.heal} 点领袖生命` : card.damage != null ? `造成 ${card.damage} 点伤害` : "战术指令");
+    : card.effectText || (card.heal != null ? `修复 ${card.heal} 点机偶生命` : card.damage != null ? `造成 ${card.damage} 点伤害` : "战术指令");
   const level = card.level ?? card.targetLevel ?? 1;
   const stats = isUnit
     ? `<span class="card-stat attack"><small>攻</small><b>${card.atk ?? "—"}</b></span>
@@ -2226,6 +2313,8 @@ async function logout() {
   username = "";
   screen = "auth";
   saveSlots = [];
+  galleryItems = null;
+  galleryLoading = false;
   render();
 }
 
@@ -2332,7 +2421,14 @@ function bindEvents() {
   $("menu-btn").addEventListener("click", openMenu);
   $("continue-btn").addEventListener("click", () => continueGame());
   $("slots-open").addEventListener("click", () => { screen = "slots"; render(); });
-  $("gallery-open").addEventListener("click", () => { screen = "gallery"; render(); });
+  $("gallery-open").addEventListener("click", () => {
+    screen = "gallery";
+    galleryItems = null;
+    $("cg-gallery").className = "gallery-empty";
+    $("cg-gallery").innerHTML = '<span class="gallery-mark" aria-hidden="true">✦</span><h2>正在读取记忆</h2>';
+    render();
+    loadGallery();
+  });
   $("settings-open").addEventListener("click", openSettings);
   $("settings-close").addEventListener("click", () => hideDialog($("settings-panel")));
   $("settings-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
@@ -2346,9 +2442,31 @@ function bindEvents() {
     else if (button.dataset.slotAction === "new") startNewGame(slotId);
     else if (button.dataset.slotAction === "delete") deleteSaveSlot(slotId);
   });
-  $("opening-cg-continue").addEventListener("click", () => {
-    clearOpeningCgPending();
-    render();
+  $("opening-cg-continue").addEventListener("click", async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      await unlockCg("opening_sky");
+      clearOpeningCgPending();
+      render();
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      busy = false;
+    }
+  });
+  $("cg-preview-close").addEventListener("click", closeCgPreview);
+  $("cg-gallery").addEventListener("click", (event) => {
+    const card = event.target.closest("[data-cg-path]");
+    if (!card || !galleryItems) return;
+    openCgPreview({
+      path: card.dataset.cgPath,
+      title: card.dataset.cgTitle,
+      chapter: card.dataset.cgChapter,
+    });
+  });
+  $("cg-preview").addEventListener("click", (event) => {
+    if (event.target === $("cg-preview")) closeCgPreview();
   });
   document.querySelectorAll("[data-menu-back]").forEach((button) => button.addEventListener("click", openMenu));
   $("settings-panel").addEventListener("click", (event) => {
@@ -2361,6 +2479,7 @@ function bindEvents() {
       advanceStoryFromScene();
     }
     if (event.key === "Escape" && !$("settings-panel").hidden) hideDialog($("settings-panel"));
+    if (event.key === "Escape" && !$("cg-preview").hidden) closeCgPreview();
   });
   $("discard-panel").querySelector(".modal").addEventListener("keydown", trapDialogFocus);
   $("result-panel").querySelector(".result-dialog").addEventListener("keydown", trapDialogFocus);

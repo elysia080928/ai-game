@@ -4,8 +4,8 @@
       "name": "豆丁机器人",
       "type": "unit",
       "levels": [
-        {"cost": 1, "atk": 15, "hp": 2},
-        {"cost": 1, "atk": 15, "hp": 3}
+        {"cost": 1, "atk": 1, "hp": 2},
+        {"cost": 1, "atk": 1, "hp": 3}
       ]
     },
     "shell": {
@@ -183,6 +183,7 @@
         "description": "下一场战斗首回合 1 列出现突击哨兵；胜利后额外三选一及 10 金币。",
         "extraEnemy": "assault_sentry",
         "column": 1,
+        "energyPenalty": 0,
         "reward": 10
       }
     ]
@@ -634,6 +635,20 @@
       {"speaker": "爱", "text": "静海档案就在前方，那里封存着很久以前的信号与记忆。"},
       {"speaker": "爱", "text": "无论里面记录了什么，我都想和你一起找到答案。我们从地图开始吧。"}
     ],
+    "finalEventAfterStory": [
+      {"speaker": "爱", "text": "今晚我守夜。你放心睡吧，听到动静我会叫醒你。", "background": "cg/篝火星河.png"},
+      {"speaker": "你", "text": "你真的不用休息吗？", "background": "cg/篝火星河.png"},
+      {"speaker": "爱", "text": "我可以闭目整理记忆。今晚我想守着篝火，也守着你。", "background": "cg/篝火星河.png"},
+      {"speaker": "你", "text": "那我安心睡一会儿。等我醒来，你还会在这里吗？", "background": "cg/篝火星河.png"},
+      {"speaker": "你", "text": "我合上眼，任由篝火声渐渐远去。", "background": "black"},
+      {"speaker": "你", "text": "醒来时，林间的篝火还亮着。爱坐在火边，双眼轻轻合着。", "background": "cg/林间篝火.png"},
+      {"speaker": "你", "text": "我放轻脚步走近。她仍闭着眼，像是在安静地休息。", "background": "cg/篝火抱膝.png"},
+      {"speaker": "你", "text": "爱。", "background": "cg/篝火抱膝.png"},
+      {"speaker": "爱", "text": "嗯？……我刚才在回忆一些过去的事。", "background": "cg/篝火暖手.png"},
+      {"speaker": "你", "text": "那些回忆，有没有让你难过？", "background": "cg/篝火暖手.png"},
+      {"speaker": "爱", "text": "有一点。但更多时候，我会想到和你一起走过的路。那些记忆让我觉得，过去没有把我困住。", "background": "cg/篝火暖手.png"},
+      {"speaker": "你", "text": "那就把今晚也记下来。以后想起它，你就知道我一直在你身边。", "background": "cg/篝火暖手.png"}
+    ],
     "templates": {
       "boss3": {
         "type": "battle",
@@ -644,11 +659,7 @@
           {"speaker": "爱", "text": "我不想让你替我承担这个选择。只要和我并肩站在这里，就已经足够了。", "background": "battle"}
         ],
         "after": [
-          {"speaker": "爱", "text": "重置停下来了。那些记忆还在，我记得你，也记得一路上每一次选择。"},
-          {"speaker": "爱", "text": "可档案也告诉我，维持这份记忆会耗尽我的核心。再往前，我就无法继续陪你了。"},
-          {"speaker": "爱", "text": "别替我难过。我曾经只是一段等待执行的程序，后来我遇见了你，学会了在离别之前也认真地爱一个人。"},
-          {"speaker": "爱", "text": "潮汐会带走信号，但不会抹掉我们走过的路。谢谢你救我，也让我有机会救你。"},
-          {"speaker": "爱", "text": "这次让我自己走完最后一段吧。再见了，我最珍惜的人。"}
+          {"speaker": "爱", "text": "请输入文本", "background": "cg/cg-dungeon-warning-turn-v2.png"}
         ]
       }
     }

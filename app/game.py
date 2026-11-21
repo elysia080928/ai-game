@@ -169,8 +169,11 @@ GROWTH_LAYOUTS = {
     ),
 }
 GROWTH_LAYOUTS["map3"] = GROWTH_LAYOUTS["map2"]
+THIRD_MAP_FINAL_EVENT_COLUMN = max(
+    index for index, (kind, _) in enumerate(GROWTH_LAYOUTS["map3"]) if kind == "event"
+)
 SUPPLY_ROUNDS = 2
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 OLD_NODE_ORDER = ["battle1", "recruit", "adventure", "battle2"]
 VALID_PHASES = ("map_story", "before_story", "node", "after_story", "transition", "map", "elite_reward", "complete")
 
@@ -1412,6 +1415,11 @@ def current_node(state):
     return _map_nodes(state).get(state.get("nodeId"))
 
 
+def is_final_boss(state):
+    node = current_node(state)
+    return current_map_type(state) == "map3" and node is not None and node.get("role") == "boss"
+
+
 def story_lines(state):
     if state["phase"] == "map_story":
         return MAPS[current_map_type(state)]["openingStory"]
@@ -1421,6 +1429,12 @@ def story_lines(state):
     if state["phase"] == "before_story":
         return node["before"]
     if state["phase"] == "after_story":
+        if (
+            current_map_type(state) == "map3"
+            and node.get("role") == "event"
+            and node.get("column") == THIRD_MAP_FINAL_EVENT_COLUMN
+        ):
+            return [*node["after"], *THIRD_MAP_CONFIG["finalEventAfterStory"]]
         return node["after"]
     return []
 
@@ -1477,6 +1491,17 @@ def _after_story_done(state):
     node = current_node(state)
     state["storyLine"] = 0
     state["nodeData"] = {}
+    if is_final_boss(state):
+        challenge_reward = state.get("pendingChallengeReward")
+        state["pendingChallengeReward"] = None
+        if challenge_reward:
+            _start_challenge_reward(state, challenge_reward)
+            return
+        if node["id"] not in state["completed"]:
+            state["completed"].append(node["id"])
+        state["phase"] = "transition"
+        state["transitionTarget"] = "complete"
+        return
     if node["next"]:
         state["phase"] = "map"
     elif current_map_type(state) == "map1":
@@ -1512,7 +1537,7 @@ def _normalize(state):
         if node is None:
             raise GameError("存档节点无效")
         if state["phase"] in ("before_story", "after_story"):
-            lines = node["before"] if state["phase"] == "before_story" else node["after"]
+            lines = story_lines(state)
             _skip_invisible(state, lines)
             if state["storyLine"] >= len(lines):
                 if state["phase"] == "before_story":
@@ -1648,6 +1673,25 @@ def confirm_battle_result(state):
         finish_node(state, node["id"])
 
 
+def finish_final_boss_battle(state, result):
+    node = current_node(state)
+    if not is_final_boss(state) or state["phase"] != "node":
+        raise GameError("当前不是最终 Boss 战斗")
+    if result not in ("win", "lose"):
+        raise GameError("最终 Boss 战斗结果无效")
+    if result == "win":
+        state["gold"] += ENCOUNTERS[node["encounter"]]["reward"]["gold"]
+        state["pendingChallengeReward"] = settle_challenges(state)
+    else:
+        state["pendingChallenges"] = []
+        state["pendingChallengeReward"] = None
+    state["pendingDrawBonus"] = 0
+    state["phase"] = "after_story"
+    state["storyLine"] = 0
+    state["nodeData"] = {}
+    _normalize(state)
+
+
 def _start_challenge_reward(state, reward):
     state["phase"] = "elite_reward"
     state["storyLine"] = 0
@@ -1663,6 +1707,13 @@ def _after_card_reward(state, node):
     state["pendingChallengeReward"] = None
     if isinstance(pending, dict) and pending.get("source") == "challenge":
         _start_challenge_reward(state, pending)
+        return
+    if is_final_boss(state):
+        if node["id"] not in state["completed"]:
+            state["completed"].append(node["id"])
+        state["phase"] = "transition"
+        state["transitionTarget"] = "complete"
+        state["nodeData"] = {}
         return
     state["phase"] = "node"
     finish_node(state, node["id"])
@@ -2760,7 +2811,7 @@ def _effect_text(stats):
     if stats["type"] != "command":
         return ""
     if stats.get("heal") is not None:
-        return f"恢复 {stats['heal']} 点生命"
+        return f"修复 {stats['heal']} 点机偶生命"
     if stats.get("damage") is not None:
         return f"造成 {stats['damage']} 点伤害"
     return ""
@@ -3536,6 +3587,8 @@ def migrate_state(state):
             card["uid"] = card_uid
         seen_uids.add(card_uid)
 
+    if version < SCHEMA_VERSION and state.get("phase") == "after_story" and is_final_boss(state):
+        state["storyLine"] = 0
     state["schemaVersion"] = SCHEMA_VERSION
     _normalize(state)
     after = json.dumps(state, sort_keys=True, ensure_ascii=False)

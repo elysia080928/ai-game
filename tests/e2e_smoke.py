@@ -231,19 +231,27 @@ def play_loop(client, battle):
                 break
         if placed:
             continue
-        battle = client.ok("/api/battle/end", {})["battle"]
+        response = client.ok("/api/battle/end", {})
+        if response["battle"] is None:
+            return {"phase": "finalized", "result": "finalized"}
+        battle = response["battle"]
     raise AssertionError("战斗没有在合理回合内结束")
 
 
 def win_battle(client, encounter_id, expected_hand=6):
+    state = client.state()
+    final_boss = state["mapType"] == "map3" and state["node"]["role"] == "boss"
+    start_path = "/api/battle/start" if final_boss else "/api/battle/reset"
     for attempt in range(8):
-        battle = client.ok("/api/battle/reset", {})["battle"]
+        battle = client.ok(start_path, {})["battle"]
         assert battle["turn"] == 1 and battle["energy"] == 4, battle
         assert len(battle["hand"]) == expected_hand, (expected_hand, len(battle["hand"]))
         assert battle_forecast(battle) == expected_forecast(encounter_id), (attempt, battle["forecast"])
         if battle.get("tutorial"):
             battle = client.ok("/api/battle/tutorial", {"skip": True})["battle"]
         battle = play_loop(client, battle)
+        if battle["phase"] == "finalized":
+            return
         if battle["result"] == "win":
             client.ok("/api/battle/confirm", {})
             return

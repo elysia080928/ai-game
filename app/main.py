@@ -20,6 +20,16 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
 TRUST_PROXY = os.environ.get("TRUST_PROXY", "0") == "1"
 MAX_BODY_BYTES = 64 * 1024
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+CG_CATALOG = (
+    {"id": "opening_sky", "title": "晴空伸手", "chapter": "序章", "path": "cg/晴空伸手.png"},
+    {"id": "campfire_stars", "title": "篝火星河", "chapter": "第三章 · 静海档案", "path": "cg/篝火星河.png"},
+    {"id": "campfire_woods", "title": "林间篝火", "chapter": "第三章 · 静海档案", "path": "cg/林间篝火.png"},
+    {"id": "campfire_knees", "title": "篝火抱膝", "chapter": "第三章 · 静海档案", "path": "cg/篝火抱膝.png"},
+    {"id": "campfire_warm", "title": "篝火暖手", "chapter": "第三章 · 静海档案", "path": "cg/篝火暖手.png"},
+    {"id": "boss_warning", "title": "海渊警告", "chapter": "第三章 · 静海档案", "path": "cg/cg-dungeon-warning-turn-v2.png"},
+)
+CG_BY_ID = {item["id"]: item for item in CG_CATALOG}
+CG_BY_PATH = {item["path"]: item["id"] for item in CG_CATALOG}
 
 app = FastAPI(title="AI Game MVP")
 db.init()
@@ -51,6 +61,10 @@ class AuthBody(BaseModel):
 class StoryBody(BaseModel):
     skip: bool = False
     transition: bool = False
+
+
+class CgUnlockBody(BaseModel):
+    cgId: str = Field(min_length=1, max_length=64)
 
 
 class DeployBody(BaseModel):
@@ -345,6 +359,70 @@ def _set_active_slot(user, slot_id):
     user["slot"] = slot_id
 
 
+def _cg_ids_from_state(state):
+    ids = set()
+    story = game.public_state(state).get("story")
+    if story and story.get("background") in CG_BY_PATH:
+        ids.add(CG_BY_PATH[story["background"]])
+    if state.get("phase") in ("map_story", "before_story", "after_story"):
+        lines = game.story_lines(state)
+        for line in lines[: max(0, state.get("storyLine", 0))]:
+            cg_id = CG_BY_PATH.get(line.get("background"))
+            if cg_id:
+                ids.add(cg_id)
+    map_type = game.current_map_type(state)
+    if map_type in ("map2", "map3"):
+        ids.add("opening_sky")
+    if map_type == "map3":
+        nodes = state.get("mapData", {}).get("nodes", [])
+        completed = set(state.get("completed") or [])
+        final_event = {
+            node["id"] for node in nodes
+            if node.get("role") == "event" and node.get("column") == game.THIRD_MAP_FINAL_EVENT_COLUMN
+        }
+        if completed & final_event:
+            ids.update({"campfire_stars", "campfire_woods", "campfire_knees", "campfire_warm"})
+        if any(node.get("role") == "boss" and node["id"] in completed for node in nodes):
+            ids.add("boss_warning")
+    return ids
+
+
+def _ensure_cg_backfill(user_id):
+    pending = db.conn().execute(
+        "SELECT 1 FROM cg_backfill_pending WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if pending is None:
+        return
+    ids = {"opening_sky"}
+    rows = db.conn().execute(
+        "SELECT state FROM save_slots WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    for row in rows:
+        try:
+            state, _ = game.migrate_state(json.loads(row["state"]))
+        except (ValueError, B.GameError, KeyError, TypeError, AttributeError):
+            continue
+        ids.update(_cg_ids_from_state(state))
+    now = time.time()
+    for cg_id in ids & CG_BY_ID.keys():
+        db.conn().execute(
+            "INSERT OR IGNORE INTO cg_unlocks(user_id, cg_id, unlocked_at) VALUES (?, ?, ?)",
+            (user_id, cg_id, now),
+        )
+    db.conn().execute("DELETE FROM cg_backfill_pending WHERE user_id = ?", (user_id,))
+    db.conn().commit()
+
+
+def _cg_gallery(user_id):
+    _ensure_cg_backfill(user_id)
+    unlocked = {
+        row["cg_id"] for row in db.conn().execute(
+            "SELECT cg_id FROM cg_unlocks WHERE user_id = ?", (user_id,)
+        )
+    }
+    return [dict(item) for item in CG_CATALOG if item["id"] in unlocked]
+
+
 @app.post("/api/register")
 def register(body: AuthBody, request: Request, response: Response):
     auth.rate_limit(f"register:{_client_ip(request)}", 5, 60)
@@ -418,6 +496,25 @@ def get_state(user=Depends(current_user)):
 @app.get("/api/save-slots")
 def get_save_slots(user=Depends(current_user)):
     return _save_slots(user)
+
+
+@app.get("/api/cg-gallery")
+def get_cg_gallery(user=Depends(current_user)):
+    with db.LOCK:
+        return {"items": _cg_gallery(user["id"])}
+
+
+@app.post("/api/cg-unlock")
+def unlock_cg(body: CgUnlockBody, user=Depends(current_user)):
+    if body.cgId not in CG_BY_ID:
+        raise B.GameError("未知 CG")
+    with db.LOCK:
+        db.conn().execute(
+            "INSERT OR IGNORE INTO cg_unlocks(user_id, cg_id, unlocked_at) VALUES (?, ?, ?)",
+            (user["id"], body.cgId, time.time()),
+        )
+        db.conn().commit()
+        return {"items": _cg_gallery(user["id"])}
 
 
 @app.post("/api/save-slots/{slot_id}/select")
@@ -599,6 +696,20 @@ def _battle_response(state, battle_state, drawn_uids=None):
     return response
 
 
+def _finish_final_boss_result(user_id, state, slot_id, battle_state):
+    if (
+        not game.is_final_boss(state)
+        or battle_state is None
+        or battle_state.get("phase") != "over"
+        or battle_state.get("result") not in ("win", "lose")
+    ):
+        return None
+    game.finish_final_boss_battle(state, battle_state["result"])
+    _save_state(user_id, state, slot_id)
+    _clear_battle(user_id, slot_id)
+    return {"state": game.public_state(state), "battle": None}
+
+
 def _abandon_lost_challenge(state, user_id, slot_id):
     previous = _load_battle(user_id, slot_id)
     if (
@@ -616,6 +727,9 @@ def battle_start(user=Depends(current_user)):
         state = _load_state(user["id"], user["slot"])
         node = game.current_node(state)
         battle_state = _load_battle(user["id"], user["slot"])
+        finalized = _finish_final_boss_result(user["id"], state, user["slot"], battle_state)
+        if finalized:
+            return finalized
         if (
             battle_state is None
             or state["phase"] != "node"
@@ -631,6 +745,13 @@ def battle_start(user=Depends(current_user)):
 def battle_reset(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
+        if game.is_final_boss(state):
+            battle_state = _load_battle(user["id"], user["slot"])
+            finalized = _finish_final_boss_result(user["id"], state, user["slot"], battle_state)
+            if finalized:
+                return finalized
+            if battle_state is not None:
+                raise B.GameError("最终 Boss 战不能重置")
         _abandon_lost_challenge(state, user["id"], user["slot"])
         battle_state = _make_battle(user["id"], state, user["slot"])
         return _battle_response(state, battle_state)
@@ -697,14 +818,23 @@ def battle_end(user=Depends(current_user)):
         B.end_turn(battle_state, rng=random.Random())
         events = battle_state.pop("combatEvents")
         drawn_uids = battle_state.pop("_drawnUids", [])
-        _store_battle(user["id"], battle_state, user["slot"])
-        return {**_battle_response(state, battle_state, drawn_uids), "combatEvents": events}
+        response = _finish_final_boss_result(user["id"], state, user["slot"], battle_state)
+        if response is None:
+            _store_battle(user["id"], battle_state, user["slot"])
+            response = _battle_response(state, battle_state, drawn_uids)
+        return {**response, "combatEvents": events}
 
 
 @app.post("/api/battle/retry")
 def battle_retry(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
+        battle_state = _load_battle(user["id"], user["slot"])
+        finalized = _finish_final_boss_result(user["id"], state, user["slot"], battle_state)
+        if finalized:
+            return finalized
+        if game.is_final_boss(state) and battle_state is not None:
+            raise B.GameError("最终 Boss 战不能重试")
         _abandon_lost_challenge(state, user["id"], user["slot"])
         battle_state = _make_battle(user["id"], state, user["slot"])
         return _battle_response(state, battle_state)
@@ -715,6 +845,9 @@ def battle_return(user=Depends(current_user)):
     with db.LOCK:
         state = _load_state(user["id"], user["slot"])
         battle_state = _current_battle(user["id"], state, user["slot"])
+        finalized = _finish_final_boss_result(user["id"], state, user["slot"], battle_state)
+        if finalized:
+            return finalized
         if battle_state.get("phase") != "over" or battle_state.get("result") != "lose":
             raise B.GameError("只有战败后可以返回地图")
         _abandon_lost_challenge(state, user["id"], user["slot"])
@@ -732,6 +865,9 @@ def battle_confirm(user=Depends(current_user)):
         if node is not None and node["id"] in state["completed"]:
             return {"state": game.public_state(state), "battle": None}
         battle_state = _current_battle(user["id"], state, user["slot"])
+        finalized = _finish_final_boss_result(user["id"], state, user["slot"], battle_state)
+        if finalized:
+            return finalized
         if battle_state["phase"] != "over":
             raise B.GameError("战斗尚未结束")
         if battle_state["result"] != "win":

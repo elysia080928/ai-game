@@ -7,7 +7,7 @@ import threading
 
 DATA_DIR = pathlib.Path(os.environ.get("DATA_DIR", "data")).resolve()
 DB_PATH = DATA_DIR / "game.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 LOCK = threading.RLock()
 _conn = None
 
@@ -71,6 +71,15 @@ def init():
             updated_at REAL NOT NULL,
             PRIMARY KEY(user_id, slot_id)
         );
+        CREATE TABLE IF NOT EXISTS cg_unlocks (
+            user_id INTEGER NOT NULL,
+            cg_id TEXT NOT NULL,
+            unlocked_at REAL NOT NULL,
+            PRIMARY KEY(user_id, cg_id)
+        );
+        CREATE TABLE IF NOT EXISTS cg_backfill_pending (
+            user_id INTEGER PRIMARY KEY
+        );
         """
     )
     columns = {
@@ -96,6 +105,10 @@ def init():
         )
         _conn.execute("DELETE FROM saves")
         _conn.execute("DELETE FROM battles")
+        if version < 3:
+            _conn.execute(
+                "INSERT OR IGNORE INTO cg_backfill_pending(user_id) SELECT id FROM users"
+            )
         _conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         _conn.commit()
     _conn.commit()

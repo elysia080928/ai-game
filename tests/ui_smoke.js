@@ -269,6 +269,46 @@ async function main() {
       }
     }
 
+    async function checkStoryCgBackgrounds() {
+      const backgrounds = [
+        "cg/篝火星河.png", "black", "cg/林间篝火.png",
+        "cg/篝火抱膝.png", "cg/篝火暖手.png",
+      ];
+      const result = await evaluate(`(() => {
+        const savedState = state;
+        const scenes = ${JSON.stringify(backgrounds)};
+        const details = scenes.map((background) => {
+          state = {
+            ...savedState,
+            phase: 'after_story',
+            story: {title:'篝火剧情',speaker:'爱',text:'请输入文本',line:1,total:1,background},
+          };
+          renderStory();
+          const panel = document.getElementById('story-panel');
+          const style = getComputedStyle(panel);
+          return {
+            background,
+            className: panel.className,
+            image: style.backgroundImage,
+            size: style.backgroundSize,
+            color: style.backgroundColor,
+            portraitHidden: getComputedStyle(document.querySelector('.story-portrait')).display === 'none',
+            text: document.getElementById('story-text').getAttribute('aria-label'),
+          };
+        });
+        state = savedState;
+        render();
+        return details;
+      })()`);
+      if (result.length !== backgrounds.length || result.some((scene, index) => {
+        if (scene.text !== "请输入文本" || !scene.className.includes("story-cg") || !scene.portraitHidden) return true;
+        if (scene.background === "black") return scene.image !== "none" || scene.color !== "rgb(0, 0, 0)";
+        return !scene.image.includes(encodeURI(scene.background)) || scene.size !== "contain";
+      })) {
+        throw new Error(`剧情 CG/黑屏页面渲染异常：${JSON.stringify(result)}`);
+      }
+    }
+
     async function playClipToEnd(filename) {
       return evaluate(`(async () => {
         const token = crypto.randomUUID();
@@ -714,7 +754,8 @@ async function main() {
       throw new Error("重载后音量滑块没有恢复已保存值");
     }
     await click("#gallery-open");
-    if (!(await visible("cg-view")) || !(await evaluate("document.querySelector('.gallery-empty h2')?.textContent.includes('尚无')"))) {
+    await waitFor(() => evaluate("document.querySelector('.gallery-empty h2')?.textContent.includes('尚无')"), "CG 空状态加载");
+    if (!(await visible("cg-view"))) {
       throw new Error("CG 空状态未显示");
     }
     await click("#cg-view [data-menu-back]");
@@ -752,8 +793,26 @@ async function main() {
     await clickTrusted("#continue-btn");
     await waitFor(() => visible("opening-cg-view"), "刷新后恢复开场 CG");
     await click("#opening-cg-continue");
+    await waitFor(() => evaluate("document.getElementById('opening-cg-view').hidden"), "开场 CG 解锁完成");
     await waitForStory("CG 后继续初始冒险");
     await assertMusicTrack("story");
+    await checkStoryCgBackgrounds();
+    await click("#menu-btn");
+    await waitFor(() => visible("menu-view"), "开场 CG 后返回主菜单");
+    await click("#gallery-open");
+    await waitFor(() => evaluate("document.querySelectorAll('.gallery-card').length === 1"), "开场 CG 写入画廊");
+    const galleryCard = await evaluate(`(() => {
+      const card = document.querySelector('.gallery-card');
+      const image = card?.querySelector('img');
+      return { title: card?.dataset.cgTitle, loaded: !!image && image.complete && image.naturalWidth > 0 };
+    })()`);
+    if (galleryCard.title !== "晴空伸手" || !galleryCard.loaded) throw new Error(`开场 CG 画廊卡片异常：${JSON.stringify(galleryCard)}`);
+    await click(".gallery-card");
+    await waitFor(() => evaluate("!document.getElementById('cg-preview').hidden"), "CG 大图预览");
+    await waitFor(() => evaluate("document.getElementById('cg-preview-image').complete && document.getElementById('cg-preview-image').naturalWidth > 0"), "CG 大图加载");
+    await click("#cg-preview-close");
+    await waitFor(() => evaluate("document.getElementById('cg-preview').hidden"), "关闭 CG 大图预览");
+    await click("#cg-view [data-menu-back]");
     const openingProgress = await evaluate("({phase: state.phase, line: state.story?.line, title: state.story?.title})");
     if (openingProgress.phase !== "map_story" || openingProgress.line !== 1 || !openingProgress.title.includes("序幕")) {
       throw new Error(`开场 CG 后未进入章节开场剧情：${JSON.stringify(openingProgress)}`);
@@ -1515,6 +1574,7 @@ async function main() {
     }
 
     if (!endedEarly && !noEnemy) {
+    await waitFor(() => evaluate("!busy && battle?.phase === 'player'"), "等待技能牌拖动目标回合");
     const repairBefore = await evaluate(`({
       energy: Number(document.getElementById('energy').textContent),
       hand: document.querySelectorAll('#hand .card').length,
@@ -1603,6 +1663,7 @@ async function main() {
     }
 
     async function deployAll() {
+      await waitFor(() => evaluate("!busy && battle?.phase === 'player'"), "部署回合就绪");
       for (let index = 0; index < 6; index += 1) {
         const handBefore = await evaluate("document.querySelectorAll('#hand .card').length");
         const deployed = await evaluate(`(() => {

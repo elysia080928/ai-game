@@ -840,6 +840,111 @@ def test_third_map_structure():
         }
 
 
+def test_map3_final_event_appends_resumable_campfire_story():
+    state = G.new_state(17, "map3", version=2)
+    final_events = [
+        node for node in state["mapData"]["nodes"]
+        if node.get("role") == "event" and node.get("column") == G.THIRD_MAP_FINAL_EVENT_COLUMN
+    ]
+    assert len(final_events) == 2
+    expected_backgrounds = [
+        "cg/篝火星河.png",
+        "cg/篝火星河.png",
+        "cg/篝火星河.png",
+        "cg/篝火星河.png",
+        "black",
+        "cg/林间篝火.png",
+        "cg/篝火抱膝.png",
+        "cg/篝火抱膝.png",
+        "cg/篝火暖手.png",
+        "cg/篝火暖手.png",
+        "cg/篝火暖手.png",
+        "cg/篝火暖手.png",
+    ]
+
+    for node in final_events:
+        current = copy.deepcopy(state)
+        current["nodeId"] = node["id"]
+        current["phase"] = "after_story"
+        current["storyLine"] = len(node["after"])
+        for background in expected_backgrounds:
+            assert G.public_state(current)["story"]["background"] == background
+            G.advance_story(current)
+            current, _ = G.migrate_state(json.loads(json.dumps(current, ensure_ascii=False)))
+        assert current["phase"] == "map"
+
+    earlier_event = next(
+        node for node in state["mapData"]["nodes"]
+        if node.get("role") == "event" and node.get("column") < G.THIRD_MAP_FINAL_EVENT_COLUMN
+    )
+    state["nodeId"] = earlier_event["id"]
+    state["phase"] = "after_story"
+    assert G.story_lines(state) == earlier_event["after"]
+
+    map2 = G.new_state(17, "map2", version=2)
+    map2_event = next(node for node in map2["mapData"]["nodes"] if node.get("role") == "event")
+    map2["nodeId"] = map2_event["id"]
+    map2["phase"] = "after_story"
+    assert G.story_lines(map2) == map2_event["after"]
+
+
+def test_final_boss_win_and_loss_end_after_warning_cg():
+    for result in ("win", "lose"):
+        state = G.new_state(23, "map3", version=2)
+        boss = next(node for node in state["mapData"]["nodes"] if node.get("role") == "boss")
+        state["nodeId"] = boss["id"]
+        state["phase"] = "node"
+        state["gold"] = 7
+        state["pendingChallenges"] = [{"id": "supply_sentry", "rewardSeed": 91}]
+        state["pendingDrawBonus"] = 1
+
+        G.finish_final_boss_battle(state, result)
+        assert state["phase"] == "after_story"
+        assert boss["id"] not in state["completed"]
+        assert state["pendingDrawBonus"] == 0
+        if result == "win":
+            assert state["gold"] == 17
+            assert state["pendingChallenges"] == []
+            assert state["pendingChallengeReward"]["source"] == "challenge"
+        else:
+            assert state["gold"] == 7
+            assert state["pendingChallenges"] == []
+            assert state["pendingChallengeReward"] is None
+
+        state, _ = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+        story = G.public_state(state)["story"]
+        assert story["text"] == "请输入文本"
+        assert story["background"] == "cg/cg-dungeon-warning-turn-v2.png"
+        G.advance_story(state)
+
+        if result == "win":
+            assert state["phase"] == "elite_reward"
+            assert G.public_state(state)["eliteReward"]["source"] == "challenge"
+            G.elite_reward_leave(state)
+        assert state["phase"] == "transition"
+        assert state["transitionTarget"] == "complete"
+        assert state["completed"].count(boss["id"]) == 1
+        G.finish_transition(state)
+        assert state["phase"] == "complete"
+        assert G.public_state(state)["complete"] is True
+
+
+def test_existing_final_boss_aftermath_save_migrates_to_warning_cg():
+    state = G.new_state(31, "map3", version=2)
+    boss = next(node for node in state["mapData"]["nodes"] if node.get("role") == "boss")
+    state["nodeId"] = boss["id"]
+    state["phase"] = "after_story"
+    state["storyLine"] = 3
+    state["completed"] = [boss["id"]]
+    state["schemaVersion"] = G.SCHEMA_VERSION - 1
+
+    restored, changed = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+    assert changed
+    assert restored["schemaVersion"] == G.SCHEMA_VERSION
+    assert restored["storyLine"] == 0
+    assert G.public_state(restored)["story"]["background"] == "cg/cg-dungeon-warning-turn-v2.png"
+
+
 def test_map_battle_balance_and_unique_encounters():
     for map_type in ("map1", "map2", "map3"):
         for seed in range(60):

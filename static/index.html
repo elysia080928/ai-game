@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>机偶回路 · MVP</title>
-  <link rel="stylesheet" href="/style.css?v=20261121-cg-audio">
+  <link rel="stylesheet" href="/style.css?v=20261121-cg-gallery">
 </head>
 <body>
   <div id="auth" class="screen auth-screen">
@@ -59,7 +59,7 @@
 
       <section id="cg-view" class="view menu-subview" hidden>
         <div class="subview-head"><div><p class="eyebrow">MEMORY GALLERY</p><h1>记忆回廊</h1></div><button class="ghost" data-menu-back>返回主菜单</button></div>
-        <div class="gallery-empty"><span class="gallery-mark" aria-hidden="true">✦</span><h2>尚无已解锁的 CG</h2><p>故事中的记忆将在解锁后收录于此。</p></div>
+        <div id="cg-gallery" class="gallery-empty"><span class="gallery-mark" aria-hidden="true">✦</span><h2>正在读取记忆</h2></div>
       </section>
 
       <section id="opening-cg-view" class="view opening-cg-view" hidden aria-labelledby="opening-cg-title">
@@ -364,6 +364,14 @@
       </div>
     </div>
 
+    <div class="overlay gallery-preview" id="cg-preview" hidden>
+      <div class="gallery-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="cg-preview-title">
+        <button id="cg-preview-close" class="ghost small gallery-preview-close" type="button" aria-label="关闭 CG 预览">关闭</button>
+        <p id="cg-preview-title" class="eyebrow"></p>
+        <img id="cg-preview-image" alt="" draggable="false">
+      </div>
+    </div>
+
     <div class="viewport-guard" id="orientation-guard" hidden>
       <div class="guard-terminal"><span class="guard-mark" aria-hidden="true">↻</span><h2>请横屏继续</h2><p>机偶回路的战术界面需要横向空间。</p></div>
     </div>
@@ -376,6 +384,6 @@
   <audio id="music-player-a" preload="auto" loop aria-hidden="true" tabindex="-1"></audio>
   <audio id="music-player-b" preload="auto" loop aria-hidden="true" tabindex="-1"></audio>
   <script src="/combat-fx.js?v=20261120"></script>
-  <script src="/app.js?v=20261121-cg-audio"></script>
+  <script src="/app.js?v=20261121-cg-gallery"></script>
 </body>
 </html>
