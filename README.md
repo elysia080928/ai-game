@@ -13,7 +13,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-打开 <http://127.0.0.1:8000> 并登录后会进入标题菜单。可继续当前会话最近使用的存档槽，或从三个账号存档槽中选择继续、新开或删除冒险；新账号的第 1 槽预置初始冒险。CG 页面目前为空，设置中的主音量会保存在当前浏览器，但尚未接入音频。数据库默认写入 `data/game.db`（已被 `.gitignore` 忽略）。
+打开 <http://127.0.0.1:8000> 并登录后会进入标题菜单。可继续当前会话最近使用的存档槽，或从三个账号存档槽中选择继续、新开或删除冒险；新账号的第 1 槽预置初始冒险。首次进入开场序幕和每次新开冒险都会播放开场 CG；CG 图库目前为空。背景音乐按菜单、剧情、奇遇、战斗和开场 CG 场景循环播放，主音量保存在当前浏览器。数据库默认写入 `data/game.db`（已被 `.gitignore` 忽略）。
 
 ## 测试
 
@@ -32,7 +32,7 @@ python tests/balance_sim.py        # 200 组固定种子/章节/类别，四类�
 ```bash
 uvicorn app.main:app --port 8099
 BASE_URL=http://127.0.0.1:8099 python tests/e2e_smoke.py     # API 三张地图完整路线：遭遇预告、分支关闭、精英三选一、重登不重抽、章节自动衔接、存档恢复、账号隔离与完成画面
-BASE_URL=http://127.0.0.1:8099 node tests/ui_smoke.js        # 无头 Chromium：标题菜单、三槽存档覆盖/删除、CG 空状态、音量保存、教程/战斗/地图流程与刷新恢复、桌面/窄窗/手机布局
+BASE_URL=http://127.0.0.1:8099 node tests/ui_smoke.js        # 无头 Chromium：标题菜单、三槽存档覆盖/删除、开场 CG 与 CG 空状态、场景音乐和音量保存、教程/战斗/地图流程与刷新恢复、桌面/窄窗/手机布局
 ```
 
 UI 测试默认查找 Windows Edge；可用 `BROWSER_PATH`、`EDGE_PATH` 或 `CHROME_PATH` 指定其他 Chromium 浏览器路径。设置 `TUTORIAL_UI_ONLY=1` 可运行首战专项：真实鼠标拖动、各阶段推进、刷新恢复、桌面及横屏手机布局、获胜奖励和地图衔接。

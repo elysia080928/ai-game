@@ -39,6 +39,20 @@ let transitionKey = null;
 let transitionToken = null;
 let transitionStatus = null;
 let transitionTimer = null;
+let musicStarted = false;
+let activeMusic = null;
+let activeMusicTrack = "";
+let musicRequest = 0;
+const openingCgFallback = new Set();
+const openingCgSeenFallback = new Set();
+
+const MUSIC_FILES = {
+  menu: "/assets/music/%E4%B8%BB%E8%8F%9C%E5%8D%95.mp3",
+  story: "/assets/music/%E6%99%AE%E9%80%9A%E5%89%A7%E6%83%85.mp3",
+  event: "/assets/music/%E5%A5%87%E9%81%87.mp3",
+  battle: "/assets/music/%E6%88%98%E6%96%97.mp3",
+  cg: "/assets/music/CG.mp3",
+};
 
 const NODE_TYPES = {
   battle: "战斗",
@@ -74,6 +88,104 @@ function showToast(text) {
   toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
+}
+
+function openingCgKey(slotId = activeSlot) {
+  return `ai-game-opening-cg:${username}:${slotId}`;
+}
+
+function openingCgSeenKey(slotId = activeSlot) {
+  return `${openingCgKey(slotId)}:seen`;
+}
+
+function markOpeningCgPending(slotId = activeSlot) {
+  if (!username) return;
+  const key = openingCgKey(slotId);
+  openingCgFallback.add(key);
+  try {
+    localStorage.setItem(key, "1");
+    localStorage.removeItem(openingCgSeenKey(slotId));
+  } catch (_) { /* 刷新恢复不可用时仍可显示当前 CG */ }
+  openingCgSeenFallback.delete(openingCgSeenKey(slotId));
+}
+
+function hasOpeningCgPending(slotId = activeSlot) {
+  const key = openingCgKey(slotId);
+  if (openingCgFallback.has(key)) return true;
+  try { return localStorage.getItem(key) === "1"; } catch (_) { return false; }
+}
+
+function hasOpeningCgBeenSeen(slotId = activeSlot) {
+  const key = openingCgSeenKey(slotId);
+  if (openingCgSeenFallback.has(key)) return true;
+  try { return localStorage.getItem(key) === "1"; } catch (_) { return false; }
+}
+
+function clearOpeningCgPending(slotId = activeSlot) {
+  const key = openingCgKey(slotId);
+  openingCgFallback.delete(key);
+  const seenKey = openingCgSeenKey(slotId);
+  openingCgSeenFallback.add(seenKey);
+  try {
+    localStorage.removeItem(key);
+    localStorage.setItem(seenKey, "1");
+  } catch (_) { /* 内存中的标记仍会清除 */ }
+}
+
+function openingCgVisible() {
+  return screen === "game" && state?.phase === "map_story" && hasOpeningCgPending();
+}
+
+function desiredMusicTrack() {
+  if (screen !== "game") return "menu";
+  if (openingCgVisible()) return "cg";
+  if (!state || state.complete) return "menu";
+  if (state.phase === "map" || state.phase === "transition") return "event";
+  if (["map_story", "before_story", "after_story"].includes(state.phase)) return "story";
+  if (state.phase === "elite_reward" || state.node?.type === "battle") return "battle";
+  return state.node ? "event" : "menu";
+}
+
+function updateBackgroundMusic() {
+  const track = desiredMusicTrack();
+  document.body.dataset.musicTrack = track;
+  if (!musicStarted) return;
+
+  const players = [$("music-player-a"), $("music-player-b")];
+  if (activeMusicTrack === track && activeMusic) {
+    if (activeMusic.paused) activeMusic.play().catch(() => {});
+    return;
+  }
+
+  const next = activeMusic === players[0] ? players[1] : players[0];
+  if (next.dataset.track !== track) {
+    next.pause();
+    next.src = MUSIC_FILES[track];
+    next.dataset.track = track;
+    next.currentTime = 0;
+    next.load();
+  }
+  next.volume = Number($("master-volume").value) / 100;
+  const request = ++musicRequest;
+  next.play().then(() => {
+    if (request !== musicRequest) return;
+    if (desiredMusicTrack() !== track) {
+      next.pause();
+      updateBackgroundMusic();
+      return;
+    }
+    const previous = activeMusic;
+    activeMusic = next;
+    activeMusicTrack = track;
+    if (previous && previous !== next) previous.pause();
+  }).catch(() => {
+    if (request === musicRequest && next !== activeMusic) next.pause();
+  });
+}
+
+function startBackgroundMusic() {
+  musicStarted = true;
+  updateBackgroundMusic();
 }
 
 function missingPayload() {
@@ -183,6 +295,7 @@ function apply(data) {
       signalTarget = null;
     }
     state = data.state;
+    if (state.phase !== "map_story" && hasOpeningCgPending()) clearOpeningCgPending();
     if (state.phase !== "complete") {
       autoMap2 = false;
       autoMap3 = false;
@@ -201,7 +314,7 @@ function apply(data) {
 }
 
 function hideViews() {
-  ["menu-view", "save-slots-view", "cg-view", "transition-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "supply-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
+  ["menu-view", "save-slots-view", "cg-view", "opening-cg-view", "transition-view", "story-view", "map-view", "battle-view", "elite-reward-view", "recruit-view", "signal-view", "adventure-view", "drift-view", "recycle-view", "shop-view", "trial-view", "supply-view", "relay-view", "training-view", "complete-view"].forEach((id) => {
     $(id).hidden = true;
   });
 }
@@ -229,6 +342,7 @@ function renderSaveSlots() {
 }
 
 function render() {
+  updateBackgroundMusic();
   combatPlayback?.abort();
   if (screen !== "game" || !state || state.phase !== "transition") clearTransition();
   if (screen !== "game" || !state || !["map_story", "before_story", "after_story"].includes(state.phase)) {
@@ -275,6 +389,12 @@ function render() {
     screen = "menu";
     $("menu-view").hidden = false;
     renderSaveSlots();
+    return;
+  }
+
+  if (openingCgVisible()) {
+    $("opening-cg-view").hidden = false;
+    $("opening-cg-continue").focus();
     return;
   }
 
@@ -731,6 +851,7 @@ async function act(path, body) {
   const previousBattle = battle;
   try {
     const data = await api(path, body);
+    if (path === "/api/game/new") markOpeningCgPending(activeSlot);
     selectedUid = null;
     if (path === "/api/battle/recycle") recycleMode = false;
     if (path.startsWith("/api/shop/")) shopTarget = null;
@@ -2086,6 +2207,7 @@ async function loginOrRegister(path) {
     const data = await api(path, payload);
     $("password").value = "";
     username = data.username;
+    if (path === "/api/register") markOpeningCgPending(1);
     state = null;
     battle = null;
     screen = "menu";
@@ -2131,6 +2253,9 @@ async function continueGame(slotId = activeSlot) {
   try {
     const data = await api(`/api/save-slots/${slotId}/select`, {});
     activeSlot = data.activeSlot;
+    if (data.state?.phase === "map_story" && data.state.story?.line === 1 && !hasOpeningCgBeenSeen(slotId)) {
+      markOpeningCgPending(slotId);
+    }
     screen = "game";
     apply(data);
   } catch (error) { showToast(error.message); }
@@ -2143,6 +2268,7 @@ async function startNewGame(slotId) {
   try {
     const data = await api("/api/game/new", { slotId, confirm: true });
     activeSlot = slotId;
+    markOpeningCgPending(slotId);
     screen = "game";
     apply(data);
   } catch (error) { showToast(error.message); }
@@ -2165,6 +2291,8 @@ function setVolume(value) {
   $("master-volume").value = String(volume);
   $("volume-value").value = `${volume}%`;
   $("volume-value").textContent = `${volume}%`;
+  $("music-player-a").volume = volume / 100;
+  $("music-player-b").volume = volume / 100;
   try { localStorage.setItem("ai-game-master-volume", String(volume)); } catch (_) { /* 浏览器存储不可用时仍可调节 */ }
 }
 
@@ -2173,6 +2301,9 @@ function openSettings() {
 }
 
 function bindEvents() {
+  document.addEventListener("pointerdown", startBackgroundMusic, true);
+  document.addEventListener("keydown", startBackgroundMusic, true);
+  document.addEventListener("click", startBackgroundMusic, true);
   window.addEventListener("message", onTransitionMessage);
   $("transition-retry").addEventListener("click", () => startTransitionPlayback(state?.transitionTarget));
   $("transition-continue").addEventListener("click", completeTransition);
@@ -2214,6 +2345,10 @@ function bindEvents() {
     if (button.dataset.slotAction === "continue") continueGame(slotId);
     else if (button.dataset.slotAction === "new") startNewGame(slotId);
     else if (button.dataset.slotAction === "delete") deleteSaveSlot(slotId);
+  });
+  $("opening-cg-continue").addEventListener("click", () => {
+    clearOpeningCgPending();
+    render();
   });
   document.querySelectorAll("[data-menu-back]").forEach((button) => button.addEventListener("click", openMenu));
   $("settings-panel").addEventListener("click", (event) => {

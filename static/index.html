@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>机偶回路 · MVP</title>
-  <link rel="stylesheet" href="/style.css?v=20261120-aircraft-direction">
+  <link rel="stylesheet" href="/style.css?v=20261121-cg-audio">
 </head>
 <body>
   <div id="auth" class="screen auth-screen">
@@ -60,6 +60,16 @@
       <section id="cg-view" class="view menu-subview" hidden>
         <div class="subview-head"><div><p class="eyebrow">MEMORY GALLERY</p><h1>记忆回廊</h1></div><button class="ghost" data-menu-back>返回主菜单</button></div>
         <div class="gallery-empty"><span class="gallery-mark" aria-hidden="true">✦</span><h2>尚无已解锁的 CG</h2><p>故事中的记忆将在解锁后收录于此。</p></div>
+      </section>
+
+      <section id="opening-cg-view" class="view opening-cg-view" hidden aria-labelledby="opening-cg-title">
+        <img class="opening-cg-image" src="/assets/cg/%E6%99%B4%E7%A9%BA%E4%BC%B8%E6%89%8B.png" alt="晴空下，爱向你伸出手" draggable="false">
+        <div class="opening-cg-dialogue" aria-live="polite">
+          <p class="opening-cg-speaker" id="opening-cg-title">爱</p>
+          <p>我一直以为，天空只是数据里的一片蓝。</p>
+          <p>把手给我吧，我们一起去看看真正的远方。</p>
+          <button id="opening-cg-continue" class="primary" type="button">继续</button>
+        </div>
       </section>
 
       <section id="transition-view" class="view" hidden aria-label="章节转场">
@@ -351,7 +361,6 @@
         <p class="eyebrow">SYSTEM</p><h2 id="settings-title">设置</h2>
         <label for="master-volume">主音量 <output id="volume-value" for="master-volume">100%</output></label>
         <input id="master-volume" type="range" min="0" max="100" step="1" value="100">
-        <p class="settings-note">当前版本暂无音频，音量设置会保存在此浏览器。</p>
       </div>
     </div>
 
@@ -364,7 +373,9 @@
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   </div>
 
+  <audio id="music-player-a" preload="auto" loop aria-hidden="true" tabindex="-1"></audio>
+  <audio id="music-player-b" preload="auto" loop aria-hidden="true" tabindex="-1"></audio>
   <script src="/combat-fx.js?v=20261120"></script>
-  <script src="/app.js?v=20261120-flying-combat-aircraft"></script>
+  <script src="/app.js?v=20261121-cg-audio"></script>
 </body>
 </html>

@@ -219,6 +219,56 @@ async function main() {
       return !(await evaluate(`document.getElementById(${JSON.stringify(id)}).hidden`));
     }
 
+    async function waitForStory(label) {
+      await waitFor(async () => await visible("story-view") || await visible("opening-cg-view"), label);
+      if (!(await visible("opening-cg-view"))) return;
+      await waitFor(() => evaluate(`(() => {
+        const image = document.querySelector('.opening-cg-image');
+        return image.complete && image.naturalWidth > 0;
+      })()`), "开场 CG 图片加载");
+      const openingCg = await evaluate(`(() => {
+        const image = document.querySelector('.opening-cg-image');
+        const view = document.getElementById('opening-cg-view').getBoundingClientRect();
+        const imageRect = image.getBoundingClientRect();
+        const dialogue = document.querySelector('.opening-cg-dialogue').getBoundingClientRect();
+        const button = document.getElementById('opening-cg-continue').getBoundingClientRect();
+        return {
+          loaded: image.complete && image.naturalWidth > 0,
+          fit: getComputedStyle(image).objectFit,
+          fitsViewport: Math.abs(view.width - innerWidth) < 1 && Math.abs(view.height - innerHeight) < 1 &&
+            imageRect.left >= view.left && imageRect.right <= view.right &&
+            dialogue.bottom <= view.bottom + 1 && button.bottom <= view.bottom + 1 &&
+            document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1,
+          track: document.body.dataset.musicTrack,
+          cgAsset: [...document.querySelectorAll('audio')].some(audio =>
+            audio.dataset.track === 'cg' && audio.src.includes('/assets/music/CG.mp3')),
+          looping: [...document.querySelectorAll('audio')].every(audio => audio.loop),
+        };
+      })()`);
+      if (!openingCg.loaded || openingCg.fit !== "contain" || !openingCg.fitsViewport || openingCg.track !== "cg" ||
+          !openingCg.cgAsset || !openingCg.looping) {
+        throw new Error(`开场 CG 或配乐状态异常：${JSON.stringify(openingCg)}`);
+      }
+      await assertMusicTrack("cg");
+      await click("#opening-cg-continue");
+      await waitFor(() => visible("story-view"), `${label}后进入序幕`);
+    }
+
+    async function assertMusicTrack(track) {
+      await waitFor(() => evaluate(`[...document.querySelectorAll('audio')].some(audio =>
+        audio.dataset.track === ${JSON.stringify(track)} && !audio.paused)`), `${track} 背景音乐开始播放`);
+      const state = await evaluate(`(() => ({
+        track: document.body.dataset.musicTrack,
+        assigned: [...document.querySelectorAll('audio')].some(audio => audio.dataset.track === ${JSON.stringify(track)}),
+        playing: [...document.querySelectorAll('audio')].some(audio => audio.dataset.track === ${JSON.stringify(track)} && !audio.paused),
+        looping: [...document.querySelectorAll('audio')].every(audio => audio.loop),
+        volume: [...document.querySelectorAll('audio')].every(audio => Math.abs(audio.volume - Number($('master-volume').value) / 100) < 0.001),
+      }))()`);
+      if (state.track !== track || !state.assigned || !state.playing || !state.looping || !state.volume) {
+        throw new Error(`背景音乐状态异常：${JSON.stringify(state)}，期望 ${track}`);
+      }
+    }
+
     async function playClipToEnd(filename) {
       return evaluate(`(async () => {
         const token = crypto.randomUUID();
@@ -258,7 +308,8 @@ async function main() {
       await command("Page.reload", {});
       await waitFor(() => visible("menu-view"), "刷新后标题菜单");
       await click("#continue-btn");
-      await waitFor(() => visible(viewId), label);
+      if (viewId === "story-view") await waitForStory(label);
+      else await waitFor(() => visible(viewId), label);
     }
 
     async function checkResultLayout(outcome, size) {
@@ -336,6 +387,19 @@ async function main() {
       if (!ok) throw new Error(`无法点击 ${selector}`);
     }
 
+    async function clickTrusted(selector) {
+      const point = await evaluate(`(() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        if (!element || element.disabled) return null;
+        const rect = element.getBoundingClientRect();
+        return {x: rect.left + rect.width / 2, y: rect.top + rect.height / 2};
+      })()`);
+      if (!point) throw new Error(`无法真实点击 ${selector}`);
+      await command("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+      await command("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...point });
+      await command("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...point });
+    }
+
     async function clickDialog(selector, accept) {
       const opened = new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -390,7 +454,7 @@ async function main() {
       await waitFor(()=>visible("menu-view"),"手机注册与主菜单");
       await command("Emulation.setDeviceMetricsOverride",{width:667,height:375,deviceScaleFactor:2,mobile:true});
       await click("#continue-btn");
-      await waitFor(()=>visible("story-view"),"手机继续冒险");
+      await waitForStory("手机继续冒险");
       for (const [width,height] of sizes) {
         await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:2,mobile:true});
         await sleep(250);
@@ -606,11 +670,12 @@ async function main() {
     await evaluate(`
       document.getElementById('username').value = ${JSON.stringify(username)};
       document.getElementById('password').value = 'test-pass-123';
-      document.getElementById('register-btn').click();
       true;
     `);
+    await clickTrusted("#register-btn");
     await waitFor(async () => await visible("game"), "注册后进入游戏");
     await waitFor(async () => await visible("menu-view"), "注册后显示标题菜单");
+    await assertMusicTrack("menu");
     await screenshot("ai-game-title-menu.png", "#menu-view");
     const menuArt = await evaluate(`({
       background: getComputedStyle(document.getElementById('menu-view')).backgroundImage,
@@ -656,8 +721,8 @@ async function main() {
     await click("#slots-open");
     const initialSlots = await evaluate("[...document.querySelectorAll('#save-slots .save-slot')].map((slot) => slot.classList.contains('empty'))");
     if (JSON.stringify(initialSlots) !== JSON.stringify([false, true, true])) throw new Error(`新账号存档槽状态异常：${JSON.stringify(initialSlots)}`);
-    await click('#save-slots [data-slot-action="new"][data-slot="2"]');
-    await waitFor(async () => await visible("story-view"), "空槽新游戏");
+    await clickTrusted('#save-slots [data-slot-action="new"][data-slot="2"]');
+    await waitForStory("空槽新游戏");
     await click("#menu-btn");
     await waitFor(async () => await visible("menu-view"), "返回主菜单");
     await click("#slots-open");
@@ -665,7 +730,7 @@ async function main() {
     await clickDialog('#save-slots [data-slot-action="new"][data-slot="2"]', false);
     if (!(await visible("save-slots-view"))) throw new Error("取消覆盖后离开了存档选择界面");
     await clickDialog('#save-slots [data-slot-action="new"][data-slot="2"]', true);
-    await waitFor(async () => await visible("story-view"), "确认覆盖已有存档");
+    await waitForStory("确认覆盖已有存档");
     await click("#menu-btn");
     await waitFor(async () => await visible("menu-view"), "覆盖后返回主菜单");
     await click("#slots-open");
@@ -674,13 +739,31 @@ async function main() {
     await clickDialog('#save-slots [data-slot-action="delete"][data-slot="2"]', true);
     await waitFor(() => evaluate("document.querySelector('#save-slots .save-slot:nth-child(2)').classList.contains('empty')"), "删除指定存档槽");
     await click("#save-slots-view [data-menu-back]");
-    await click("#continue-btn");
-    await waitFor(async () => await visible("story-view"), "继续初始冒险");
+    await clickTrusted("#continue-btn");
+    await waitFor(() => visible("opening-cg-view"), "首次进入预置冒险开场 CG");
+    await waitFor(() => evaluate(`(() => {
+      const image = document.querySelector('.opening-cg-image');
+      return image.complete && image.naturalWidth > 0;
+    })()`), "预置冒险 CG 图片加载");
+    await assertMusicTrack("cg");
+    await screenshot("ai-game-opening-cg.png", "#opening-cg-view");
+    await command("Page.reload");
+    await waitFor(() => visible("menu-view"), "刷新后返回标题菜单");
+    await clickTrusted("#continue-btn");
+    await waitFor(() => visible("opening-cg-view"), "刷新后恢复开场 CG");
+    await click("#opening-cg-continue");
+    await waitForStory("CG 后继续初始冒险");
+    await assertMusicTrack("story");
     const openingProgress = await evaluate("({phase: state.phase, line: state.story?.line, title: state.story?.title})");
     if (openingProgress.phase !== "map_story" || openingProgress.line !== 1 || !openingProgress.title.includes("序幕")) {
-      throw new Error(`新游戏未恢复在章节开场剧情：${JSON.stringify(openingProgress)}`);
+      throw new Error(`开场 CG 后未进入章节开场剧情：${JSON.stringify(openingProgress)}`);
     }
-    await reloadAndContinue("story-view", "刷新后恢复章节开场剧情");
+    await command("Page.reload", {});
+    await waitFor(() => visible("menu-view"), "刷新后返回标题菜单");
+    await clickTrusted("#continue-btn");
+    await waitFor(() => visible("story-view"), "继续已看过开场 CG 的存档");
+    if (await visible("opening-cg-view")) throw new Error("继续已看过开场 CG 的存档时重复播放了 CG");
+    await assertMusicTrack("story");
     if (await evaluate("state.phase !== 'map_story' || state.story?.line !== 1")) {
       throw new Error("刷新后未恢复章节开场剧情位置");
     }
@@ -783,6 +866,7 @@ async function main() {
     await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     await waitFor(() => evaluate("state.phase === 'map_story' && state.story?.line === 2"), "章节开场剧情按回车推进");
     await storyUntil("map-view");
+    await assertMusicTrack("event");
     const openingMap = await evaluate(`({
       phase: state.phase,
       available: state.map.available,
@@ -801,6 +885,7 @@ async function main() {
         (await evaluate("document.querySelectorAll('#hand .card').length")) > 0,
       "战斗界面载入"
     );
+    await assertMusicTrack("battle");
     console.log("ok 固定剧情素材、全屏版式、逐字显示、点击补全文字与回车推进");
     await waitFor(
       () => evaluate("document.getElementById('hand-toggle').getAttribute('aria-expanded') === 'true'"),
