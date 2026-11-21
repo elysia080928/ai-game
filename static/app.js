@@ -597,11 +597,10 @@ function finishStoryTyping() {
   $("story-continue-hint").hidden = options.length > 0;
   const background = state.story.background;
   const cgId = CG_ID_BY_BACKGROUND[background];
-  const unlockKey = cgId || "";
-  if (cgId && unlockKey !== storyCgUnlockKey) {
-    storyCgUnlockKey = unlockKey;
+  if (cgId && cgId !== storyCgUnlockKey) {
+    storyCgUnlockKey = cgId;
     unlockCg(cgId).catch(() => {
-      if (storyCgUnlockKey === unlockKey) storyCgUnlockKey = "";
+      if (storyCgUnlockKey === cgId) storyCgUnlockKey = "";
     });
   }
 }
