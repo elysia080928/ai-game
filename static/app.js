@@ -560,7 +560,7 @@ function updateViewportGuard(loggedIn = !!state) {
   $("orientation-guard").hidden = !loggedIn || !portrait;
   $("orientation-guard").querySelector("p").textContent = state && state.story
     ? "为了完整呈现场景、立绘和对白，请横向旋转设备。"
-    : "机偶回路的战术界面需要横向空间。";
+    : "记忆之海的战术界面需要横向空间。";
   $("size-guard").hidden = !loggedIn || portrait || window.innerWidth >= width && window.innerHeight >= height;
 }
 
@@ -820,14 +820,11 @@ function renderComplete() {
     return;
   }
   const meta = state.mapMeta || {};
-  const finalMap = state.mapType === "map3";
-  $("complete-title").textContent = finalMap ? "静海档案完成" : `${meta.title || "回路边境"}完成`;
-  $("complete-text").textContent = finalMap
-    ? "你走完了海渊档案的最后一段路。"
-    : `你已经走通了${meta.title || "回路边境"}的完整路线。`;
+  $("complete-title").textContent = `${meta.title || "旅程"}完成`;
+  $("complete-text").textContent = `你已经走通了${meta.title || "这张地图"}的完整路线。`;
   const canContinue = state.canStartMap2 || state.canStartMap3;
   $("map2-btn").hidden = !canContinue;
-  $("map2-btn").textContent = state.canStartMap3 ? "进入第三张地图" : "进入第二张地图";
+  $("map2-btn").textContent = state.canStartMap3 ? "进入静海档案" : "进入回声长廊";
 }
 
 function renderMap() {
@@ -866,18 +863,17 @@ function renderMap() {
   const mapType = map.mapType || state.mapType || "map1";
   const meta = state.mapMeta || {};
   $("game").dataset.mapType = mapType;
-  const mapLabel = mapType === "map3" ? "第三章 · 静海档案" : mapType === "map2" ? "第二章 · 深层回路" : "第一章 · 回路边境";
-  $("map-eyebrow").textContent = meta.chapter || mapLabel.split(" · ")[0];
-  $("map-title").textContent = meta.title || mapLabel.split(" · ")[1];
-  $("map-subtitle").textContent = meta.subtitle || "THE BORDERLANDS";
+  $("map-eyebrow").textContent = meta.chapter || "冒险地图";
+  $("map-title").textContent = meta.title || "未命名地图";
+  $("map-subtitle").textContent = meta.subtitle || "";
   $("map-page-left").innerHTML = `
-    <div class="map-board map-type-${esc(mapType)}" role="group" aria-label="${esc(meta.title || "回路边境")}冒险地图，选择亮起的事件图标前进">
+    <div class="map-board map-type-${esc(mapType)}" role="group" aria-label="${esc(meta.title || "冒险地图")}，选择亮起的事件图标前进">
       <div class="map-terrain" aria-hidden="true"></div>
       <div class="map-route-field">
       <svg class="map-paths map-paths-desktop" viewBox="0 0 1200 640" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>
       <svg class="map-paths map-paths-mobile" viewBox="0 0 640 1200" preserveAspectRatio="none" aria-hidden="true"><g transform="matrix(0 1 1 0 0 0)">${paths}</g></svg>
       ${nodes}
-      <span class="map-destination" aria-hidden="true">${esc(meta.destination || "镜像核心")}</span>
+      <span class="map-destination" aria-hidden="true">${esc(meta.destination || "")}</span>
       </div>
     </div>`;
   $("map-page-right").innerHTML = `

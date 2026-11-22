@@ -31,6 +31,7 @@ SUPPLY_CHALLENGES = SUPPLY.get("challenges") or []
 SUPPLY_CHALLENGE_BY_ID = {item["id"]: item for item in SUPPLY_CHALLENGES}
 ENEMIES = CONTENT["enemies"]
 ENCOUNTERS = CONTENT["encounters"]
+BATTLE_STORIES = CONTENT.get("battleStories") or {}
 NODES = CONTENT["nodes"]
 RECRUIT = CONTENT["recruit"]
 ADVENTURE = CONTENT["adventure"]
@@ -67,24 +68,24 @@ THIRD_MAP_MAX_BRANCHES = THIRD_MAP_CONFIG.get("maxBranches", MAP_MAX_BRANCHES)
 THIRD_MAP_TEMPLATES = {**MAP_TEMPLATES, **(THIRD_MAP_CONFIG.get("templates") or {})}
 MAP_META = {
     "chapter": MAP_CONFIG.get("chapter", "第一章"),
-    "title": MAP_CONFIG.get("title", "回路边境"),
-    "subtitle": MAP_CONFIG.get("subtitle", "THE BORDERLANDS"),
+    "title": MAP_CONFIG.get("title", "林间边境"),
+    "subtitle": MAP_CONFIG.get("subtitle", "FOREST BORDER"),
     "caption": MAP_CONFIG.get("caption", "一张尚未写完的地图"),
-    "destination": MAP_CONFIG.get("destination", "镜像核心"),
+    "destination": MAP_CONFIG.get("destination", "镜像关隘"),
 }
 SECOND_MAP_META = {
     "chapter": SECOND_MAP_CONFIG.get("chapter", "第二章"),
-    "title": SECOND_MAP_CONFIG.get("title", "深层回路"),
-    "subtitle": SECOND_MAP_CONFIG.get("subtitle", "THE DEEP CIRCUIT"),
+    "title": SECOND_MAP_CONFIG.get("title", "回声长廊"),
+    "subtitle": SECOND_MAP_CONFIG.get("subtitle", "ECHO CORRIDOR"),
     "caption": SECOND_MAP_CONFIG.get("caption", "第二条路线"),
-    "destination": SECOND_MAP_CONFIG.get("destination", "深层核心"),
+    "destination": SECOND_MAP_CONFIG.get("destination", "回声闸门"),
 }
 THIRD_MAP_META = {
     "chapter": THIRD_MAP_CONFIG.get("chapter", "第三章"),
     "title": THIRD_MAP_CONFIG.get("title", "静海档案"),
     "subtitle": THIRD_MAP_CONFIG.get("subtitle", "THE ABYSSAL ARCHIVE"),
     "caption": THIRD_MAP_CONFIG.get("caption", "沉在海底的记忆库"),
-    "destination": THIRD_MAP_CONFIG.get("destination", "海渊中枢"),
+    "destination": THIRD_MAP_CONFIG.get("destination", "档案中枢"),
 }
 MAPS = {
     "map1": {
@@ -101,6 +102,7 @@ MAPS = {
         "bossTemplate": "boss",
         "startEncounter": "tutorial",
         "startTemplate": "tutorial_start",
+        "battleStoryKeys": MAP_CONFIG.get("battleStoryKeys") or {},
         "meta": MAP_META,
         "openingStory": MAP_CONFIG.get("openingStory"),
     },
@@ -116,6 +118,7 @@ MAPS = {
         "templates": SECOND_MAP_TEMPLATES,
         "bossEncounter": SECOND_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": SECOND_MAP_CONFIG.get("bossTemplate", "boss2"),
+        "battleStoryKeys": SECOND_MAP_CONFIG.get("battleStoryKeys") or {},
         "meta": SECOND_MAP_META,
         "openingStory": SECOND_MAP_CONFIG.get("openingStory"),
     },
@@ -131,6 +134,7 @@ MAPS = {
         "templates": THIRD_MAP_TEMPLATES,
         "bossEncounter": THIRD_MAP_CONFIG.get("bossEncounter", "boss2"),
         "bossTemplate": THIRD_MAP_CONFIG.get("bossTemplate", "boss3"),
+        "battleStoryKeys": THIRD_MAP_CONFIG.get("battleStoryKeys") or {},
         "meta": THIRD_MAP_META,
         "openingStory": THIRD_MAP_CONFIG.get("openingStory"),
     },
@@ -443,6 +447,31 @@ def validate_content():
                         ):
                             raise RuntimeError(f"节点 {node['id']} 剧情选项跳转非法")
 
+    if not isinstance(BATTLE_STORIES, dict):
+        raise RuntimeError("战斗回忆配置非法")
+    for story_key, story in BATTLE_STORIES.items():
+        if not isinstance(story_key, str) or not story_key:
+            raise RuntimeError("战斗回忆 ID 非法")
+        if not isinstance(story, dict):
+            raise RuntimeError(f"战斗回忆 {story_key} 配置非法")
+        for slot in ("before", "after"):
+            lines = story.get(slot, [])
+            if not isinstance(lines, list):
+                raise RuntimeError(f"战斗回忆 {story_key} {slot} 非法")
+            for index, line in enumerate(lines):
+                if not isinstance(line, dict) or not isinstance(line.get("text"), str):
+                    raise RuntimeError(f"战斗回忆 {story_key} 第 {index + 1} 句非法")
+                if "if" in line and not isinstance(line["if"], dict):
+                    raise RuntimeError(f"战斗回忆 {story_key} 条件非法")
+
+    for map_type, definition in MAPS.items():
+        story_keys = definition.get("battleStoryKeys") or {}
+        if not isinstance(story_keys, dict):
+            raise RuntimeError(f"{map_type} 战斗回忆映射非法")
+        for key, story_key in story_keys.items():
+            if not isinstance(key, str) or not key or not isinstance(story_key, str) or story_key not in BATTLE_STORIES:
+                raise RuntimeError(f"{map_type} 战斗回忆映射引用非法")
+
     for encounter_id, encounter in ENCOUNTERS.items():
         if encounter["reward"]["gold"] < 0:
             raise RuntimeError(f"遭遇 {encounter_id} 奖励非法")
@@ -742,8 +771,39 @@ def _map_template(template_id, templates):
     return TEMPLATE_BY_TYPE[template_id]
 
 
-def _make_map_node(template_id, column, row, role, templates, encounter=None, elite_reward=False):
+def _battle_story_key(definition, kind, column, row=0):
+    story_keys = definition.get("battleStoryKeys") or {}
+    candidates = []
+    if kind in ("start", "boss", "elite", "late"):
+        candidates.extend((f"{kind}_{column}_{row}", f"{kind}_{column}", kind))
+    else:
+        candidates.extend(
+            (
+                f"battle_{column}_{row}",
+                f"battle_{column}",
+                f"battle_{column:02d}",
+                "battle",
+            )
+        )
+    for candidate in candidates:
+        if candidate in story_keys:
+            return story_keys[candidate]
+    return None
+
+
+def _make_map_node(
+    template_id,
+    column,
+    row,
+    role,
+    templates,
+    encounter=None,
+    elite_reward=False,
+    story_key=None,
+):
     template = _map_template(template_id, templates)
+    if story_key is None:
+        story_key = template.get("storyKey")
     node = {
         "id": f"{template_id}_{column}_{row}",
         "type": template["type"],
@@ -761,6 +821,8 @@ def _make_map_node(template_id, column, row, role, templates, encounter=None, el
         node["encounter"] = encounter
     if elite_reward:
         node["eliteReward"] = True
+    if story_key is not None:
+        node["storyKey"] = story_key
     return node
 
 
@@ -828,6 +890,14 @@ def _validate_generated_map(data, legacy=False):
             raise RuntimeError("地图节点重复或非法")
         if node.get("type") not in NODE_TYPES or not isinstance(node.get("name"), str):
             raise RuntimeError("地图节点类型非法")
+        story_key = node.get("storyKey")
+        if story_key is not None and (
+            node.get("type") != "battle"
+            or not isinstance(story_key, str)
+            or not story_key
+            or story_key not in BATTLE_STORIES
+        ):
+            raise RuntimeError("地图战斗回忆键非法")
         if node.get("role") not in ("start", "late", "boss", "event", "elite", "battle", "supply"):
             raise RuntimeError("地图节点角色非法")
         column, row = node.get("column"), node.get("row")
@@ -1055,6 +1125,7 @@ def _generate_growth_map_positions(seed, map_type):
                     "start" if kind == "start" else "boss" if kind == "boss" else "late" if kind == "late" else "battle",
                     templates,
                     encounter=encounter,
+                    story_key=_battle_story_key(definition, kind, column, row),
                 )
                 node["name"] = ENCOUNTERS[encounter].get("name") or node["name"]
                 layer.append(node)
@@ -1071,7 +1142,13 @@ def _generate_growth_map_positions(seed, map_type):
         elif kind == "elite":
             normal_encounter = rng.choice(elite_normal_pool)
             normal_node = _make_map_node(
-                "battle_late", column, 0, "battle", templates, encounter=normal_encounter
+                "battle_late",
+                column,
+                0,
+                "battle",
+                templates,
+                encounter=normal_encounter,
+                story_key=_battle_story_key(definition, "battle", column),
             )
             normal_node["name"] = (
                 f"普通路线 · {ENCOUNTERS[normal_encounter].get('name') or normal_node['name']}"
@@ -1080,6 +1157,7 @@ def _generate_growth_map_positions(seed, map_type):
                 "elite", column, 1, "elite", templates,
                 encounter=elite_encounter,
                 elite_reward=True,
+                story_key=_battle_story_key(definition, "elite", column, 1),
             )
             layer.extend([normal_node, elite_node])
         else:
@@ -1160,6 +1238,7 @@ def _generate_growth_map(seed, map_type):
                     "start" if kind == "start" else "boss" if kind == "boss" else "late" if kind == "late" else "battle",
                     templates,
                     encounter=encounter,
+                    story_key=_battle_story_key(definition, kind, column, row),
                 )
                 node["name"] = ENCOUNTERS[encounter].get("name") or node["name"]
                 layer.append(node)
@@ -1183,7 +1262,13 @@ def _generate_growth_map(seed, map_type):
                 raise GameError("精英位置缺少可选普通战")
             used_encounters.add(normal_encounter)
             normal_node = _make_map_node(
-                "battle_late", column, 0, "battle", templates, encounter=normal_encounter
+                "battle_late",
+                column,
+                0,
+                "battle",
+                templates,
+                encounter=normal_encounter,
+                story_key=_battle_story_key(definition, "battle", column),
             )
             normal_node["name"] = (
                 f"普通路线 · {ENCOUNTERS[normal_encounter].get('name') or normal_node['name']}"
@@ -1192,6 +1277,7 @@ def _generate_growth_map(seed, map_type):
                 "elite", column, 1, "elite", templates,
                 encounter=definition.get("eliteEncounter", "elite"),
                 elite_reward=True,
+                story_key=_battle_story_key(definition, "elite", column, 1),
             )
             layer.extend([normal_node, elite_node])
         else:
@@ -1427,15 +1513,22 @@ def story_lines(state):
     if node is None:
         return []
     if state["phase"] == "before_story":
+        story_key = node.get("storyKey")
+        if node.get("type") == "battle" and story_key in BATTLE_STORIES:
+            return BATTLE_STORIES[story_key].get("before", node["before"])
         return node["before"]
     if state["phase"] == "after_story":
+        lines = node["after"]
+        story_key = node.get("storyKey")
+        if node.get("type") == "battle" and story_key in BATTLE_STORIES:
+            lines = BATTLE_STORIES[story_key].get("after", lines)
         if (
             current_map_type(state) == "map3"
             and node.get("role") == "event"
             and node.get("column") == THIRD_MAP_FINAL_EVENT_COLUMN
         ):
-            return [*node["after"], *THIRD_MAP_CONFIG["finalEventAfterStory"]]
-        return node["after"]
+            return [*lines, *THIRD_MAP_CONFIG["finalEventAfterStory"]]
+        return lines
     return []
 
 
@@ -3393,6 +3486,17 @@ def migrate_state(state):
             _validate_generated_map(map_data, legacy=True)
         except (RuntimeError, KeyError, TypeError) as exc:
             raise ValueError(f"存档地图非法：{exc}") from exc
+        templates = MAPS[map_data.get("mapType", DEFAULT_MAP_TYPE)]["templates"]
+        for node in map_data["nodes"]:
+            template_id = node["id"].rsplit("_", 2)[0]
+            template = templates.get(template_id, {})
+            if node["role"] == "elite" or node["type"] != "battle":
+                name = template.get("name")
+            else:
+                name = ENCOUNTERS[node["encounter"]].get("name")
+            if name:
+                prefix = "普通路线 · " if node["name"].startswith("普通路线 · ") else ""
+                node["name"] = f"{prefix}{name}"
         node_ids = {node["id"] for node in map_data["nodes"]}
     else:
         node_ids = set(NODE_BY_ID)

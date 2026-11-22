@@ -487,7 +487,7 @@ def test_second_map(client):
     assert sorted({node["column"] for node in state["map"]["nodes"]}) == list(range(15)), state
     boss_node = next(node for node in state["map"]["nodes"] if node["role"] == "boss")
     assert boss_node["column"] == 14, boss_node
-    assert boss_node["encounter"] == "boss2_growth" and boss_node["name"] == "深层核心", boss_node
+    assert boss_node["encounter"] == "boss2_growth" and boss_node["name"] == "回声闸门", boss_node
 
     map_before = state["map"]
     client.ok("/api/logout", {})
@@ -544,7 +544,7 @@ def test_third_map(client):
     assert state["phase"] == "map" and state["mapType"] == "map3", state
     assert state["runLength"] == 15
     boss = next(node for node in state["map"]["nodes"] if node["role"] == "boss")
-    assert boss["encounter"] == "boss3" and boss["name"] == "海渊中枢"
+    assert boss["encounter"] == "boss3" and boss["name"] == "档案中枢"
     route = plan_elite_route(state)
     while route:
         expected = route.pop(0)

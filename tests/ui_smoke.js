@@ -129,7 +129,7 @@ async function main() {
 
     let storySkipVerified = false;
     async function storyUntil(viewId) {
-      for (let index = 0; index < 16; index += 1) {
+      for (let index = 0; index < 64; index += 1) {
         if (await visible(viewId)) return;
         if (await visible("transition-view")) {
           await command("Page.setWebLifecycleState", { state: "active" });
@@ -2194,8 +2194,8 @@ print(json.dumps(states))
     const map2Check = await checkMapLayout();
     if (map2Check.mapType !== "map2" || map2Check.runLength !== 15 ||
         map2Check.columns.length !== 15 || !map2Check.boardMap2 ||
-        !map2Check.eyebrow.includes("第二章") || !map2Check.cartouche.includes("深层回路") ||
-        !map2Check.destination.includes("深层核心")) {
+        !map2Check.eyebrow.includes("第二章") || !map2Check.cartouche.includes("回声长廊") ||
+        !map2Check.destination.includes("回声闸门")) {
       throw new Error(`第二张地图界面异常：${JSON.stringify(map2Check)}`);
     }
     await screenshot("ai-game-map2.png", "#map-view");

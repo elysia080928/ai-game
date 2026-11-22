@@ -20,18 +20,19 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
 TRUST_PROXY = os.environ.get("TRUST_PROXY", "0") == "1"
 MAX_BODY_BYTES = 64 * 1024
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+THIRD_CHAPTER_LABEL = f"{game.map_meta('map3')['chapter']} · {game.map_meta('map3')['title']}"
 CG_CATALOG = (
     {"id": "opening_sky", "title": "晴空伸手", "chapter": "序章", "path": "cg/晴空伸手.png"},
-    {"id": "campfire_stars", "title": "篝火星河", "chapter": "第三章 · 静海档案", "path": "cg/篝火星河.png"},
-    {"id": "campfire_woods", "title": "林间篝火", "chapter": "第三章 · 静海档案", "path": "cg/林间篝火.png"},
-    {"id": "campfire_knees", "title": "篝火抱膝", "chapter": "第三章 · 静海档案", "path": "cg/篝火抱膝.png"},
-    {"id": "campfire_warm", "title": "篝火暖手", "chapter": "第三章 · 静海档案", "path": "cg/篝火暖手.png"},
-    {"id": "boss_warning", "title": "海渊警告", "chapter": "第三章 · 静海档案", "path": "cg/cg-dungeon-warning-turn-v2.png"},
+    {"id": "campfire_stars", "title": "篝火星河", "chapter": THIRD_CHAPTER_LABEL, "path": "cg/篝火星河.png"},
+    {"id": "campfire_woods", "title": "林间篝火", "chapter": THIRD_CHAPTER_LABEL, "path": "cg/林间篝火.png"},
+    {"id": "campfire_knees", "title": "篝火抱膝", "chapter": THIRD_CHAPTER_LABEL, "path": "cg/篝火抱膝.png"},
+    {"id": "campfire_warm", "title": "篝火暖手", "chapter": THIRD_CHAPTER_LABEL, "path": "cg/篝火暖手.png"},
+    {"id": "boss_warning", "title": "档案警报", "chapter": THIRD_CHAPTER_LABEL, "path": "cg/cg-dungeon-warning-turn-v2.png"},
 )
 CG_BY_ID = {item["id"]: item for item in CG_CATALOG}
 CG_BY_PATH = {item["path"]: item["id"] for item in CG_CATALOG}
 
-app = FastAPI(title="AI Game MVP")
+app = FastAPI(title="若你坠入记忆之海")
 db.init()
 
 

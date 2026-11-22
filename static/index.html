@@ -3,14 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>机偶回路 · MVP</title>
-  <link rel="stylesheet" href="/style.css?v=20261121-cg-gallery">
+  <title>若你坠入记忆之海</title>
+  <link rel="stylesheet" href="/style.css?v=20261122-game-title">
 </head>
 <body>
   <div id="auth" class="screen auth-screen">
     <div class="auth-card">
-      <h1>机偶回路</h1>
-      <p class="subtitle">MVP 试玩版</p>
+      <h1>若你坠入记忆之海</h1>
       <label>用户名<input id="username" maxlength="20" autocomplete="username" placeholder="3-20 位字母 / 数字 / 下划线"></label>
       <label>密码<input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="至少 8 位"></label>
       <div class="auth-error" id="auth-error"></div>
@@ -23,7 +22,7 @@
 
   <div id="game" class="screen game-screen" hidden>
     <header class="topbar">
-      <div class="brand">机偶回路 <span class="tag">MVP</span></div>
+      <div class="brand">若你坠入记忆之海</div>
       <div class="hud">
         <div class="hud-resources">
           <span class="hud-item hud-gold"><svg class="map-coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14"/><circle cx="16" cy="16" r="10"/><path d="m16 8 6 8-6 8-6-8Z"/></svg>金币 <b id="hud-gold">0</b></span>
@@ -43,7 +42,7 @@
         <button id="settings-open" class="title-settings" type="button" aria-label="打开设置" title="设置">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Zm9 4.9v-2.2l-2.1-.7a7.3 7.3 0 0 0-.6-1.4l1-2-1.6-1.6-2 1a7.3 7.3 0 0 0-1.4-.6L13.6 3h-2.2l-.7 2.1a7.3 7.3 0 0 0-1.4.6l-2-1-1.6 1.6 1 2a7.3 7.3 0 0 0-.6 1.4L4 10.9v2.2l2.1.7a7.3 7.3 0 0 0 .6 1.4l-1 2 1.6 1.6 2-1a7.3 7.3 0 0 0 1.4.6l.7 2.1h2.2l.7-2.1a7.3 7.3 0 0 0 1.4-.6l2 1 1.6-1.6-1-2a7.3 7.3 0 0 0 .6-1.4l2.1-.7Z"/></svg>
         </button>
-        <div class="title-brand"><p>THE CIRCUIT AWAKENS</p><h1>机偶回路</h1><span>在失落的回路中，继续前行</span></div>
+        <div class="title-brand"><p>IF YOU FALL INTO THE SEA OF MEMORIES</p><h1>若你坠入记忆之海</h1><span>跟随记忆，寻找你以为失去的人</span></div>
         <nav class="title-actions" aria-label="主菜单">
           <button id="continue-btn" class="title-primary">继续游戏</button>
           <button id="slots-open">选择存档</button>
@@ -102,9 +101,9 @@
 
       <section id="map-view" class="view" hidden>
         <div class="map-head map-cartouche">
-          <span id="map-subtitle">THE BORDERLANDS</span>
+          <span id="map-subtitle"></span>
           <p class="map-eyebrow" id="map-eyebrow">第一章</p>
-          <h2 id="map-title">回路边境</h2>
+          <h2 id="map-title"></h2>
         </div>
         <div class="map-table">
           <div class="map-sheet" id="map-page-left"></div>
@@ -335,7 +334,7 @@
 
       <section id="complete-view" class="view" hidden>
         <div class="complete-panel">
-          <h1 id="complete-title">MVP 完成</h1>
+          <h1 id="complete-title">旅程完成</h1>
           <p id="complete-text">你已经走通了完整的节点路线。</p>
           <div class="complete-actions">
             <button id="map2-btn" class="primary" hidden>进入第二张地图</button>
@@ -373,7 +372,7 @@
     </div>
 
     <div class="viewport-guard" id="orientation-guard" hidden>
-      <div class="guard-terminal"><span class="guard-mark" aria-hidden="true">↻</span><h2>请横屏继续</h2><p>机偶回路的战术界面需要横向空间。</p></div>
+      <div class="guard-terminal"><span class="guard-mark" aria-hidden="true">↻</span><h2>请横屏继续</h2><p>记忆之海的战术界面需要横向空间。</p></div>
     </div>
     <div class="viewport-guard" id="size-guard" hidden>
       <div class="guard-terminal"><span class="guard-mark" aria-hidden="true">1024 × 600</span><h2>窗口空间不足</h2><p>请放大窗口至建议尺寸后继续。</p></div>
@@ -384,6 +383,6 @@
   <audio id="music-player-a" preload="auto" loop aria-hidden="true" tabindex="-1"></audio>
   <audio id="music-player-b" preload="auto" loop aria-hidden="true" tabindex="-1"></audio>
   <script src="/combat-fx.js?v=20261120"></script>
-  <script src="/app.js?v=20261121-cg-gallery"></script>
+  <script src="/app.js?v=20261122-game-title"></script>
 </body>
 </html>

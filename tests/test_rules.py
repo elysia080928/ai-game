@@ -372,7 +372,12 @@ def test_story_flow_and_new_game():
     assert state["nodeId"] == state["mapData"]["start"]
     G.advance_story(state)
     assert state["phase"] == "map_story"
-    G.advance_story(state)
+    for _ in range(32):
+        if state["phase"] != "map_story":
+            break
+        G.advance_story(state)
+    else:
+        raise AssertionError("地图开场剧情没有结束")
     assert state["phase"] == "transition" and state["transitionTarget"] == "map"
     restored, _ = G.migrate_state(json.loads(json.dumps(state)))
     assert restored["phase"] == "transition" and restored["transitionTarget"] == "map"
@@ -381,7 +386,7 @@ def test_story_flow_and_new_game():
     assert G.available_nodes(state) == [state["mapData"]["start"]]
     G.select_node(state, state["mapData"]["start"])
     assert state["phase"] == "before_story"
-    assert G.public_state(state)["story"]["text"].startswith("别着急")
+    assert G.public_state(state)["story"]["text"].startswith("敌人的动作")
     G.advance_story(state)
     assert state["phase"] == "node"
     assert G.current_node(state)["role"] == "start"
@@ -786,7 +791,7 @@ def test_dead_attacker_stops_remaining_attack():
 def test_second_map_structure():
     assert G.SECOND_MAP_RUN_LENGTHS == (12,)
     templates = G.MAPS["map2"]["templates"]
-    assert templates["boss2"]["name"] == "深层核心"
+    assert templates["boss2"]["name"] == "回声闸门"
     for seed in range(30):
         data = G.generate_map(seed, "map2")
         nodes = {node["id"]: node for node in data["nodes"]}
@@ -795,7 +800,7 @@ def test_second_map_structure():
         assert data["start"] in nodes and data["boss"] in nodes and data["elite"] in nodes
         assert nodes[data["boss"]]["encounter"] == "boss2"
         assert nodes[data["boss"]]["role"] == "boss"
-        assert nodes[data["boss"]]["name"] == "深层核心"
+        assert nodes[data["boss"]]["name"] == "回声闸门"
         columns = {}
         for node in data["nodes"]:
             columns.setdefault(node["column"], []).append(node)
@@ -821,13 +826,13 @@ def test_second_map_structure():
 
 def test_third_map_structure():
     assert G.THIRD_MAP_RUN_LENGTHS == (12,)
-    assert G.MAPS["map3"]["templates"]["boss3"]["name"] == "海渊中枢"
+    assert G.MAPS["map3"]["templates"]["boss3"]["name"] == "档案中枢"
     for seed in range(30):
         data = G.generate_map(seed, "map3")
         nodes = {node["id"]: node for node in data["nodes"]}
         assert data["mapType"] == "map3" and data["runLength"] == 12
         assert nodes[data["boss"]]["encounter"] == "boss2"
-        assert nodes[data["boss"]]["name"] == "海渊中枢"
+        assert nodes[data["boss"]]["name"] == "档案中枢"
         assert len(data["nodes"]) == len(G.generate_map(seed, "map2")["nodes"])
         second = G.generate_map(seed, "map2")
         second_nodes = {node["id"]: node for node in second["nodes"]}
@@ -888,6 +893,29 @@ def test_map3_final_event_appends_resumable_campfire_story():
     assert G.story_lines(map2) == map2_event["after"]
 
 
+def test_battle_story_keys_keep_battle_memory_and_event_reality_separate():
+    for map_type in ("map1", "map2", "map3"):
+        state = G.new_state(17, map_type, version=2)
+        nodes = state["mapData"]["nodes"]
+        battle_nodes = [node for node in nodes if node["type"] == "battle"]
+        assert battle_nodes
+        for node in battle_nodes:
+            story_key = node.get("storyKey")
+            assert story_key in G.BATTLE_STORIES
+            state["nodeId"] = node["id"]
+            state["phase"] = "before_story"
+            assert G.story_lines(state) == G.BATTLE_STORIES[story_key]["before"]
+            state["phase"] = "after_story"
+            assert G.story_lines(state) == G.BATTLE_STORIES[story_key]["after"]
+
+        for node in nodes:
+            if node["type"] == "battle":
+                continue
+            assert "storyKey" not in node
+            if node.get("role") == "event" and node.get("column") != G.THIRD_MAP_FINAL_EVENT_COLUMN:
+                assert all(line.get("background") != "black" for line in node["before"] + node["after"])
+
+
 def test_final_boss_win_and_loss_end_after_warning_cg():
     for result in ("win", "lose"):
         state = G.new_state(23, "map3", version=2)
@@ -913,9 +941,14 @@ def test_final_boss_win_and_loss_end_after_warning_cg():
 
         state, _ = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
         story = G.public_state(state)["story"]
-        assert story["text"] == "请输入文本"
+        assert story["text"] == "清除程序已经开始。核心防线在冲突中失控了，别回头，继续往前。"
         assert story["background"] == "cg/cg-dungeon-warning-turn-v2.png"
-        G.advance_story(state)
+        for _ in range(64):
+            if state["phase"] != "after_story":
+                break
+            G.advance_story(state)
+        else:
+            raise AssertionError("最终 Boss 后剧情没有结束")
 
         if result == "win":
             assert state["phase"] == "elite_reward"
@@ -1136,6 +1169,38 @@ def test_old_generated_map_without_map_type():
     assert changed
     assert G.current_map_type(reloaded) == "map1"
     assert reloaded["mapData"]["seed"] == state["mapData"]["seed"]
+
+
+def test_saved_map_names_refresh_without_changing_story_or_route():
+    state = G.new_state(29, "map2", version=2)
+    state["phase"] = "map"
+    map_data = state["mapData"]
+    start = next(node for node in map_data["nodes"] if node["id"] == map_data["start"])
+    boss = next(node for node in map_data["nodes"] if node["role"] == "boss")
+    start["name"] = "旧版起始战"
+    boss["name"] = "深层核心"
+    normal_route = next(
+        node for node in map_data["nodes"] if node["name"].startswith("普通路线 · ")
+    )
+    normal_route["name"] = "普通路线 · 边境试探"
+    saved_story = json.loads(json.dumps(boss["after"], ensure_ascii=False))
+    saved_edges = json.loads(json.dumps(map_data["edges"], ensure_ascii=False))
+
+    reloaded, changed = G.migrate_state(json.loads(json.dumps(state, ensure_ascii=False)))
+
+    nodes = {node["id"]: node for node in reloaded["mapData"]["nodes"]}
+    public = G.public_state(reloaded)
+    assert changed
+    assert public["node"]["name"] == G.ENCOUNTERS[start["encounter"]]["name"]
+    assert nodes[boss["id"]]["name"] == "回声闸门"
+    assert nodes[normal_route["id"]]["name"] == (
+        f"普通路线 · {G.ENCOUNTERS[normal_route['encounter']]['name']}"
+    )
+    assert nodes[boss["id"]]["after"] == saved_story
+    assert reloaded["mapData"]["edges"] == saved_edges
+    public_names = {node["id"]: node["name"] for node in public["map"]["nodes"]}
+    assert public_names[boss["id"]] == "回声闸门"
+    assert public_names[normal_route["id"]] == nodes[normal_route["id"]]["name"]
 
 
 def test_legacy_map_run_length_migration():

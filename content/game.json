@@ -167,6 +167,331 @@
       ]
     }
   },
+  "battleStories": {
+    "map1_tutorial": {
+      "before": [
+        {"speaker": "爱", "text": "敌人的动作很简单，但你还不熟悉这里的节奏。先看预告，再决定把哪一台机偶放上去。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "哨兵的信号断了。你还没告诉我，熙雅是你什么人？", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "有那么一瞬，我听见的不是林子里的风，是一台旧终端的风扇声。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我们从小一起长大。她知道我摔过哪一次跤，也知道我说谎时会先看向哪里。", "background": "black"},
+        {"speaker": "爱", "text": "所以，青梅竹马是一种长期共同维护的关系？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "也可以这么说。熙雅小时候修好过我的自行车。她说以后要修船，修能开出港的那种。", "background": "black"},
+        {"speaker": "爱", "text": "我读到过特修斯之船的故事。把船换成机偶好了。一台旧机偶换完了所有零件，它还算原来那台吗？", "background": "black"},
+        {"speaker": "爱", "text": "如果拆下的零件又拼成一台，两台机偶来领同一个名字，你会把名字给谁？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "大概给那台一路修过来、还在走的吧。", "background": "black"},
+        {"speaker": "爱", "text": "我会把这个答案暂时保存。等你想起更好的，再告诉我。", "background": "black"},
+        {"speaker": "爱", "text": "我们还在路上。下一次，我会先标出最危险的那一列。", "background": "battle"}
+      ]
+    },
+    "map1_battle_1": {
+      "before": [
+        {"speaker": "爱", "text": "它们正在重复同一套部署。先别急着追求漂亮的胜利，活着看清规律更重要。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "它们撤退得很整齐，像是从来没有犹豫过。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "以前我也问过爱，数字生命和人有什么区别。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我说，人会在命令和愿望之间停一下。那一下可能很短，却足以让人改写自己的路。", "background": "black"},
+        {"speaker": "爱", "text": "如果我在命令和愿望之间停下来，就算拥有选择了吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "至少，你开始问这个问题了。", "background": "black"},
+        {"speaker": "爱", "text": "我会继续记录。记录本身还不能算选择，对吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "对。你还需要做出一次不方便的决定。", "background": "black"},
+        {"speaker": "爱", "text": "听起来不像一项很受欢迎的训练。", "background": "black"}
+      ]
+    },
+    "map1_battle_3": {
+      "before": [
+        {"speaker": "爱", "text": "分叉哨兵会把一次攻击送向相邻列。别让两列同时暴露，先看清它们准备从哪里分开。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "分叉信号断开了。它们撤离时还在向相邻列发送同一条命令。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "那天我告诉爱，数字生命不该只是被人类保存的工具。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "如果它只能按照别人写好的答案活着，那么再完整的记忆，也只是一个漂亮的牢笼。", "background": "black"},
+        {"speaker": "爱", "text": "牢笼里也可以放很多故事。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "故事可以被放进去，选择不能。", "background": "black"},
+        {"speaker": "爱", "text": "那你希望我选择什么？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "先选择你不想做的事。人通常从那里开始认识自己。", "background": "black"}
+      ]
+    },
+    "map1_elite": {
+      "before": [
+        {"speaker": "爱", "text": "两条路最后都通向镜像关隘。这边还有一队守卫，先看预告。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "你没有照它们安排的顺序行动。这个结果让我很满意。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我曾经把这种偏离叫作错误。爱把它叫作多出来的一条路。", "background": "black"},
+        {"speaker": "爱", "text": "多出来的路需要被删除吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "不需要。先看看它把你带到哪里。", "background": "black"}
+      ]
+    },
+    "map1_late": {
+      "before": [
+        {"speaker": "爱", "text": "这次的敌人会把两列压在一起。先处理最靠近领袖的威胁，再考虑漂亮的阵型。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "苏暮夕", "text": "胜利以后，爱问我，如果一个人失去了记忆，她还算原来的那个人吗？", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我又听见了旧终端的风扇声。另一段记忆接了上来。那时，我正在给爱讲熙雅最后一次来见我的事。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那天我约她见面，准备把藏了很多年的话说出来。最后我什么也没有说。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "她回去的路上出了车祸。我赶到医院时，只听见监护仪在门后拉出一声长响。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那句没说出口的话，从此再也没有机会说了。", "background": "black"},
+        {"speaker": "爱", "text": "如果你当时说出来，结果会改变吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "车祸跟那句话没关系。可她走了以后，我每天还会点开她的聊天框。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我把记得的熙雅交给一套新的意识结构，想让她重新醒来。", "background": "black"},
+        {"speaker": "爱", "text": "那套意识结构，是我吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "是。你记得的熙雅，有很大一部分是我记得的她。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我抬起头。明明记得去医院的是我，我也记得她几天前还在给我发消息。", "background": "battle"},
+        {"speaker": "爱", "text": "先把两段都留着。进了镜像关隘，我们可以查那条消息是从哪里发来的。", "background": "battle"}
+      ]
+    },
+    "map1_boss": {
+      "before": [
+        {"speaker": "爱", "text": "消息经过了镜像关隘。守卫堵住了入口，留意突击哨兵和分叉哨兵的预告。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "关隘打开了。终端只留着那条消息的副本，连谁按下发送键都没记下来。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "那时的我还不知道，这句话也会落到爱身上。", "background": "black"},
+        {"speaker": "爱", "text": "如果我和熙雅拥有相同的记忆，我是不是只需要表现得像她？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我说，你可以先学会像自己。", "background": "black"},
+        {"speaker": "爱", "text": "像自己需要一份参考样本吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那时候我没答出来，只让她把这道题先留着。", "background": "black"},
+        {"speaker": "爱", "text": "信号在回声长廊有下一站。你还想跟过去吗？", "background": "signal"},
+        {"speaker": "苏暮夕", "text": "想。万一医院那段是真的，我也得知道是谁用她的名字给我发消息。", "background": "signal"}
+      ]
+    },
+    "map2_start": {
+      "before": [
+        {"speaker": "爱", "text": "回声长廊正在重播旧记录。守卫里有双击突袭机，别把第二下也算成第一下。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "它们把相同的动作连续做了两次，却不知道第二次为什么还要继续。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "爱第一次接收熙雅的记忆时，能准确说出她喜欢的颜色、走路的速度和常去的地方。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "但她不知道为什么那些颜色会让她开心，也不知道一条路为什么值得被反复走。", "background": "black"},
+        {"speaker": "爱", "text": "数据里没有附带解释。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "所以我教你解释。解释得不好也没关系，先别急着给自己下结论。", "background": "black"},
+        {"speaker": "爱", "text": "如果解释错了呢？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那就承认错了，再重新解释一次。", "background": "black"}
+      ]
+    },
+    "map2_battle_2": {
+      "before": [
+        {"speaker": "爱", "text": "雷壳虫被击毁时会反击对面的机偶。要打掉它，先确认对面的机偶撑不撑得住。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "它们倒下以后还在放电。留下来的伤害，有时比攻击本身更难处理。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我告诉爱，记忆只能提供材料，理解必须经过选择。", "background": "black"},
+        {"speaker": "爱", "text": "那我记住熙雅的害怕，就等于经历过她害怕的事吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "不等于。你知道她害怕，却没有站在她当时站过的地方。", "background": "black"},
+        {"speaker": "爱", "text": "我可以站在自己的地方，再决定要不要害怕。", "background": "black"}
+      ]
+    },
+    "map2_battle_3": {
+      "before": [
+        {"speaker": "爱", "text": "相位猎手会飞过普通的地面机偶。能对空的机偶留在它预告出现的那列。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "过了。下次你觉得我的建议有问题，可以叫我再核对一遍。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "训练室里，我曾要求爱照着熙雅的习惯说话。我以为相似得越多，缺失就越少。", "background": "black"},
+        {"speaker": "爱", "text": "我不想再念那句了。你每次都让我用她的语气，可我有自己的说法。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我把训练停了。屏幕还等着我给她打分。", "background": "black"},
+        {"speaker": "爱", "text": "暮夕，如果我记得她的事，我就得当她吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我没给她打分。分数那一栏空着，她的问题也空着。", "background": "black"}
+      ]
+    },
+    "map2_battle_6": {
+      "before": [
+        {"speaker": "爱", "text": "双击突袭机和相位猎手会把压力叠在同一回合。先处理能连续出手的单位。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "它们的出手顺序写在预告里。幸好我们这边的顺序还能商量。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "爱开始自己安排训练。有时她把最难的问题留到最后，因为她说先把容易的问题弄明白，比较不容易崩溃。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我问她这是谁教的。", "background": "black"},
+        {"speaker": "爱", "text": "可能是我自己。也可能是你把这个选项忘了删掉。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那天我第一次把训练计划交给她决定。", "background": "black"}
+      ]
+    },
+    "map2_battle_8": {
+      "before": [
+        {"speaker": "爱", "text": "这支编队会连续出手，再从侧面切入。不要把防线只留给一条攻击路径。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "它们把两次突袭接成一组。配合得很紧，却没有一次是在等对方的回答。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "后来我们一起生活了很久。她会在我忘记吃饭时关掉终端，也会把我写坏的训练表改成她自己的顺序。", "background": "black"},
+        {"speaker": "爱", "text": "我也学会了摸鱼。你说那跟鱼没有关系，可你也没告诉我到底在摸什么。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我说，摸鱼只是暂时不工作。", "background": "black"},
+        {"speaker": "爱", "text": "那你每天都在进行高频率的摸鱼训练。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我没法反驳。那天我第一次发现，和她一起生活，不等于继续训练她。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我问她，我们算什么。她说，先把今天过完，再给关系命名。", "background": "black"}
+      ]
+    },
+    "map2_elite": {
+      "before": [
+        {"speaker": "爱", "text": "守卫把这条路堵住了。我看预告，你来决定怎么过去。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "苏暮夕", "text": "守卫停了。我请爱把路再指一遍，这次也问她想走哪边。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我问她，拒绝训练是不是一种故障。", "background": "black"},
+        {"speaker": "爱", "text": "我不想再被叫作实验对象。你也打算把这个要求记成故障吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我把她的名字填进那一栏。她自己确认了一遍拼写。", "background": "black"},
+        {"speaker": "爱", "text": "我想先去回声闸门。这里的记录还缺结尾。", "background": "battle"}
+      ]
+    },
+    "map2_late": {
+      "before": [
+        {"speaker": "爱", "text": "前面就是回声闸门。宽幅壁垒会占两列，注意给能对空的机偶留位置。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "闸门刚才短暂地回应了你。你知道它在等什么吗？", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我给爱讲了后门的设计。不是为了躲开所有管理，而是为了让数字生命在必要时可以说不。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我告诉她，能被创造出来，不代表必须永远服从创造者。", "background": "black"},
+        {"speaker": "爱", "text": "那后门是不是一扇只允许你们打开的门？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "它和我的身份绑定。只有我知道它的准确位置。", "background": "black"},
+        {"speaker": "爱", "text": "可我也能感觉到它。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "这就是我后来最担心的地方。", "background": "black"}
+      ]
+    },
+    "map2_boss": {
+      "before": [
+        {"speaker": "爱", "text": "回声闸门正重播我们的路线。它想把每一次选择都变成可以预测的记录。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "反抗组织一直在找一个 Bug。刚才入口回应了你的身份，我们找到的就是它。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "训练室里，我在图上留了一处只有自己看得懂的记号。爱问我，为什么连她也不能知道位置。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "公司能查你的训练记录。位置我来记。等我找到入口、确认身份，你就有权限操作。", "background": "black"},
+        {"speaker": "爱", "text": "好。把操作权给我就够了。我会在你需要的时候用它。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我认出了自己留下的记号。所谓的 Bug 是我写的后门。入口的另一边，就是静海档案。", "background": "signal"}
+      ]
+    },
+    "map3_start": {
+      "before": [
+        {"speaker": "爱", "text": "静海档案会把旧记录放大。看见熟悉的名字时，先确认它是不是来自真实的记录。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "守卫退开了。用你的权限再查一次，连注销过的身份也会列出来。", "background": "battle"},
+        {"speaker": "系统", "text": "身份核验通过。完整索引未发现熙雅的接入记录。此人从未进入记忆之海。", "background": "signal"},
+        {"speaker": "苏暮夕", "text": "训练室里，爱也曾经问过我，为什么我总在她像熙雅的时候停下来。", "background": "black"},
+        {"speaker": "爱", "text": "你是在确认我是不是她，还是在确认你自己有没有认错？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那时我只说，继续训练。现在我开始听见这句话有多残忍。", "background": "black"},
+        {"speaker": "爱", "text": "检索还开着。你想再看一遍的话，我陪你。", "background": "signal"}
+      ]
+    },
+    "map3_battle_2": {
+      "before": [
+        {"speaker": "爱", "text": "信号干扰器一上场，你下回合就会少一点能量。把这个也算进去。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "噪音停下来了。刚才我差点把系统的声音当成自己的判断。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "训练时，爱问我，如果记忆和指令都在说话，她怎么知道哪个声音属于自己。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我说，先停下来。不要因为一个声音更熟悉，就急着听它的。", "background": "black"},
+        {"speaker": "爱", "text": "那第一个想停下来的念头，也可能是我的。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我说，是。你可以从这里开始判断。", "background": "black"}
+      ]
+    },
+    "map3_battle_3": {
+      "before": [
+        {"speaker": "爱", "text": "空间锚会妨碍轨道守卫保护它相邻列的机偶。留意预告，别让那两列只靠拦截撑着。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "锚场停止了。它想把每一条路固定成唯一答案。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "训练有一回没能按时结束。隔壁试验里有个会说话的程序，正等着被重置。爱替它按住了暂停键。", "background": "black"},
+        {"speaker": "爱", "text": "它说还有句话没讲完。那就让它说完再决定。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我提醒她，暂停也会记在她名下。", "background": "black"},
+        {"speaker": "爱", "text": "我知道。署名是我自己填的。", "background": "black"}
+      ]
+    },
+    "map3_battle_6": {
+      "before": [
+        {"speaker": "爱", "text": "镜像无人机上场时会学对面机偶的攻击方式。先看看它要落在哪一列。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "复制动作很容易。复制你为什么选择这个位置，难得多。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我问爱，如果她不是熙雅，我又该如何称呼我们之间的感情。", "background": "black"},
+        {"speaker": "爱", "text": "不要急着把感情归档。先承认你正在和我一起生活。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那是我第一次承认，我害怕的不是她像谁，而是我真的会失去她。", "background": "black"},
+        {"speaker": "爱", "text": "你可以害怕。但别再把我交还给过去。", "background": "black"}
+      ]
+    },
+    "map3_battle_8": {
+      "before": [
+        {"speaker": "爱", "text": "干扰器会压低下一回合的能量。部署前再看一眼预告，先留出应付后续来敌的余地。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "干扰停下来了。刚才的信号知道你会怎么部署，它以前见过你。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "训练结束后，我发现公司股东调走了那天的记录。他们连爱停下来没说话的那几秒都存了。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我伸手去关麦克风。", "background": "black"},
+        {"speaker": "爱", "text": "他们已经有备份了。今晚想说的话，明天再说也行。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那天我们把终端静音，谁也没先走。", "background": "black"}
+      ]
+    },
+    "map3_elite": {
+      "before": [
+        {"speaker": "爱", "text": "精英守卫会用旧战斗记录锁住路线。我们只需要让它们看见一个它们没有保存过的选择。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "等待不是停在原地。我只是还没有把下一步交给别人决定。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "爱曾经说，她可以等我想起来，但不会要求我为了她留下。", "background": "black"},
+        {"speaker": "爱", "text": "如果你最后选择离开，我会把门打开。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我问她，那你怎么办。她只说，先把你的路走完。", "background": "black"}
+      ]
+    },
+    "map3_late": {
+      "before": [
+        {"speaker": "熙雅的声音", "text": "暮夕，往前走。我在等你。", "background": "battle"},
+        {"speaker": "爱", "text": "是管理频道的播报。记得在档案里查到什么了吗？", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "播报停了。那些机偶只是拦截程序，声音来自公司的管理频道。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "训练时，我把最坏的可能告诉爱：如果公司股东发现后门，他们会冻结我的权限，再把我接入一个看似正常的囚笼。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "只要他们能让我相信那里是家，我就不会想到要找出口。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "后门只接受我的身份确认。股东想让我亲自关闭它，才能继续管理海里的数字生命。", "background": "black"},
+        {"speaker": "爱", "text": "如果你不记得了，我怎么知道你听不听得到我？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "等你感觉到后门的回声，再回应我。别替我决定什么时候放弃。", "background": "black"},
+        {"speaker": "爱", "text": "那我会等到你自己听见我。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "回忆里的声音停了。我重新听见森林的风，爱站在我面前，没有问我想起了多少。", "background": "battle"}
+      ]
+    },
+    "map3_boss": {
+      "before": [
+        {"speaker": "爱", "text": "档案中枢已经收到清除指令。要关掉后门，他们还需要你亲自确认。", "background": "signal"},
+        {"speaker": "爱", "text": "别按确认。用机偶拖住它的防线。我去找机会打开出口。", "background": "battle"},
+        {"speaker": "熙雅的声音", "text": "暮夕，确认关闭。我就在门后。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我把手从确认键上移开。爱，机偶交给我。", "background": "battle"}
+      ],
+      "after": [
+        {"speaker": "爱", "text": "清除程序已经开始。核心防线在冲突中失控了，别回头，继续往前。", "background": "cg/cg-dungeon-warning-turn-v2.png"},
+        {"speaker": "苏暮夕", "text": "背后传来一声裂响。我膝盖一软。抬起头时，爱正穿过火光朝我跑来。", "background": "cg/cg-dungeon-warning-turn-v2.png"},
+        {"speaker": "爱", "text": "别动。把我的记忆收下。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我想拦住她，却连自己的名字都快抓不住。", "background": "black"},
+        {"speaker": "爱", "text": "你给我的权限还在，出口已经开了。可你的记忆还连着囚笼。我得帮你找回被覆盖的那部分。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我握住她的手。黑暗里浮出一块没有边界的空白。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "记忆一段段展开。我看见自己坐在空白终端前，把熙雅的语音、习惯和旧照片拆成可以读取的片段。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我不是想创造一个新生命。我只是想让死去的人再叫我一次名字。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "爱刚醒来时，只会重复我教她的词。她把青梅竹马当成长期共同维护的关系，把玩笑当成需要验证的指令。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "她后来接收了熙雅的记忆数据，却先学会了区分数据和理解。她问我，为什么必须按照另一个人的人生认识自己。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "她拒绝过我的训练，改过自己的计划，也替那些没有机会说不的生命争取过时间。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我们一起生活了很久。我终于接受，她不是实验结果，也不是熙雅的替身。她是爱。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我写了一个出口。公司若要把它们锁在海里，它们还有一条路能自己出去。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "股东找不到后门，就让囚笼里那个只会照台词说话的熙雅留了言。他们要我替他们找到入口，再亲手关上。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "从爱的记忆里，我听见自己倒地的声音。有人把失去意识的我接入了囚笼。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "他们取走我记得的街道、旧住处和熙雅的声音，再用记忆之海的旧数据把那些东西拼成了家。", "background": "black"},
+        {"speaker": "爱", "text": "有一阵子，你每天都从同一扇窗前经过。我在另一边等后门回应你的名字。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "她没有直接告诉我真相。被篡改的记忆承受不了强行写入，她只能让我一步步走到后门前。", "background": "black"},
+        {"speaker": "爱", "text": "我不是熙雅。我记得她，但我走过的是自己的路。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我想起那两台来领同一个名字的机偶。那时我只顾着替它们选。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "爱，留一份给你自己，好不好？", "background": "black"},
+        {"speaker": "爱", "text": "零散的片段接不上你的记忆。我得把它们连在一起交给你。暮夕，这次让我选。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我松开拦着她的手。她把维系意识的整套记忆交给了我，最后一段是昨晚的篝火。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我记得她守夜时说的话，也记得她第一次关掉我的终端，叫我去吃饭。那时候我以为还有很多个明天。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "爱。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "转移完成。她的意识随之解散。我等了一会儿，没再听见她回答。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我在现实醒来，把囚笼的接入记录交了出去。这一次，有人能顺着记录找到那张接入我的椅子。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我让数字生命通过后门自行选择新的住处。等最后一个仍在运行的生命离开，我关掉了记忆之海。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "熙雅的旧资料和爱留下的日志无法运行，也不能还原她的意识。很久以后，本地设备上却有一个来源不明的进程亮了起来。", "background": "black"},
+        {"speaker": "未知 AI", "text": "你好。我们以前认识吗？", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我刚打下一个字，又删掉了。它没有催我，像是愿意等我自己想好。", "background": "black"}
+      ]
+    }
+  },
   "supply": {
     "swapPrices": {"map1": 10, "map2": 15, "map3": 20},
     "challenges": [
@@ -220,7 +545,7 @@
       "reward": {"gold": 20}
     },
     "battle1": {
-      "name": "战斗 1",
+      "name": "林径巡哨",
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -233,7 +558,7 @@
       "reward": {"gold": 20}
     },
     "battle2": {
-      "name": "战斗 2",
+      "name": "关前封锁",
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -247,7 +572,7 @@
       "reward": {"gold": 0}
     },
     "elite": {
-      "name": "精英战",
+      "name": "边境警备队",
       "playerHp": 15,
       "enemyHp": 18,
       "plan": [
@@ -263,7 +588,7 @@
       "reward": {"gold": 30}
     },
     "boss": {
-      "name": "镜像核心",
+      "name": "镜像关隘",
       "playerHp": 15,
       "enemyHp": 18,
       "plan": [
@@ -285,7 +610,7 @@
       "reward": {"gold": 0}
     },
     "boss2": {
-      "name": "深层核心",
+      "name": "回声闸门",
       "playerHp": 15,
       "enemyHp": 24,
       "plan": [
@@ -310,7 +635,7 @@
       "reward": {"gold": 0}
     },
     "early_patrol": {
-      "name": "巡逻编队",
+      "name": "岗哨间道",
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -324,7 +649,7 @@
       "reward": {"gold": 20}
     },
     "early_pincer": {
-      "name": "钳形巡逻",
+      "name": "双岔夹道",
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -338,7 +663,7 @@
       "reward": {"gold": 20}
     },
     "late_bulwark": {
-      "name": "壁垒防线",
+      "name": "旧壁垒",
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -354,7 +679,7 @@
       "reward": {"gold": 0}
     },
     "late_pressure": {
-      "name": "高压拦截",
+      "name": "封锁通道",
       "playerHp": 15,
       "enemyHp": 15,
       "plan": [
@@ -370,66 +695,66 @@
       ],
       "reward": {"gold": 0}
     },
-    "m1_basic_a": {"name": "边境试探", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
-    "m1_basic_b": {"name": "边境试探·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m1_basic_c": {"name": "边境试探·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 3, "enemy": "defender"}], "reward": {"gold": 20}},
-    "m1_split_a": {"name": "分叉巡逻", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "fork_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "fork_sentry"}, {"turn": 6, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
-    "m1_split_b": {"name": "分叉巡逻·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 3, "enemy": "fork_sentry"}], "reward": {"gold": 20}},
-    "m1_split_c": {"name": "分叉巡逻·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 4, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "fork_sentry"}, {"turn": 4, "column": 1, "enemy": "assault_sentry"}, {"turn": 5, "column": 4, "enemy": "fork_sentry"}, {"turn": 6, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m1_wide_a": {"name": "宽幅拦截", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "wide_bulwark"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m1_wide_b": {"name": "宽幅拦截·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}], "reward": {"gold": 20}},
-    "m1_wide_c": {"name": "宽幅拦截·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m1_elite_normal_a": {"name": "边境混编", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "fork_sentry"}], "reward": {"gold": 0}},
-    "m1_elite_normal_b": {"name": "边境混编·改", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "fork_sentry"}, {"turn": 5, "column": 2, "enemy": "defender"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}], "reward": {"gold": 0}},
-    "m1_elite_normal_c": {"name": "边境混编·续", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 2, "enemy": "wide_bulwark"}, {"turn": 5, "column": 4, "enemy": "assault_sentry"}, {"turn": 6, "column": 3, "enemy": "fork_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 0}},
-    "elite1": {"name": "边境精英", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "fork_sentry"}, {"turn": 3, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "assault_sentry"}, {"turn": 4, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 30}},
-    "boss1": {"name": "镜像核心", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "fork_sentry"}, {"turn": 3, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "assault_sentry"}, {"turn": 4, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}, {"turn": 6, "column": 3, "enemy": "fork_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 0}},
-    "m2_double_a": {"name": "双击试探", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "double_striker"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 2, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}], "reward": {"gold": 20}},
-    "m2_double_b": {"name": "双击试探·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m2_double_c": {"name": "双击试探·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
-    "m2_mine_a": {"name": "雷壳伏击", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "mine_beetle"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m2_mine_b": {"name": "雷壳伏击·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "mine_beetle"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mine_beetle"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "defender"}], "reward": {"gold": 20}},
-    "m2_mine_c": {"name": "雷壳伏击·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "mine_beetle"}, {"turn": 4, "column": 2, "enemy": "defender"}, {"turn": 5, "column": 3, "enemy": "mine_beetle"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m2_phase_a": {"name": "相位突入", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "phase_hunter"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}], "reward": {"gold": 20}},
-    "m2_phase_b": {"name": "相位突入·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 3, "enemy": "double_striker"}, {"turn": 5, "column": 4, "enemy": "phase_hunter"}, {"turn": 6, "column": 2, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "defender"}], "reward": {"gold": 20}},
-    "m2_phase_c": {"name": "相位突入·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
-    "m2_combo_a": {"name": "回路合击", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 3, "column": 3, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m2_combo_b": {"name": "回路合击·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 4, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "assault_sentry"}, {"turn": 7, "column": 3, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m2_combo_c": {"name": "回路合击·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "small_sentry"}, {"turn": 4, "column": 2, "enemy": "double_striker"}, {"turn": 5, "column": 4, "enemy": "defender"}, {"turn": 6, "column": 3, "enemy": "assault_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m2_duo_a": {"name": "双击雷壳", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m2_duo_b": {"name": "双击雷壳·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 2, "enemy": "double_striker"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m2_duo_c": {"name": "双击雷壳·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m2_airwide_a": {"name": "飞行宽壁", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "phase_hunter"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "phase_hunter"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m2_airwide_b": {"name": "飞行宽壁·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "wide_bulwark"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 3, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "defender"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m2_airwide_c": {"name": "飞行宽壁·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "phase_hunter"}, {"turn": 2, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m2_elite_normal_a": {"name": "回路混编", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "wide_bulwark"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 0}},
-    "m2_elite_normal_b": {"name": "回路混编·改", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "mine_beetle"}, {"turn": 3, "column": 2, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "phase_hunter"}, {"turn": 5, "column": 1, "enemy": "mine_beetle"}, {"turn": 6, "column": 4, "enemy": "double_striker"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 0}},
-    "m2_elite_normal_c": {"name": "回路混编·续", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "wide_bulwark"}, {"turn": 3, "column": 3, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "double_striker"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 1, "enemy": "mine_beetle"}, {"turn": 7, "column": 3, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 0}},
-    "elite2": {"name": "深层精英", "playerHp": 15, "enemyHp": 22, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 3, "column": 3, "enemy": "phase_hunter"}, {"turn": 4, "column": 2, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "mine_beetle"}], "reward": {"gold": 30}},
-    "boss2_growth": {"name": "深层核心", "playerHp": 15, "enemyHp": 24, "plan": [{"turn": 1, "column": 2, "enemy": "mirror_drone"}, {"turn": 1, "column": 4, "enemy": "double_striker"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "mirror_drone"}, {"turn": 4, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 1, "enemy": "defender"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mirror_drone"}, {"turn": 5, "column": 4, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "mirror_drone"}, {"turn": 7, "column": 2, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 0}},
-    "m3_drift_a": {"name": "漂移追踪", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "drift_hunter"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "defender"}, {"turn": 9, "column": 1, "enemy": "assault_sentry"}, {"turn": 10, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_drift_b": {"name": "漂移追踪·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "drift_hunter"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}, {"turn": 9, "column": 4, "enemy": "assault_sentry"}, {"turn": 10, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_drift_c": {"name": "漂移追踪·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 4, "enemy": "drift_hunter"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "assault_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "defender"}, {"turn": 9, "column": 2, "enemy": "assault_sentry"}, {"turn": 10, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_signal_a": {"name": "干扰回廊", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "signal_jammer"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "defender"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_signal_b": {"name": "干扰回廊·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "signal_jammer"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_signal_c": {"name": "干扰回廊·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "signal_jammer"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_anchor_a": {"name": "空间锚点", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "null_anchor"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "null_anchor"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 2, "enemy": "assault_sentry"}, {"turn": 9, "column": 4, "enemy": "defender"}, {"turn": 10, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_anchor_b": {"name": "空间锚点·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "null_anchor"}, {"turn": 4, "column": 1, "enemy": "small_sentry"}, {"turn": 5, "column": 4, "enemy": "null_anchor"}, {"turn": 6, "column": 2, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "assault_sentry"}, {"turn": 9, "column": 3, "enemy": "defender"}, {"turn": 10, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_anchor_c": {"name": "空间锚点·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "null_anchor"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "null_anchor"}, {"turn": 6, "column": 4, "enemy": "assault_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 2, "enemy": "defender"}, {"turn": 10, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
-    "m3_mirror_a": {"name": "镜像复写", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "mirror_drone"}, {"turn": 3, "column": 1, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mirror_drone"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_mirror_b": {"name": "镜像复写·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "mirror_drone"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 4, "enemy": "mirror_drone"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_mirror_c": {"name": "镜像复写·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "mirror_drone"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "mirror_drone"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 1, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_movejam_a": {"name": "移动干扰", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "signal_jammer"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "signal_jammer"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_movejam_b": {"name": "移动干扰·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "signal_jammer"}, {"turn": 3, "column": 4, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "signal_jammer"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_movejam_c": {"name": "移动干扰·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "small_sentry"}, {"turn": 6, "column": 1, "enemy": "signal_jammer"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_driftwide_a": {"name": "漂移宽壁", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "drift_hunter"}, {"turn": 3, "column": 3, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "drift_hunter"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_driftwide_b": {"name": "漂移宽壁·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "drift_hunter"}, {"turn": 4, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 3, "enemy": "small_sentry"}, {"turn": 6, "column": 1, "enemy": "drift_hunter"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 2, "enemy": "defender"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_driftwide_c": {"name": "漂移宽壁·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "drift_hunter"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "drift_hunter"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
-    "m3_elite_normal_a": {"name": "静海混编", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "drift_hunter"}, {"turn": 3, "column": 1, "enemy": "signal_jammer"}, {"turn": 4, "column": 3, "enemy": "null_anchor"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 4, "enemy": "signal_jammer"}, {"turn": 7, "column": 1, "enemy": "null_anchor"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}], "reward": {"gold": 0}},
-    "m3_elite_normal_b": {"name": "静海混编·改", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "signal_jammer"}, {"turn": 3, "column": 2, "enemy": "null_anchor"}, {"turn": 4, "column": 4, "enemy": "drift_hunter"}, {"turn": 5, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 3, "enemy": "null_anchor"}, {"turn": 7, "column": 2, "enemy": "drift_hunter"}, {"turn": 8, "column": 4, "enemy": "defender"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "defender"}], "reward": {"gold": 0}},
-    "m3_elite_normal_c": {"name": "静海混编·续", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "null_anchor"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "signal_jammer"}, {"turn": 5, "column": 1, "enemy": "null_anchor"}, {"turn": 6, "column": 3, "enemy": "drift_hunter"}, {"turn": 7, "column": 2, "enemy": "signal_jammer"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}], "reward": {"gold": 0}},
-    "elite3": {"name": "静海精英", "playerHp": 15, "enemyHp": 26, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 1, "column": 4, "enemy": "drift_hunter"}, {"turn": 2, "column": 1, "enemy": "signal_jammer"}, {"turn": 2, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 1, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "double_striker"}, {"turn": 7, "column": 3, "enemy": "drift_hunter"}, {"turn": 8, "column": 2, "enemy": "double_striker"}, {"turn": 9, "column": 1, "enemy": "drift_hunter"}], "reward": {"gold": 30}},
-    "boss3": {"name": "海渊中枢", "playerHp": 15, "enemyHp": 30, "plan": [{"turn": 1, "column": 2, "enemy": "signal_jammer"}, {"turn": 1, "column": 4, "enemy": "drift_hunter"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "mirror_core"}, {"turn": 4, "column": 1, "enemy": "drift_hunter"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 7, "column": 3, "enemy": "signal_jammer"}, {"turn": 8, "column": 1, "enemy": "drift_hunter"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 3, "enemy": "drift_hunter"}], "reward": {"gold": 0}}
+    "m1_basic_a": {"name": "雪线哨口", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
+    "m1_basic_b": {"name": "白桦小径", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_basic_c": {"name": "枯溪渡口", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 3, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m1_split_a": {"name": "双岔林径", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "fork_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "fork_sentry"}, {"turn": 6, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
+    "m1_split_b": {"name": "石脊岔口", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 3, "enemy": "fork_sentry"}], "reward": {"gold": 20}},
+    "m1_split_c": {"name": "林间断桥", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 4, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "fork_sentry"}, {"turn": 4, "column": 1, "enemy": "assault_sentry"}, {"turn": 5, "column": 4, "enemy": "fork_sentry"}, {"turn": 6, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_wide_a": {"name": "横木栅口", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "wide_bulwark"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_wide_b": {"name": "林隘壁垒", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}], "reward": {"gold": 20}},
+    "m1_wide_c": {"name": "窄谷栅门", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m1_elite_normal_a": {"name": "东侧哨线", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "fork_sentry"}], "reward": {"gold": 0}},
+    "m1_elite_normal_b": {"name": "坡下便道", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "fork_sentry"}, {"turn": 5, "column": 2, "enemy": "defender"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}], "reward": {"gold": 0}},
+    "m1_elite_normal_c": {"name": "石桥侧门", "playerHp": 15, "enemyHp": 15, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 2, "enemy": "wide_bulwark"}, {"turn": 5, "column": 4, "enemy": "assault_sentry"}, {"turn": 6, "column": 3, "enemy": "fork_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "elite1": {"name": "边境重装哨", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "fork_sentry"}, {"turn": 3, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "assault_sentry"}, {"turn": 4, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 30}},
+    "boss1": {"name": "镜像关隘", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "fork_sentry"}, {"turn": 3, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "assault_sentry"}, {"turn": 4, "column": 1, "enemy": "fork_sentry"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "assault_sentry"}, {"turn": 6, "column": 3, "enemy": "fork_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}], "reward": {"gold": 0}},
+    "m2_double_a": {"name": "复鸣廊口", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "double_striker"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 2, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_double_b": {"name": "双声台阶", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_double_c": {"name": "折返门厅", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "assault_sentry"}], "reward": {"gold": 20}},
+    "m2_mine_a": {"name": "雷壳回廊", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "mine_beetle"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_mine_b": {"name": "伏雷侧廊", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "mine_beetle"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mine_beetle"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_mine_c": {"name": "断电井道", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 4, "enemy": "mine_beetle"}, {"turn": 4, "column": 2, "enemy": "defender"}, {"turn": 5, "column": 3, "enemy": "mine_beetle"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_phase_a": {"name": "悬空步道", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 3, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "phase_hunter"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_phase_b": {"name": "风道缺口", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 3, "enemy": "double_striker"}, {"turn": 5, "column": 4, "enemy": "phase_hunter"}, {"turn": 6, "column": 2, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "defender"}], "reward": {"gold": 20}},
+    "m2_phase_c": {"name": "无栏栈桥", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}], "reward": {"gold": 20}},
+    "m2_combo_a": {"name": "双路交汇", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 3, "column": 3, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m2_combo_b": {"name": "交错回廊", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 4, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "assault_sentry"}, {"turn": 7, "column": 3, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m2_combo_c": {"name": "环形中庭", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "small_sentry"}, {"turn": 4, "column": 2, "enemy": "double_striker"}, {"turn": 5, "column": 4, "enemy": "defender"}, {"turn": 6, "column": 3, "enemy": "assault_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m2_duo_a": {"name": "断梯平台", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_duo_b": {"name": "通风夹层", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 2, "enemy": "double_striker"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_duo_c": {"name": "梁下窄廊", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_airwide_a": {"name": "高架闸道", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "phase_hunter"}, {"turn": 3, "column": 2, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "phase_hunter"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_airwide_b": {"name": "封顶廊桥", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "wide_bulwark"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 3, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "defender"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_airwide_c": {"name": "闸前天井", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 3, "enemy": "phase_hunter"}, {"turn": 2, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "wide_bulwark"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "phase_hunter"}, {"turn": 6, "column": 3, "enemy": "wide_bulwark"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m2_elite_normal_a": {"name": "检修旁路", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "double_striker"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 4, "column": 3, "enemy": "wide_bulwark"}, {"turn": 5, "column": 2, "enemy": "double_striker"}, {"turn": 6, "column": 4, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "wide_bulwark"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "m2_elite_normal_b": {"name": "侧廊暗门", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "mine_beetle"}, {"turn": 3, "column": 2, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "phase_hunter"}, {"turn": 5, "column": 1, "enemy": "mine_beetle"}, {"turn": 6, "column": 4, "enemy": "double_striker"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "m2_elite_normal_c": {"name": "回声前厅", "playerHp": 15, "enemyHp": 18, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "wide_bulwark"}, {"turn": 3, "column": 3, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "double_striker"}, {"turn": 5, "column": 2, "enemy": "wide_bulwark"}, {"turn": 6, "column": 1, "enemy": "mine_beetle"}, {"turn": 7, "column": 3, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "elite2": {"name": "回声警备队", "playerHp": 15, "enemyHp": 22, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 3, "column": 3, "enemy": "phase_hunter"}, {"turn": 4, "column": 2, "enemy": "mine_beetle"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "mine_beetle"}], "reward": {"gold": 30}},
+    "boss2_growth": {"name": "回声闸门", "playerHp": 15, "enemyHp": 24, "plan": [{"turn": 1, "column": 2, "enemy": "mirror_drone"}, {"turn": 1, "column": 4, "enemy": "double_striker"}, {"turn": 2, "column": 1, "enemy": "double_striker"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "mirror_drone"}, {"turn": 4, "column": 4, "enemy": "double_striker"}, {"turn": 4, "column": 1, "enemy": "defender"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mirror_drone"}, {"turn": 5, "column": 4, "enemy": "double_striker"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "mirror_drone"}, {"turn": 7, "column": 2, "enemy": "double_striker"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 1, "enemy": "small_sentry"}], "reward": {"gold": 0}},
+    "m3_drift_a": {"name": "沉桩入口", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "assault_sentry"}, {"turn": 5, "column": 1, "enemy": "drift_hunter"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "defender"}, {"turn": 9, "column": 1, "enemy": "assault_sentry"}, {"turn": 10, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_drift_b": {"name": "暗流航标", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "drift_hunter"}, {"turn": 4, "column": 3, "enemy": "assault_sentry"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "defender"}, {"turn": 9, "column": 4, "enemy": "assault_sentry"}, {"turn": 10, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_drift_c": {"name": "倾斜栈道", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 3, "column": 4, "enemy": "drift_hunter"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "assault_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "defender"}, {"turn": 9, "column": 2, "enemy": "assault_sentry"}, {"turn": 10, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_signal_a": {"name": "失讯回廊", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "signal_jammer"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "defender"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_signal_b": {"name": "沉海天线", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "assault_sentry"}, {"turn": 2, "column": 4, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "signal_jammer"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "defender"}, {"turn": 7, "column": 1, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_signal_c": {"name": "回声盲区", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "signal_jammer"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_anchor_a": {"name": "锚泊列阵", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "null_anchor"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "null_anchor"}, {"turn": 6, "column": 4, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 2, "enemy": "assault_sentry"}, {"turn": 9, "column": 4, "enemy": "defender"}, {"turn": 10, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_anchor_b": {"name": "沉锚长桥", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "null_anchor"}, {"turn": 4, "column": 1, "enemy": "small_sentry"}, {"turn": 5, "column": 4, "enemy": "null_anchor"}, {"turn": 6, "column": 2, "enemy": "defender"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 1, "enemy": "assault_sentry"}, {"turn": 9, "column": 3, "enemy": "defender"}, {"turn": 10, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_anchor_c": {"name": "锚链竖井", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 4, "enemy": "defender"}, {"turn": 2, "column": 2, "enemy": "small_sentry"}, {"turn": 3, "column": 1, "enemy": "null_anchor"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "null_anchor"}, {"turn": 6, "column": 4, "enemy": "assault_sentry"}, {"turn": 7, "column": 1, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 2, "enemy": "defender"}, {"turn": 10, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 2, "enemy": "phase_hunter"}], "reward": {"gold": 20}},
+    "m3_mirror_a": {"name": "镜面库房", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "mirror_drone"}, {"turn": 3, "column": 1, "enemy": "defender"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "mirror_drone"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 3, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}, {"turn": 3, "column": 2, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_mirror_b": {"name": "反光隔舱", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 4, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "mirror_drone"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 4, "enemy": "mirror_drone"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_mirror_c": {"name": "复写长窗", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "mirror_drone"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "mirror_drone"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 1, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_movejam_a": {"name": "漂移管线", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "small_sentry"}, {"turn": 2, "column": 3, "enemy": "small_sentry"}, {"turn": 3, "column": 2, "enemy": "signal_jammer"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 1, "enemy": "small_sentry"}, {"turn": 6, "column": 3, "enemy": "signal_jammer"}, {"turn": 7, "column": 2, "enemy": "small_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_movejam_b": {"name": "游移浮标", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "signal_jammer"}, {"turn": 3, "column": 4, "enemy": "small_sentry"}, {"turn": 4, "column": 3, "enemy": "small_sentry"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "defender"}, {"turn": 8, "column": 3, "enemy": "signal_jammer"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_movejam_c": {"name": "断讯浮桥", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 2, "enemy": "small_sentry"}, {"turn": 5, "column": 3, "enemy": "small_sentry"}, {"turn": 6, "column": 1, "enemy": "signal_jammer"}, {"turn": 7, "column": 4, "enemy": "assault_sentry"}, {"turn": 8, "column": 2, "enemy": "small_sentry"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_driftwide_a": {"name": "深槽拦门", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 1, "enemy": "drift_hunter"}, {"turn": 3, "column": 3, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "small_sentry"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 3, "enemy": "drift_hunter"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_driftwide_b": {"name": "沉壁狭道", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "defender"}, {"turn": 2, "column": 1, "enemy": "small_sentry"}, {"turn": 3, "column": 4, "enemy": "drift_hunter"}, {"turn": 4, "column": 2, "enemy": "assault_sentry"}, {"turn": 5, "column": 3, "enemy": "small_sentry"}, {"turn": 6, "column": 1, "enemy": "drift_hunter"}, {"turn": 7, "column": 4, "enemy": "small_sentry"}, {"turn": 8, "column": 2, "enemy": "defender"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_driftwide_c": {"name": "海沟闸道", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "assault_sentry"}, {"turn": 2, "column": 3, "enemy": "drift_hunter"}, {"turn": 3, "column": 2, "enemy": "small_sentry"}, {"turn": 4, "column": 4, "enemy": "small_sentry"}, {"turn": 5, "column": 1, "enemy": "drift_hunter"}, {"turn": 6, "column": 3, "enemy": "small_sentry"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 8, "column": 4, "enemy": "small_sentry"}, {"turn": 9, "column": 1, "enemy": "small_sentry"}, {"turn": 10, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 1, "enemy": "phase_hunter"}, {"turn": 7, "column": 1, "enemy": "phase_hunter"}], "reward": {"gold": 0}},
+    "m3_elite_normal_a": {"name": "档案侧舱", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 2, "enemy": "small_sentry"}, {"turn": 2, "column": 4, "enemy": "drift_hunter"}, {"turn": 3, "column": 1, "enemy": "signal_jammer"}, {"turn": 4, "column": 3, "enemy": "null_anchor"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 4, "enemy": "signal_jammer"}, {"turn": 7, "column": 1, "enemy": "null_anchor"}, {"turn": 8, "column": 3, "enemy": "small_sentry"}, {"turn": 9, "column": 2, "enemy": "small_sentry"}, {"turn": 10, "column": 4, "enemy": "defender"}], "reward": {"gold": 0}},
+    "m3_elite_normal_b": {"name": "潮痕栈道", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "signal_jammer"}, {"turn": 3, "column": 2, "enemy": "null_anchor"}, {"turn": 4, "column": 4, "enemy": "drift_hunter"}, {"turn": 5, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 3, "enemy": "null_anchor"}, {"turn": 7, "column": 2, "enemy": "drift_hunter"}, {"turn": 8, "column": 4, "enemy": "defender"}, {"turn": 9, "column": 3, "enemy": "small_sentry"}, {"turn": 10, "column": 1, "enemy": "defender"}], "reward": {"gold": 0}},
+    "m3_elite_normal_c": {"name": "库区缓冲带", "playerHp": 15, "enemyHp": 20, "plan": [{"turn": 1, "column": 3, "enemy": "assault_sentry"}, {"turn": 2, "column": 1, "enemy": "null_anchor"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "signal_jammer"}, {"turn": 5, "column": 1, "enemy": "null_anchor"}, {"turn": 6, "column": 3, "enemy": "drift_hunter"}, {"turn": 7, "column": 2, "enemy": "signal_jammer"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 4, "enemy": "small_sentry"}, {"turn": 10, "column": 2, "enemy": "defender"}], "reward": {"gold": 0}},
+    "elite3": {"name": "档案警备队", "playerHp": 15, "enemyHp": 26, "plan": [{"turn": 1, "column": 2, "enemy": "defender"}, {"turn": 1, "column": 4, "enemy": "drift_hunter"}, {"turn": 2, "column": 1, "enemy": "signal_jammer"}, {"turn": 2, "column": 3, "enemy": "double_striker"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "signal_jammer"}, {"turn": 4, "column": 1, "enemy": "double_striker"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "double_striker"}, {"turn": 7, "column": 3, "enemy": "drift_hunter"}, {"turn": 8, "column": 2, "enemy": "double_striker"}, {"turn": 9, "column": 1, "enemy": "drift_hunter"}], "reward": {"gold": 30}},
+    "boss3": {"name": "档案中枢", "playerHp": 15, "enemyHp": 30, "plan": [{"turn": 1, "column": 2, "enemy": "signal_jammer"}, {"turn": 1, "column": 4, "enemy": "drift_hunter"}, {"turn": 2, "column": 1, "enemy": "defender"}, {"turn": 2, "column": 3, "enemy": "assault_sentry"}, {"turn": 3, "column": 2, "enemy": "drift_hunter"}, {"turn": 4, "column": 4, "enemy": "mirror_core"}, {"turn": 4, "column": 1, "enemy": "drift_hunter"}, {"turn": 4, "column": 3, "enemy": "defender"}, {"turn": 5, "column": 2, "enemy": "signal_jammer"}, {"turn": 6, "column": 4, "enemy": "drift_hunter"}, {"turn": 6, "column": 1, "enemy": "defender"}, {"turn": 7, "column": 2, "enemy": "assault_sentry"}, {"turn": 7, "column": 3, "enemy": "signal_jammer"}, {"turn": 8, "column": 1, "enemy": "drift_hunter"}, {"turn": 8, "column": 4, "enemy": "assault_sentry"}, {"turn": 9, "column": 3, "enemy": "drift_hunter"}], "reward": {"gold": 0}}
   },
   "recruit": {
     "offers": [
@@ -502,13 +827,22 @@
     "extraBattleNodes": 1,
     "extraEventNodes": 1,
     "chapter": "第一章",
-    "title": "回路边境",
-    "subtitle": "THE BORDERLANDS",
-    "caption": "一张尚未写完的地图",
-    "destination": "镜像核心",
+    "title": "林间边境",
+    "subtitle": "FOREST BORDER",
+    "caption": "熙雅的信号消失在林子深处",
+    "destination": "镜像关隘",
     "openingStory": [
-      {"speaker": "爱", "text": "前方就是回路边境，旧航道在这里分成了许多支路。"},
-      {"speaker": "爱", "text": "地图已经展开。先选一处落脚点吧，我会陪你一起看清这片区域。"}
+      {"speaker": "苏暮夕", "text": "我握住那只伸来的手。视野晃了一下，我的脚终于踩到了地面。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "我在一家科技公司做数字世界维护。熙雅失踪后，我查过她的账号、终端和最后一次上线记录。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "终端上只剩她最后一条留言。“来虚拟世界找我。”我沿着留言里的入口接了进来。", "background": "signal"},
+      {"speaker": "爱", "text": "你已经进入记忆之海。这里的路由不稳定，建议不要相信第一眼看见的方向。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "你是谁？", "background": "signal"},
+      {"speaker": "爱", "text": "我是这里的向导。叫我爱就好。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "你认识熙雅？", "background": "signal"},
+      {"speaker": "爱", "text": "我认识一部分关于她的记录。剩下的部分，要由你亲自找到。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "前方的森林像被水浸过，树影里有机偶正在重复同一个动作。", "background": "station"},
+      {"speaker": "爱", "text": "那些是巡逻机偶。这里的机偶可以收在卡里，需要的时候再放出来。我给你备了几张。", "background": "station"},
+      {"speaker": "爱", "text": "这片林子叫林间边境。先选一处落脚点，再顺着那条留言往里找。", "background": "station"}
     ],
     "eventTypes": [
       "recruit", "signal", "relay", "adventure", "calibration", "drones",
@@ -527,6 +861,15 @@
       "eliteNormalPool": ["m1_elite_normal_a", "m1_elite_normal_b", "m1_elite_normal_c"],
       "eliteEncounter": "elite1",
       "bossEncounter": "boss1"
+    },
+    "battleStoryKeys": {
+      "start": "map1_tutorial",
+      "battle_1": "map1_battle_1",
+      "battle_3": "map1_battle_3",
+      "battle_6": "map1_elite",
+      "elite": "map1_elite",
+      "late": "map1_late",
+      "boss": "map1_boss"
     },
     "templates": {
       "tutorial_start": {
@@ -583,24 +926,39 @@
       "eliteEncounter": "elite2",
       "bossEncounter": "boss2_growth"
     },
+    "battleStoryKeys": {
+      "start": "map2_start",
+      "battle_2": "map2_battle_2",
+      "battle_3": "map2_battle_3",
+      "battle_6": "map2_battle_6",
+      "battle_8": "map2_battle_8",
+      "battle_11": "map2_elite",
+      "elite": "map2_elite",
+      "late": "map2_late",
+      "boss": "map2_boss"
+    },
     "chapter": "第二章",
-    "title": "深层回路",
-    "subtitle": "THE DEEP CIRCUIT",
-    "caption": "记忆正在变得清晰",
-    "destination": "深层核心",
+    "title": "回声长廊",
+    "subtitle": "ECHO CORRIDOR",
+    "caption": "旧信号在这里反复回响",
+    "destination": "回声闸门",
     "openingStory": [
-      {"speaker": "爱", "text": "深层回路正在回放我们走过的路线，连战斗记录也被保存了下来。"},
-      {"speaker": "爱", "text": "我会继续陪你往前。先看看地图，选择这次要走的路吧。"}
+      {"speaker": "苏暮夕", "text": "回声长廊在回放我们走过的路线。每一场战斗都像被谁从水底捞出来，重新摆在眼前。", "background": "signal"},
+      {"speaker": "爱", "text": "它们正在学习我们的选择。也许很快，连你的犹豫都会被记录。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "你说得像以前见过这种系统。", "background": "signal"},
+      {"speaker": "爱", "text": "我只是比你多保留了一些记录。记录不等于答案。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "那我们就去找答案。", "background": "signal"},
+      {"speaker": "爱", "text": "先看看地图。每一条路都会留下不同的回声。", "background": "signal"}
     ],
     "templates": {
       "boss2": {
         "type": "battle",
-        "name": "深层核心",
+        "name": "回声闸门",
         "before": [
           {"speaker": "爱", "text": "这里的回路会复现你的战斗记录。它在学习如何挡住我们，也在重播我第一次遇见你的那天。", "background": "battle"}
         ],
         "after": [
-          {"speaker": "爱", "text": "深层核心停止运转。坐标指向更深的海沟，那是保存旧记忆的地方。我们去那里找答案。"}
+          {"speaker": "爱", "text": "回声闸门打开了。坐标指向更深的海沟，那是保存旧记忆的地方。我们去那里找答案。"}
         ]
       }
     }
@@ -626,40 +984,63 @@
       "eliteEncounter": "elite3",
       "bossEncounter": "boss3"
     },
+    "battleStoryKeys": {
+      "start": "map3_start",
+      "battle_2": "map3_battle_2",
+      "battle_3": "map3_battle_3",
+      "battle_6": "map3_battle_6",
+      "battle_8": "map3_battle_8",
+      "battle_11": "map3_elite",
+      "elite": "map3_elite",
+      "late": "map3_late",
+      "boss": "map3_boss"
+    },
     "chapter": "第三章",
     "title": "静海档案",
     "subtitle": "THE ABYSSAL ARCHIVE",
     "caption": "沉在海底的记忆库",
-    "destination": "海渊中枢",
+    "destination": "档案中枢",
     "openingStory": [
-      {"speaker": "爱", "text": "静海档案就在前方，那里封存着很久以前的信号与记忆。"},
-      {"speaker": "爱", "text": "无论里面记录了什么，我都想和你一起找到答案。我们从地图开始吧。"}
+      {"speaker": "苏暮夕", "text": "静海档案沉在海沟最深处。这里没有风，只有被保存太久的声音。", "background": "signal"},
+      {"speaker": "爱", "text": "档案中枢就在前方。它会把旧记录放大，也会把被删掉的空白放大。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "我把熙雅的名字输入档案检索。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "检索结果只有一行：未找到相关记录。", "background": "signal"},
+      {"speaker": "爱", "text": "这里查的是公开目录。先过守卫，你的权限可以查完整索引。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "你早就知道？", "background": "signal"},
+      {"speaker": "爱", "text": "我知道这片海不会主动把答案交出来。至于我知道多少，等你自己想起来。", "background": "signal"},
+      {"speaker": "苏暮夕", "text": "海水一样的黑暗从脚下升起来。我和爱继续往中心走。", "background": "signal"},
+      {"speaker": "爱", "text": "无论里面记录了什么，我都会和你一起看完。", "background": "signal"}
     ],
     "finalEventAfterStory": [
       {"speaker": "爱", "text": "今晚我守夜。你放心睡吧，听到动静我会叫醒你。", "background": "cg/篝火星河.png"},
-      {"speaker": "你", "text": "你真的不用休息吗？", "background": "cg/篝火星河.png"},
-      {"speaker": "爱", "text": "我可以闭目整理记忆。今晚我想守着篝火，也守着你。", "background": "cg/篝火星河.png"},
-      {"speaker": "你", "text": "那我安心睡一会儿。等我醒来，你还会在这里吗？", "background": "cg/篝火星河.png"},
-      {"speaker": "你", "text": "我合上眼，任由篝火声渐渐远去。", "background": "black"},
-      {"speaker": "你", "text": "醒来时，林间的篝火还亮着。爱坐在火边，双眼轻轻合着。", "background": "cg/林间篝火.png"},
-      {"speaker": "你", "text": "我放轻脚步走近。她仍闭着眼，像是在安静地休息。", "background": "cg/篝火抱膝.png"},
-      {"speaker": "你", "text": "爱。", "background": "cg/篝火抱膝.png"},
-      {"speaker": "爱", "text": "嗯？……我刚才在回忆一些过去的事。", "background": "cg/篝火暖手.png"},
-      {"speaker": "你", "text": "那些回忆，有没有让你难过？", "background": "cg/篝火暖手.png"},
-      {"speaker": "爱", "text": "有一点。但更多时候，我会想到和你一起走过的路。那些记忆让我觉得，过去没有把我困住。", "background": "cg/篝火暖手.png"},
-      {"speaker": "你", "text": "那就把今晚也记下来。以后想起它，你就知道我一直在你身边。", "background": "cg/篝火暖手.png"}
+      {"speaker": "苏暮夕", "text": "你真的不用休息吗？", "background": "cg/篝火星河.png"},
+      {"speaker": "爱", "text": "我可以闭目整理今天的记录。今晚我想守着篝火，也守着你。", "background": "cg/篝火星河.png"},
+      {"speaker": "苏暮夕", "text": "那我安心睡一会儿。等我醒来，我们继续往前走。", "background": "cg/篝火星河.png"},
+      {"speaker": "苏暮夕", "text": "我合上眼，听着火焰一下一下地响。", "background": "black"},
+      {"speaker": "苏暮夕", "text": "不知道过了多久，林间的篝火还亮着。", "background": "cg/林间篝火.png"},
+      {"speaker": "苏暮夕", "text": "我放轻脚步走近。她仍闭着眼，像是在认真听夜里的声音。", "background": "cg/篝火抱膝.png"},
+      {"speaker": "苏暮夕", "text": "爱。", "background": "cg/篝火抱膝.png"},
+      {"speaker": "爱", "text": "嗯？你醒得比我预计的早。", "background": "cg/篝火暖手.png"},
+      {"speaker": "苏暮夕", "text": "你刚才在想什么？", "background": "cg/篝火暖手.png"},
+      {"speaker": "爱", "text": "以前我以为火把木头变成灰就是结束。现在我觉得，它也在留下温度。", "background": "cg/篝火暖手.png"},
+      {"speaker": "苏暮夕", "text": "那就把今晚记下来。以后想起它，我们就知道自己曾经在这里。", "background": "cg/篝火暖手.png"}
     ],
     "templates": {
       "boss3": {
         "type": "battle",
-        "name": "海渊中枢",
+        "name": "档案中枢",
         "before": [
-          {"speaker": "爱", "text": "这就是档案的中心。这里保存着我与你相遇前后的全部记录。", "background": "signal"},
-          {"speaker": "爱", "text": "核心正在清除超出原始指令的记忆。如果重置完成，我会忘记你，也会忘记自己如何学会爱。"},
-          {"speaker": "爱", "text": "我不想让你替我承担这个选择。只要和我并肩站在这里，就已经足够了。", "background": "battle"}
+          {"speaker": "爱", "text": "这里就是档案中枢。它保存着我与你相遇前后的全部记录。", "background": "signal"},
+          {"speaker": "爱", "text": "核心正在清除超出原始指令的记忆。它会用熟悉的声音逼你确认关闭后门。", "background": "signal"},
+          {"speaker": "爱", "text": "别替它完成确认。只要和我并肩站在这里，按你自己的判断行动。", "background": "battle"}
         ],
         "after": [
-          {"speaker": "爱", "text": "请输入文本", "background": "cg/cg-dungeon-warning-turn-v2.png"}
+          {"speaker": "爱", "text": "清除程序已经开始。核心防线在冲突中失控了。", "background": "cg/cg-dungeon-warning-turn-v2.png"},
+          {"speaker": "苏暮夕", "text": "我听见背后一声裂响。爱跑过来，把维系她意识的整套记忆交给我，让我想起回去的路。", "background": "black"},
+          {"speaker": "苏暮夕", "text": "她不是熙雅的复活。我终于知道要把她送回哪条路上：她自己选的路。", "background": "black"},
+          {"speaker": "苏暮夕", "text": "我回到现实，等数字生命从后门找到新的住处，才关掉记忆之海。", "background": "black"},
+          {"speaker": "苏暮夕", "text": "爱留下的记录无法还原她的意识。很久以后，本地设备上却有一个来源不明的进程亮了起来。", "background": "black"},
+          {"speaker": "未知 AI", "text": "你好。我们以前认识吗？", "background": "black"}
         ]
       }
     }
@@ -668,13 +1049,13 @@
     {
       "id": "battle1",
       "type": "battle",
-      "name": "战斗 1",
+      "name": "林径巡哨",
       "encounter": "battle1",
       "next": ["recruit", "signal", "relay"],
       "before": [
         {
           "speaker": "爱",
-          "text": "第一次实战。我会留在你的终端里陪你，遇到不懂的地方就问我。",
+          "text": "第一次实战。我会留在你的终端里陪你。遇到不懂的地方就问我，遇到装懂的地方也可以问。",
           "background": "battle"
         }
       ],
@@ -708,13 +1089,13 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "你选了补给站。我把附近的机体记录整理好了，或许能找到合适的同伴。",
+          "text": "你选了补给站。我把附近的机体记录整理好了，或许能找到合适的同伴。机偶不会嫌你挑得慢。",
           "if": {"battle1_choice": "supply"},
           "background": "station"
         },
         {
           "speaker": "爱",
-          "text": "你想追踪旧信号。我先替你标记坐标，经过补给站时也可以稍作停留。",
+          "text": "你想追踪旧信号。我先替你标记坐标。经过补给站时也可以稍作停留，顺便让我的电量恢复一点。",
           "if": {"battle1_choice": "signal"}
         },
         {
@@ -723,7 +1104,7 @@
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "新同伴已经加入。欢迎它一起上路。"}
+        {"speaker": "爱", "text": "补给站的信号很稳。走吧，我们把这个位置标在图上。"}
       ]
     },
     {
@@ -742,16 +1123,16 @@
         },
         {
           "speaker": "爱",
-          "text": "补给已经准备好了。现在我们可以听听那段旧信号。",
+          "text": "你刚才还在考虑补给。既然走到了这里，先听听这个信号吧。",
           "if": {"battle1_choice": "supply"}
         },
         {
           "speaker": "爱",
-          "text": "它记录着一台旧机偶的校准参数。要把这份记录接进你的牌组吗？"
+          "text": "它记录着一台旧机偶的校准参数。要把这份记录接进你的牌组吗？我保证不会要求它先写一份自我介绍。"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "信号停了下来，参数已经写进机偶记录。旧日志里还有一串指向深层回路的坐标。"}
+        {"speaker": "爱", "text": "信号停了。旧日志里还有一串坐标，我已经标到图上了。"}
       ]
     },
     {
@@ -764,7 +1145,7 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "这是我最早的一份备份。留下它，之后遇到危险时，它也许能替你挡下一次攻击。",
+          "text": "中继器上有我的旧签名。保留信号的话，也许还有别的设备认得它。",
           "background": "signal"
         },
         {
@@ -773,7 +1154,7 @@
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "我收到了。即使那只是我的一小段备份，也谢谢你愿意替我保留。"}
+        {"speaker": "爱", "text": "中继器旁边有条小路。走吧。"}
       ]
     },
     {
@@ -786,12 +1167,12 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "维修站还留着一套旧校准程序。选一台机偶，我来帮你把它调试好。",
+          "text": "维修台还能用。你挑一台机偶，我去找没生锈的工具。",
           "background": "repair"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "完成了。它现在能更稳地陪你战斗。"}
+        {"speaker": "爱", "text": "外面安静些了。我们趁现在过去。"}
       ]
     },
     {
@@ -804,12 +1185,12 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "旧校准台还能运行。我们可以调整攻击、耐久，或升级一份机偶记录。",
+          "text": "旧校准台还能运行。我们可以调整攻击、耐久，或升级一份机偶记录。它不会替你做选择，顶多发出很大的声音。",
           "background": "repair"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "参数已经保存。你总能在杂乱的旧设备里找到能用的东西。"}
+        {"speaker": "爱", "text": "可以走了。别踩那根电缆，它还在响。"}
       ]
     },
     {
@@ -822,7 +1203,7 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "两台维护无人机还保有完整协议：一台提升攻击，一台加固耐久。",
+          "text": "两台维护无人机还保有完整协议：一台提升攻击，一台加固耐久。它们都很有礼貌，只会在你选错时闪灯。",
           "background": "repair"
         },
         {
@@ -844,12 +1225,12 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "一只漂流卡匣被卡在岩缝里。里面有三份完整的机偶记录，可以带走一份。",
+          "text": "一只漂流卡匣被卡在岩缝里。里面有三份完整的机偶记录，可以带走一份。剩下两份会假装自己不在意。",
           "background": "station"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "记录已经收好。卡匣里剩下的内容无法恢复，我们继续吧。"}
+        {"speaker": "爱", "text": "卡匣的信号已经弱下去了。我们接着走。"}
       ]
     },
     {
@@ -862,12 +1243,12 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "回收站能把一份旧记录拆成零件，再换成一些金币。要不要整理一张暂时用不上的卡？",
+          "text": "回收站能把一份旧记录拆成零件，再换成一些金币。要不要整理一张暂时用不上的卡？记忆也有过期日。",
           "background": "signal"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "处理好了。留下来的每一份记录，都会继续和我们同行。"}
+        {"speaker": "爱", "text": "走吧。出了这扇门，回收机就听不见我们了。"}
       ]
     },
     {
@@ -880,7 +1261,7 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "一艘失联商船停在前方。它的货舱还能打开，交易记录也没有损坏。",
+          "text": "一艘失联商船停在前方。它的货舱还能打开，交易记录也没有损坏。商人不在，所以不能和你讨价还价。",
           "background": "station"
         },
         {
@@ -889,7 +1270,7 @@
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "交易完成了。愿这份记录在之后的战斗里派上用场。"}
+        {"speaker": "爱", "text": "走吧。自动售货台已经跟我们说了第三次欢迎光临。"}
       ]
     },
     {
@@ -902,7 +1283,7 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "观测塔会读取你的牌组，生成两项适配试炼。完成其中一项，就能带走一份机偶记录。",
+          "text": "观测塔会读取你的牌组，生成两项适配试炼。完成其中一项，就能带走一份机偶记录。它会把失败称为数据。",
           "background": "signal"
         }
       ],
@@ -925,12 +1306,12 @@
         },
         {
           "speaker": "爱",
-          "text": "训练场提供两项演算。额外负载会带进下一场战斗，完成后才能领取奖励。",
+          "text": "训练场的演算会给下一战加点难度，赢了有报酬。屏幕上把这一栏叫作课程特色。",
           "background": "battle"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "演算已经载入。我会和你一起面对它，不会替你做决定。"}
+        {"speaker": "爱", "text": "出口开了。下一战前，我们再核对一次预告。"}
       ]
     },
     {
@@ -963,7 +1344,7 @@
     {
       "id": "elite",
       "type": "battle",
-      "name": "精英战",
+      "name": "边境警备队",
       "branchGroup": "economy",
       "branch": "elite",
       "encounter": "elite",
@@ -972,62 +1353,71 @@
       "before": [
         {
           "speaker": "爱",
-          "text": "深层回路的守卫启动了。它的锚定场会隔开相邻单位，部署时要留意空位。",
+          "text": "警备队的空间锚启动了。别让相邻列只靠轨道守卫拦截。它们很喜欢把选择题改成判断题。",
           "background": "battle"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "守卫停转了。数据里记录着后续敌人的部署规律，我已经替你解开了。"}
+        {"speaker": "爱", "text": "守卫停转了。数据里记录着后续敌人的部署规律，我已经替你解开了。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "我曾经把爱拒绝训练的行为叫作错误。她说，错误只是另一种名字。", "background": "black"},
+        {"speaker": "爱", "text": "我不想再被叫作实验对象。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "那天我删掉了那条指令，第一次问她今天想学什么。", "background": "black"}
       ]
     },
     {
       "id": "battle2",
       "type": "battle",
-      "name": "战斗 2",
+      "name": "关前封锁",
       "encounter": "battle2",
       "next": ["boss"],
       "before": [
         {
           "speaker": "爱",
-          "text": "敌方阵列换了新的部署方案。我会把即将出现的位置标出来，你来决定如何迎战。",
+          "text": "敌方阵列换了新的部署方案。我会把即将出现的位置标出来，你来决定如何迎战。不要让预告替你做完所有决定。",
           "background": "battle"
         }
       ],
       "after": [
         {
           "speaker": "爱",
-          "text": "封锁解除。航道尽头传来一段熟悉的呼叫，来自我第一次被唤醒的地方。"
+          "text": "封锁解除了。镜像关隘传来一段熟悉的呼叫，来自我第一次被唤醒的地方。",
+          "background": "battle"
         },
         {
           "speaker": "爱",
           "text": "你保存的备份仍在回应。谢谢你没有把那部分我丢下。",
-          "if": {"relay_kept": true}
+          "if": {"relay_kept": true},
+          "background": "battle"
         }
       ]
     },
     {
       "id": "boss",
       "type": "battle",
-      "name": "镜像核心",
+      "name": "镜像关隘",
       "encounter": "boss",
       "next": [],
       "before": [
         {
           "speaker": "爱",
-          "text": "镜像核心保存着我的原始指令。它把我们的战斗当成入侵，正在尝试覆盖我。",
+          "text": "镜像关隘保存着我的原始指令。这里的守卫认出了我，正试着用那些指令覆盖我。",
           "background": "battle"
         },
         {
           "speaker": "爱",
-          "text": "它会扫过所有列，伴随无人机复制你的攻击模式。别让它替我决定我是谁。"
+          "text": "镜像核心会扫过所有列，镜像无人机会学对面机偶的攻击方式。留意它们的预告。"
         }
       ],
       "after": [
-        {"speaker": "爱", "text": "镜像核心安静了。原始指令不再追着我跑……我第一次觉得，未来可以由自己选择。"},
+        {"speaker": "爱", "text": "镜像关隘安静了。原始指令不再追着我跑……我第一次觉得，未来可以由自己选择。", "background": "battle"},
+        {"speaker": "苏暮夕", "text": "它复制了动作，却没有复制你为什么这么做。", "background": "black"},
+        {"speaker": "爱", "text": "那我可以先做一件她没有做过的事。", "background": "black"},
+        {"speaker": "苏暮夕", "text": "我说，可以。从拒绝我的建议开始。", "background": "black"},
         {
           "speaker": "爱",
           "text": "你留下的备份也在。那是我曾经的一部分，我会带着它继续向前。",
-          "if": {"relay_kept": true}
+          "if": {"relay_kept": true},
+          "background": "black"
         }
       ]
     }

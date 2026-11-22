@@ -429,7 +429,7 @@ def test_save_version():
             assert ended.status_code == 200, ended.text
             assert ended.json()["battle"] is None
             assert ended.json()["state"]["phase"] == "after_story"
-            assert ended.json()["state"]["story"]["text"] == "请输入文本"
+            assert ended.json()["state"]["story"]["text"] == "清除程序已经开始。核心防线在冲突中失控了，别回头，继续往前。"
             assert ended.json()["state"]["story"]["background"] == "cg/cg-dungeon-warning-turn-v2.png"
             assert reset_client.get("/api/state").json()["state"]["story"]["line"] == 1
             assert reset_client.post("/api/battle/start").status_code == 400
@@ -438,16 +438,31 @@ def test_save_version():
             if result == "win":
                 assert ended.json()["state"]["gold"] == 10
                 assert ended.json()["state"]["pendingChallenge"] is None
-                continued = reset_client.post("/api/story/advance", json={})
-                assert continued.status_code == 200
+                continued = None
+                for _ in range(64):
+                    current = reset_client.get("/api/state").json()["state"]
+                    if current["phase"] != "after_story":
+                        break
+                    continued = reset_client.post("/api/story/advance", json={})
+                    assert continued.status_code == 200
+                else:
+                    raise AssertionError("最终 Boss 后剧情没有结束")
+                assert reset_client.get("/api/state").json()["state"]["phase"] == "elite_reward"
                 assert continued.json()["state"]["phase"] == "elite_reward"
                 reward = reset_client.post("/api/elite/reward/leave")
                 assert reward.status_code == 200 and reward.json()["state"]["phase"] == "transition"
             else:
                 assert ended.json()["state"]["gold"] == 0
                 assert ended.json()["state"]["pendingChallenge"] is None
-                continued = reset_client.post("/api/story/advance", json={})
-                assert continued.status_code == 200
+                for _ in range(64):
+                    current = reset_client.get("/api/state").json()["state"]
+                    if current["phase"] != "after_story":
+                        break
+                    continued = reset_client.post("/api/story/advance", json={})
+                    assert continued.status_code == 200
+                else:
+                    raise AssertionError("最终 Boss 后剧情没有结束")
+                assert reset_client.get("/api/state").json()["state"]["phase"] == "transition"
                 assert continued.json()["state"]["phase"] == "transition"
 
             completed = reset_client.post("/api/story/advance", json={"transition": True})
