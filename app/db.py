@@ -5,7 +5,8 @@ import pathlib
 import sqlite3
 import threading
 
-DATA_DIR = pathlib.Path(os.environ.get("DATA_DIR", "data")).resolve()
+PROJECT_DIR = pathlib.Path(__file__).resolve().parent.parent
+DATA_DIR = pathlib.Path(os.environ.get("DATA_DIR", PROJECT_DIR / "data")).resolve()
 DB_PATH = DATA_DIR / "game.db"
 SCHEMA_VERSION = 3
 LOCK = threading.RLock()
